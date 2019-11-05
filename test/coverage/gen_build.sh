@@ -75,7 +75,7 @@ EOF
     # shard can take 100s and some takes only 10s, so we use the maximum sharding to here to let
     # Bazel scheduling them across CPU cores.
     # Sharding can be disabled by --test_sharding_strategy=disabled.
-    shard_count = 50,
+    shard_count = 20,
 )
 EOF
 

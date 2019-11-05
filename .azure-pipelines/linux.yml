@@ -44,6 +44,8 @@ jobs:
     matrix:
       gcc:
         CI_TARGET: 'bazel.gcc'
+      coverage:
+        CI_TARGET: 'bazel.coverage'
       clang_tidy:
         CI_TARGET: 'bazel.clang_tidy'
       asan:
@@ -101,9 +103,9 @@ jobs:
       searchFolder: $(Build.StagingDirectory)/tmp
     condition: always()
 
-  - task: PublishBuildArtifacts@1
+  - task: PublishPipelineArtifact@1
     inputs:
-      pathtoPublish: "$(Build.StagingDirectory)/envoy"
+      targetPath: "$(Build.StagingDirectory)/envoy"
       artifactName: $(CI_TARGET)
     condition: always()
 
