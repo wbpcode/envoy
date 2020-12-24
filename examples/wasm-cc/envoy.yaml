@@ -30,23 +30,22 @@ static_resources:
               value:
                 config:
                   name: "my_plugin"
-                  root_id: "my_root_id"
-                  configuration:
-                    "@type": "type.googleapis.com/google.protobuf.StringValue"
-                    value: |
-                      {}
+                  root_id: "normal_example"
+                  configuration: {}
                   vm_config:
                     runtime: "envoy.wasm.runtime.v8"
                     vm_id: "my_vm_id"
                     code:
                       local:
-                        filename: "lib/envoy_filter_http_wasm_example.wasm"
+                        filename: "/home/ping/envoy-dev/envoy-wasm-example/asm/normal_example/build/optimized.wasm"
                     configuration: {}
+          # - name: complex_example
+          #   typed_config: {}
           - name: envoy.filters.http.router
             typed_config: {}
   clusters:
   - name: web_service
-    connect_timeout: 0.25s
+    connect_timeout: 5s
     type: strict_dns
     lb_policy: round_robin
     load_assignment:
@@ -56,5 +55,7 @@ static_resources:
         - endpoint:
             address:
               socket_address:
-                address: web_service
-                port_value: 9000
+                address: localhost
+                port_value: 8080
+                # address: httpbin.org
+                # port_value: 80
