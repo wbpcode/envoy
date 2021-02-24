@@ -24,6 +24,10 @@ envoy_cc_library(
     name = "hessian_utils_lib",
     srcs = ["hessian_utils.cc"],
     hdrs = ["hessian_utils.h"],
+    external_deps = [
+        "hessian2_codec_codec_impl",
+        "hessian2_codec_object_codec_lib",
+    ],
     deps = [
         ":buffer_helper_lib",
         "//source/common/singleton:const_singleton",
