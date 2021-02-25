@@ -12,6 +12,14 @@ load("//bazel:repositories.bzl", "envoy_dependencies")
 
 envoy_dependencies()
 
+local_repository(
+    name = "com_github_alibaba_hessian2_codec",
+    path = "/home/ping/envoy-dev/com/hessian2-codec",
+    repo_mapping = {
+        "@com_google_absl": "@com_google_absl",
+    },
+)
+
 load("//bazel:repositories_extra.bzl", "envoy_dependencies_extra")
 
 envoy_dependencies_extra()
