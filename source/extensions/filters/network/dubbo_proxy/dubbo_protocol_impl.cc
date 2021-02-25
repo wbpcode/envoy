@@ -140,7 +140,7 @@ bool DubboProtocolImpl::decodeData(Buffer::Instance& buffer, ContextSharedPtr co
                                    MessageMetadataSharedPtr metadata) {
   ASSERT(serializer_);
 
-  if ((buffer.length()) < static_cast<uint64_t>(context->bodySize())) {
+  if ((buffer.length()) < context->bodySize()) {
     return false;
   }
 

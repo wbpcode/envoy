@@ -168,15 +168,15 @@ TEST(HessianProtocolTest, serializeRpcResult) {
 
   EXPECT_NE(serializer.serializeRpcResult(buffer, mock_response, mock_response_type), 0);
 
-  size_t hessian_int_size;
-  int type_value = HessianUtils::peekInt(buffer, &hessian_int_size);
+  Hessian2::Decoder decoder(std::make_unique<BufferReader>(buffer));
+
+  int type_value = *decoder.decode<int32_t>();
   EXPECT_EQ(static_cast<uint8_t>(mock_response_type), static_cast<uint8_t>(type_value));
 
-  size_t hessian_string_size;
-  std::string content = HessianUtils::peekString(buffer, &hessian_string_size, sizeof(uint8_t));
+  std::string content = *decoder.decode<std::string>();
   EXPECT_EQ(mock_response, content);
 
-  EXPECT_EQ(buffer.length(), hessian_int_size + hessian_string_size);
+  EXPECT_EQ(buffer.length(), decoder.offset());
 
   size_t body_size = mock_response.size() + sizeof(mock_response_type);
   std::shared_ptr<ContextImpl> context = std::make_shared<ContextImpl>();
