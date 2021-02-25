@@ -17,6 +17,11 @@ namespace Extensions {
 namespace NetworkFilters {
 namespace DubboProxy {
 
+class HessianUtils : public Logger::Loggable<Logger::Id::dubbo> {
+public:
+  static uint32_t getParametersNumber(const std::string& parameters_type);
+};
+
 class BufferWriter : public Hessian2::Writer {
 public:
   BufferWriter(Envoy::Buffer::Instance& buffer) : buffer_(buffer) {}

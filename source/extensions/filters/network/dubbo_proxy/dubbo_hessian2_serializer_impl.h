@@ -8,7 +8,6 @@ namespace NetworkFilters {
 namespace DubboProxy {
 class DubboHessian2SerializerImpl : public Serializer {
 public:
-  ~DubboHessian2SerializerImpl() override = default;
   const std::string& name() const override {
     return ProtocolSerializerNames::get().fromType(ProtocolType::Dubbo, type());
   }

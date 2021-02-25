@@ -41,6 +41,51 @@ DubboHessian2SerializerImpl::deserializeRpcInvocation(Buffer::Instance& buffer,
   invo->setServiceVersion(*service_version);
   invo->setMethodName(*method_name);
 
+  // TODO(wbpcode): Lazy parsing of parameters and attachments will be supported later to improve
+  // performance.
+  if (auto types = decoder.decode<std::string>(); types && !types->empty()) {
+    auto parameters_detail = invo->parametersDetail();
+    auto parameters_number = HessianUtils::getParametersNumber(*types);
+
+    parameters_detail.before_ = decoder.offset();
+    parameters_detail.number_ = parameters_number;
+
+    auto parameters = invo->mutableParameters();
+    for (uint32_t i = 0; i < parameters_number; i++) {
+      auto offset = decoder.offset();
+      auto result = decoder.decode<Hessian2::Object>();
+
+      if (!result) {
+        throw EnvoyException("Cannot parse RpcInvocation parameter from buffer");
+      }
+
+      parameters_detail.detail_.push_back(decoder.offset() - offset);
+      parameters.push_back(std::move(result));
+    }
+  }
+
+  if (decoder.offset() < buffer.length()) {
+    // Try to parse attachment of dubbo message.
+    auto result = decoder.decode<Hessian2::Object>();
+    if (result && result->type() == Hessian2::Object::Type::UntypedMap) {
+      auto attachment = invo->mutableAttachment();
+      for (const auto& pair : result->asType<Hessian2::UntypedMapObject>().data_) {
+        if (!pair.first || !pair.second) {
+          continue;
+        }
+        auto [key, value] = {pair.first->toString(), pair.second->toString()};
+        if (!key.has_value() || !value.has_value()) {
+          continue;
+        }
+        attachment.insert(key.value(), value.value());
+      }
+      auto group = attachment.lookup("group");
+      if (group) {
+        invo->setServiceGroup(*group);
+      }
+    }
+  }
+
   return std::pair<RpcInvocationSharedPtr, bool>(invo, true);
 }
 

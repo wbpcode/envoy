@@ -43,7 +43,13 @@ RouteConstSharedPtr RouteEntryImplBase::clusterEntry(uint64_t random_value) cons
                                           false);
 }
 
-bool RouteEntryImplBase::headersMatch(const Http::HeaderMap& headers) const {
+bool RouteEntryImplBase::headersMatch(const const RpcInvocationImpl& invocation) const {
+  if (config_headers_.empty()) {
+    ENVOY_LOG(debug, "dubbo route matcher: no headers match");
+    return true;
+  }
+
+  const auto headers = invocation.attachment().headers();
   ENVOY_LOG(debug, "dubbo route matcher: headers size {}, metadata headers size {}",
             config_headers_.size(), headers.size());
   return Http::HeaderUtility::matchHeaders(headers, config_headers_);
@@ -84,24 +90,34 @@ RouteConstSharedPtr ParameterRouteEntryImpl::matches(const MessageMetadata& meta
   ASSERT(metadata.hasInvocationInfo());
   const auto invocation = dynamic_cast<const RpcInvocationImpl*>(&metadata.invocationInfo());
   ASSERT(invocation);
-  if (!invocation->hasParameters()) {
+
+  const auto& parameters = invocation->parameters();
+  if (parameters.empty()) {
     return nullptr;
   }
 
   ENVOY_LOG(debug, "dubbo route matcher: parameter name match");
   for (auto& config_data : parameter_data_list_) {
-    const std::string& data = invocation->getParameterValue(config_data.index_);
-    if (data.empty()) {
+    if (config_data.index_ >= parameters.size()) {
       ENVOY_LOG(debug,
-                "dubbo route matcher: parameter matching failed, there are no parameters in the "
+                "dubbo route matcher: parameter matching failed, there are no parameter in the "
                 "user request, index '{}'",
                 config_data.index_);
       return nullptr;
     }
 
-    if (!matchParameter(data, config_data)) {
+    const auto data = parameters[config_data.index_]->toString();
+    if (!data.has_value()) {
+      ENVOY_LOG(debug,
+                "dubbo route matcher: parameter matching failed, the parameter cannot be converted "
+                "to string, index '{}'",
+                config_data.index_);
+      return nullptr;
+    }
+
+    if (!matchParameter(data.value(), config_data)) {
       ENVOY_LOG(debug, "dubbo route matcher: parameter matching failed, index '{}', value '{}'",
-                config_data.index_, data);
+                config_data.index_, data.value());
       return nullptr;
     }
   }
@@ -144,7 +160,7 @@ RouteConstSharedPtr MethodRouteEntryImpl::matches(const MessageMetadata& metadat
   const auto invocation = dynamic_cast<const RpcInvocationImpl*>(&metadata.invocationInfo());
   ASSERT(invocation);
 
-  if (invocation->hasHeaders() && !RouteEntryImplBase::headersMatch(invocation->headers())) {
+  if (!RouteEntryImplBase::headersMatch(invocation->attachment().headers()) {
     ENVOY_LOG(error, "dubbo route matcher: headers not match");
     return nullptr;
   }
@@ -179,16 +195,32 @@ SingleRouteMatcherImpl::SingleRouteMatcherImpl(const RouteConfig& config,
   ENVOY_LOG(debug, "dubbo route matcher: routes list size {}", routes_.size());
 }
 
+bool SingleRouteMatcherImpl::matchServiceGroup(const RpcInvocationImpl& invocation) const {
+  if (!group_.has_value() || group_.value().empty()) {
+    return true;
+  }
+  // Since the configured group is not empty, we need to parse the attachment of the invocation and
+  // get the group in it.
+  invocation.attachment();
+
+  return invocation.serviceGroup().has_value() && invocation.serviceGroup().value() == group_;
+}
+
+bool SingleRouteMatcherImpl::matchServiceVersion(const RpcInvocationImpl& invocation) const {
+  if (!version_.has_value() || version_.value().empty()) {
+    return true;
+  }
+  return invocation.serviceVersion().has_value() && invocation.serviceVersion().value() == version_;
+}
+
 RouteConstSharedPtr SingleRouteMatcherImpl::route(const MessageMetadata& metadata,
                                                   uint64_t random_value) const {
   ASSERT(metadata.hasInvocationInfo());
-  const auto& invocation = metadata.invocationInfo();
+  const auto invocation = dynamic_cast<const RpcInvocationImpl*>(&metadata.invocationInfo());
+  ASSERT(invocation);
 
-  if (service_name_ == invocation.serviceName() &&
-      (group_.value().empty() ||
-       (invocation.serviceGroup().has_value() && invocation.serviceGroup().value() == group_)) &&
-      (version_.value().empty() || (invocation.serviceVersion().has_value() &&
-                                    invocation.serviceVersion().value() == version_))) {
+  if (service_name_ == invocation->serviceName() && matchServiceGroup(invocation) &&
+      matchServiceVersion(invocation)) {
     for (const auto& route : routes_) {
       RouteConstSharedPtr route_entry = route->matches(metadata, random_value);
       if (nullptr != route_entry) {

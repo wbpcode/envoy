@@ -5,41 +5,68 @@ namespace Extensions {
 namespace NetworkFilters {
 namespace DubboProxy {
 
-void RpcInvocationImpl::addParameterValue(uint32_t index, const std::string& value) {
-  assignParameterIfNeed();
-  parameter_map_->emplace(index, value);
-}
+void RpcInvocationImpl::Attachment::insert(const std::string& key, const std::string& value) {
+  if (origin_headers_.find(key) != origin_headers_.end()) {
+    return;
+  }
+  auto result = origin_headers_.insert({key, {Http::LowerCaseString(key), value}});
 
-const std::string& RpcInvocationImpl::getParameterValue(uint32_t index) const {
-  if (parameter_map_) {
-    auto itor = parameter_map_->find(index);
-    if (itor != parameter_map_->end()) {
-      return itor->second;
-    }
+  if (!result.second) {
+    return;
   }
 
-  return EMPTY_STRING;
+  headers_.addReference(result.first->second.first, result.first->second.second);
+}
+void RpcInvocationImpl::Attachment::update(const std::string& key, const std::string& value) {
+  origin_headers_[key] = {Http::LowerCaseString(key), value};
+
+  auto iter = origin_headers_.find(key);
+  ASSERT(iter != origin_headers_.end());
+
+  auto entry = headers_.get(iter->second.first);
+  if (!entry.empty()) {
+    entry[0]->value(iter->second.second);
+  } else {
+    headers_.addReference(iter->second.first, iter->second.second);
+  }
+}
+void RpcInvocationImpl::Attachment::remove(const std::string& key) {
+  auto iter = origin_headers_.find(key);
+  if (iter == origin_headers_.end()) {
+    return;
+  }
+
+  headers_.remove(iter->second.first);
+  origin_headers_.erase(iter);
 }
 
-const RpcInvocationImpl::ParameterValueMap& RpcInvocationImpl::parameters() {
-  ASSERT(hasParameters());
-  return *parameter_map_;
+const std::string* RpcInvocationImpl::Attachment::lookup(const std::string& key) {
+  auto iter = origin_headers_.find(key);
+  if (iter == origin_headers_.end()) {
+    return nullptr;
+  }
+
+  return &iter->second.second;
 }
 
-const Http::HeaderMap& RpcInvocationImpl::headers() const {
-  ASSERT(hasHeaders());
-  return *headers_;
+const RpcInvocationImpl::Attachment& RpcInvocationImpl::attachment() const {
+  assignAttachmentIfNeed();
+  return *attachment_;
 }
 
-void RpcInvocationImpl::addHeader(const std::string& key, const std::string& value) {
-  assignHeaderIfNeed();
-  headers_->addCopy(Http::LowerCaseString(key), value);
+RpcInvocationImpl::Attachment& RpcInvocationImpl::mutableAttachment() {
+  assignAttachmentIfNeed();
+  return *attachment_;
 }
 
-void RpcInvocationImpl::addHeaderReference(const Http::LowerCaseString& key,
-                                           const std::string& value) {
-  assignHeaderIfNeed();
-  headers_->addReference(key, value);
+const RpcInvocationImpl::Parameters& RpcInvocationImpl::parameters() const {
+  assignParametersIfNeed();
+  return *parameters_;
+}
+
+RpcInvocationImpl::Parameters& RpcInvocationImpl::mutableParameters() {
+  assignParametersIfNeed();
+  return *parameters_;
 }
 
 } // namespace DubboProxy

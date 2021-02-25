@@ -7,32 +7,21 @@ namespace Extensions {
 namespace NetworkFilters {
 namespace DubboProxy {
 
-class ContextBase : public Context {
+class ContextImpl : public Context {
 public:
-  ContextBase() = default;
-  ~ContextBase() override = default;
-
-  // Override from Context
-  size_t bodySize() const override { return body_size_; }
+  // DubboProxy::Context
   size_t headerSize() const override { return header_size_; }
+  size_t bodySize() const override { return body_size_; }
+  bool isHeartbeat() const override { return is_heartbeat_; }
 
-  void setBodySize(size_t size) { body_size_ = size; }
   void setHeaderSize(size_t size) { header_size_ = size; }
-
-protected:
-  size_t body_size_{0};
-  size_t header_size_{0};
-};
-
-class ContextImpl : public ContextBase {
-public:
-  ContextImpl() = default;
-  ~ContextImpl() override = default;
-
-  bool isHeartbeat() const { return is_heartbeat_; }
+  void setBodySize(size_t size) { body_size_ = size; }
   void setHeartbeat(bool is_heartbeat) { is_heartbeat_ = is_heartbeat; }
 
 private:
+  size_t header_size_{0};
+  size_t body_size_{0};
+
   bool is_heartbeat_{false};
 };
 

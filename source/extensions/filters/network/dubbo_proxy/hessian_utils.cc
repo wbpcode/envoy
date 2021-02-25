@@ -16,6 +16,53 @@ namespace Extensions {
 namespace NetworkFilters {
 namespace DubboProxy {
 
+uint32_t HessianUtils::getParametersNumber(const std::string& parameters_type) {
+  if (types.empty()) {
+    return 0;
+  }
+
+  uint32_t count = 0;
+  bool next = false;
+
+  for (auto ch : types) {
+    if (ch == '[') {
+      // Is array.
+      continue;
+    }
+
+    if (next && ch != ';') {
+      // Is Object.
+      continue;
+    }
+
+    switch (ch) {
+    case 'V':
+    case 'Z':
+    case 'B':
+    case 'C':
+    case 'D':
+    case 'F':
+    case 'I':
+    case 'J':
+    case 'S':
+      count++;
+      break;
+    case 'L':
+      // Start of Object.
+      count++;
+      next = true;
+      break;
+    case ';':
+      // End of Object.
+      next = false;
+      break;
+    default:
+      break;
+    }
+  }
+  return count;
+}
+
 void BufferWriter::rawWrite(const void* data, uint64_t size) { buffer_.add(data, size); }
 
 void BufferWriter::rawWrite(absl::string_view data) {
@@ -23,7 +70,7 @@ void BufferWriter::rawWrite(absl::string_view data) {
   std::cout << typeid(absl::string_view).name() << std::endl;
 
   std::cout << "writer" << data.size() << std::endl;
-  std::cout << data.substr(0,20).data() << std::endl;
+  std::cout << data.substr(0, 20).data() << std::endl;
 
   buffer_.add(data);
 }
