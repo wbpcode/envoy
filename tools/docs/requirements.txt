@@ -169,9 +169,9 @@ sphinx-tabs==3.2.0 \
     --hash=sha256:1e1b1846c80137bd81a78e4a69b02664b98b1e1da361beb30600b939dfc75065 \
     --hash=sha256:33137914ed9b276e6a686d7a337310ee77b1dae316fdcbce60476913a152e0a4
     # via -r tools/docs/requirements.txt
-sphinx==4.1.1 \
-    --hash=sha256:23c846a1841af998cb736218539bb86d16f5eb95f5760b1966abcd2d584e62b8 \
-    --hash=sha256:3d513088236eef51e5b0adb78b0492eb22cc3b8ccdb0b36dd021173b365d4454
+sphinx==4.1.2 \
+    --hash=sha256:46d52c6cee13fec44744b8c01ed692c18a640f6910a725cbb938bc36e8d64544 \
+    --hash=sha256:3092d929cd807926d846018f2ace47ba2f3b671b309c7a89cd3306e80c826b13
     # via
     #   -r tools/docs/requirements.txt
     #   sphinx-copybutton
