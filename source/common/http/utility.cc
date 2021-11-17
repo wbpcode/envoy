@@ -254,36 +254,48 @@ bool maybeAdjustForIpv6(absl::string_view absolute_url, uint64_t& offset, uint64
   return true;
 }
 
-void forEachCookie(
-    const HeaderMap& headers, const LowerCaseString& cookie_header,
-    const std::function<bool(absl::string_view, absl::string_view)>& cookie_consumer) {
+namespace {
+using CookieHandlerFn = std::function<bool(absl::string_view, absl::string_view)>;
+
+bool consumeCookie(absl::string_view header_value, const CookieHandlerFn& cookie_consumer) {
+  // Split the cookie header into individual cookies.
+  for (const auto& s : StringUtil::splitToken(header_value, ";")) {
+    // Find the key part of the cookie (i.e. the name of the cookie).
+    size_t first_non_space = s.find_first_not_of(' ');
+    size_t equals_index = s.find('=');
+    if (equals_index == absl::string_view::npos) {
+      // The cookie is malformed if it does not have an `=`. Continue
+      // checking other cookies in this header.
+      continue;
+    }
+    absl::string_view k = s.substr(first_non_space, equals_index - first_non_space);
+    absl::string_view v = s.substr(equals_index + 1, s.size() - 1);
+
+    // Cookie values may be wrapped in double quotes.
+    // Please check https://tools.ietf.org/html/rfc6265#section-4.1.1
+    if (v.size() >= 2 && v.back() == '"' && v[0] == '"') {
+      v = v.substr(1, v.size() - 2);
+    }
+
+    if (!cookie_consumer(k, v)) {
+      // Stop iterate cookie headers.
+      return false;
+    }
+  }
+  return true;
+}
+} // namespace
+
+// Iterate every cookie/set-cookie header in the headers.
+void forEachCookie(const HeaderMap& headers, const LowerCaseString& cookie_header,
+                   const CookieHandlerFn& cookie_consumer) {
   const Http::HeaderMap::GetResult cookie_headers = headers.get(cookie_header);
 
   for (size_t index = 0; index < cookie_headers.size(); index++) {
     auto cookie_header_value = cookie_headers[index]->value().getStringView();
 
-    // Split the cookie header into individual cookies.
-    for (const auto& s : StringUtil::splitToken(cookie_header_value, ";")) {
-      // Find the key part of the cookie (i.e. the name of the cookie).
-      size_t first_non_space = s.find_first_not_of(' ');
-      size_t equals_index = s.find('=');
-      if (equals_index == absl::string_view::npos) {
-        // The cookie is malformed if it does not have an `=`. Continue
-        // checking other cookies in this header.
-        continue;
-      }
-      absl::string_view k = s.substr(first_non_space, equals_index - first_non_space);
-      absl::string_view v = s.substr(equals_index + 1, s.size() - 1);
-
-      // Cookie values may be wrapped in double quotes.
-      // https://tools.ietf.org/html/rfc6265#section-4.1.1
-      if (v.size() >= 2 && v.back() == '"' && v[0] == '"') {
-        v = v.substr(1, v.size() - 2);
-      }
-
-      if (!cookie_consumer(k, v)) {
-        return;
-      }
+    if (!consumeCookie(cookie_header_value, cookie_consumer)) {
+      return;
     }
   }
 }
@@ -475,8 +487,28 @@ std::string Utility::replaceQueryString(const HeaderString& path,
   return new_path;
 }
 
-std::string Utility::parseCookieValue(const HeaderMap& headers, const std::string& key) {
-  // TODO(wbpcode): Modify the headers parameter type to 'RequestHeaderMap'.
+std::string Utility::parseCookieValue(const RequestHeaderMap& headers, const std::string& key) {
+  static auto InlineHandle =
+      CustomInlineHeaderRegistry::getInlineHeader<CustomInlineHeaderRegistry::Type::RequestHeaders>(
+          Headers::get().Cookie);
+
+  // Use inline handle to avoid hash search.
+  if (InlineHandle.has_value()) {
+    std::string single_cookie_value;
+    auto cookie_value = headers.getInlineValue(InlineHandle.value());
+
+    consumeCookie(cookie_value,
+                  [&key, &single_cookie_value](absl::string_view k, absl::string_view v) -> bool {
+                    if (key == k) {
+                      single_cookie_value = std::string{v};
+                      return false;
+                    }
+                    // continue iterating until a cookie that matches `key` is found.
+                    return true;
+                  });
+    return single_cookie_value;
+  }
+
   return parseCookie(headers, key, Http::Headers::get().Cookie);
 }
 

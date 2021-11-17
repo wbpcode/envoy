@@ -268,7 +268,7 @@ std::string replaceQueryString(const HeaderString& path, const QueryParams& para
  * @param key the key for the particular cookie value to return
  * @return std::string the parsed cookie value, or "" if none exists
  **/
-std::string parseCookieValue(const HeaderMap& headers, const std::string& key);
+std::string parseCookieValue(const RequestHeaderMap& headers, const std::string& key);
 
 /**
  * Parse cookies from header into a map.
