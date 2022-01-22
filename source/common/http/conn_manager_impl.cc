@@ -1623,19 +1623,20 @@ ConnectionManagerImpl::ActiveStream::route(const Router::RouteCallback& cb) {
  * functions as a helper to refreshCachedRoute(const Router::RouteCallback& cb).
  */
 void ConnectionManagerImpl::ActiveStream::setRoute(Router::RouteConstSharedPtr route) {
-  filter_manager_.streamInfo().route_ = route;
-  cached_route_ = std::move(route);
-  if (nullptr == filter_manager_.streamInfo().route() ||
-      nullptr == filter_manager_.streamInfo().route()->routeEntry()) {
+  if (nullptr == route || nullptr == route->routeEntry()) {
     cached_cluster_info_ = nullptr;
   } else {
     Upstream::ThreadLocalCluster* local_cluster =
         connection_manager_.cluster_manager_.getThreadLocalCluster(
-            filter_manager_.streamInfo().route()->routeEntry()->clusterName());
+            route->routeEntry()->clusterName());
     cached_cluster_info_ = (nullptr == local_cluster) ? nullptr : local_cluster->info();
   }
 
   filter_manager_.streamInfo().setUpstreamClusterInfo(cached_cluster_info_.value());
+  filter_manager_.streamInfo().route_ = route;
+
+  cached_route_ = std::move(route);
+
   refreshCachedTracingCustomTags();
   refreshDurationTimeout();
 }
