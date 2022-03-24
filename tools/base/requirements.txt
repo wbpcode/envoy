@@ -839,14 +839,14 @@ trycast==0.3.0 \
     #   envoy-base-utils
 twitter-common-finagle-thrift==0.3.9 \
     --hash=sha256:1e3a57d11f94f58745e6b83348ecd4fa74194618704f45444a15bc391fde497a
-    # via
-    #   -r requirements.in
-    #   twitter-common-rpc
-twitter-common-lang==0.3.9 \
-    --hash=sha256:56d1d266fd4767941d11c27061a57bc1266a3342e551bde3780f9e9eb5ad0ed1
+    # via -r requirements.in
+twitter-common-lang==0.3.11 \
+    --hash=sha256:6e967ca2b5bb96ea749d21052f45b18e37deb5cc160eb12c64a8f1cb9dba7a22 \
+    --hash=sha256:eecd2c27d43a374be4eba08c0bad7ed27f7012adb654b436bcbf3ac96828ca54
     # via twitter-common-rpc
-twitter-common-rpc==0.3.9 \
-    --hash=sha256:0792b63fb2fb32d970c2e9a409d3d00633190a22eb185145fe3d9067fdaa4514
+twitter-common-rpc==0.3.11 \
+    --hash=sha256:09d29730aa97f12857ff88834ffb4a0b93fb913acc255a7f1cc3e8276f1371d6 \
+    --hash=sha256:d2fc26e9cef1f929d93f243976accdc5b91dfece1e54ed272804c6edd9d48b77
     # via -r requirements.in
 types-orjson==3.6.2 \
     --hash=sha256:22ee9a79236b6b0bfb35a0684eded62ad930a88a56797fa3c449b026cf7dbfe4 \
