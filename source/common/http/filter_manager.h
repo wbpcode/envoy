@@ -749,6 +749,15 @@ public:
     addStreamEncoderFilterWorker(filter, nullptr, true);
   }
   void addAccessLogHandler(AccessLog::InstanceSharedPtr handler) override;
+  const StreamInfo::StreamInfo& streamInfo() const override { return stream_info_; }
+
+  // TODO(snowp): This should probably return a StreamInfo instead of the impl.
+  StreamInfo::StreamInfoImpl& streamInfo() { return stream_info_; }
+  // const StreamInfo::StreamInfoImpl& streamInfo() const { return stream_info_; }
+  void setDownstreamRemoteAddress(
+      const Network::Address::InstanceConstSharedPtr& downstream_remote_address) {
+    stream_info_.setDownstreamRemoteAddress(downstream_remote_address);
+  }
 
   void log() {
     RequestHeaderMap* request_headers = nullptr;
@@ -919,14 +928,6 @@ public:
   void skipFilterChainCreation() {
     ASSERT(!state_.created_filter_chain_);
     state_.created_filter_chain_ = true;
-  }
-
-  // TODO(snowp): This should probably return a StreamInfo instead of the impl.
-  StreamInfo::StreamInfoImpl& streamInfo() { return stream_info_; }
-  const StreamInfo::StreamInfoImpl& streamInfo() const { return stream_info_; }
-  void setDownstreamRemoteAddress(
-      const Network::Address::InstanceConstSharedPtr& downstream_remote_address) {
-    stream_info_.setDownstreamRemoteAddress(downstream_remote_address);
   }
 
   // Set up the Encoder/Decoder filter chain.

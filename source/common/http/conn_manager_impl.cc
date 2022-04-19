@@ -1061,6 +1061,8 @@ void ConnectionManagerImpl::ActiveStream::decodeHeaders(RequestHeaderMapPtr&& he
             cached_route_.value().get()));
   }
 
+  // Set request headers into the stream info before create filter chain. The request headers is
+  // necessary for the creating of filters that have matcher.
   filter_manager_.streamInfo().setRequestHeaders(*request_headers_);
 
   const bool upgrade_rejected = filter_manager_.createFilterChain() == false;

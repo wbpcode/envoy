@@ -1067,6 +1067,11 @@ public:
    * @param return the worker thread's dispatcher.
    */
   virtual Event::Dispatcher& dispatcher() PURE;
+
+  /**
+   * Allows filters to access the stream info of current stream or request.
+   */
+  virtual const StreamInfo::StreamInfo& streamInfo() const PURE;
 };
 
 /**

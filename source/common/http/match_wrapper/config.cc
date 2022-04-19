@@ -1,5 +1,6 @@
 #include "source/common/http/match_wrapper/config.h"
 
+#include "envoy/extensions/filters/common/matcher/action/v3/skip_action.pb.h"
 #include "envoy/http/filter.h"
 #include "envoy/matcher/matcher.h"
 #include "envoy/registry/registry.h"
@@ -16,6 +17,9 @@ namespace Http {
 namespace MatchWrapper {
 
 namespace {
+
+class SkipAction : public Matcher::ActionBase<
+                       envoy::extensions::filters::common::matcher::action::v3::SkipFilter> {};
 
 class MatchTreeValidationVisitor
     : public Matcher::MatchTreeValidationVisitor<Envoy::Http::HttpMatchingData> {
@@ -49,12 +53,34 @@ private:
 
 struct DelegatingFactoryCallbacks : public Envoy::Http::FilterChainFactoryCallbacks {
   DelegatingFactoryCallbacks(Envoy::Http::FilterChainFactoryCallbacks& delegated_callbacks,
-                             Matcher::MatchTreeSharedPtr<Envoy::Http::HttpMatchingData> match_tree)
-      : delegated_callbacks_(delegated_callbacks), match_tree_(std::move(match_tree)) {}
+                             Matcher::MatchTreePtr<Envoy::Http::HttpMatchingData>& match_tree)
+      : delegated_callbacks_(delegated_callbacks), match_tree_(match_tree) {
+
+    Envoy::Http::Matching::HttpMatchingDataImpl match_data(
+        delegated_callbacks.streamInfo().downstreamAddressProvider());
+    ASSERT(delegated_callbacks.streamInfo().getRequestHeaders() != nullptr);
+    match_data.onRequestHeaders(*delegated_callbacks.streamInfo().getRequestHeaders());
+
+    auto result = Matcher::evaluateMatch<Envoy::Http::HttpMatchingData>(*match_tree, match_data);
+
+    ASSERT(result.match_state_ == Matcher::MatchState::MatchComplete);
+    ASSERT(result.result_ != nullptr);
+    if (result.result_) {
+      if (match_result_ = result.result_(); SkipAction().typeUrl() == match_result_->typeUrl()) {
+        skip_filter_ = true;
+      }
+    }
+  }
 
   Event::Dispatcher& dispatcher() override { return delegated_callbacks_.dispatcher(); }
   void addStreamDecoderFilter(Envoy::Http::StreamDecoderFilterSharedPtr filter) override {
-    delegated_callbacks_.addStreamDecoderFilter(std::move(filter), match_tree_);
+    if (skip_filter_) {
+      return;
+    }
+    if (match_result_) {
+      filter->onMatchCallback(*match_result_);
+    }
+    delegated_callbacks_.addStreamDecoderFilter(std::move(filter));
   }
   void addStreamDecoderFilter(
       Envoy::Http::StreamDecoderFilterSharedPtr filter,
@@ -62,7 +88,13 @@ struct DelegatingFactoryCallbacks : public Envoy::Http::FilterChainFactoryCallba
     delegated_callbacks_.addStreamDecoderFilter(std::move(filter), std::move(match_tree));
   }
   void addStreamEncoderFilter(Envoy::Http::StreamEncoderFilterSharedPtr filter) override {
-    delegated_callbacks_.addStreamEncoderFilter(std::move(filter), match_tree_);
+    if (skip_filter_) {
+      return;
+    }
+    if (match_result_) {
+      filter->onMatchCallback(*match_result_);
+    }
+    delegated_callbacks_.addStreamEncoderFilter(std::move(filter));
   }
   void addStreamEncoderFilter(
       Envoy::Http::StreamEncoderFilterSharedPtr filter,
@@ -70,8 +102,16 @@ struct DelegatingFactoryCallbacks : public Envoy::Http::FilterChainFactoryCallba
     delegated_callbacks_.addStreamEncoderFilter(std::move(filter), std::move(match_tree));
   }
   void addStreamFilter(Envoy::Http::StreamFilterSharedPtr filter) override {
-    delegated_callbacks_.addStreamFilter(std::move(filter), match_tree_);
+    if (skip_filter_) {
+      return;
+    }
+    if (match_result_) {
+      Envoy::Http::StreamEncoderFilter* base_filter = filter.get();
+      base_filter->onMatchCallback(*match_result_);
+    }
+    delegated_callbacks_.addStreamFilter(std::move(filter));
   }
+  // This method now is unnecessary because we we needn't inject match tree to the filter chain manager.
   void
   addStreamFilter(Envoy::Http::StreamFilterSharedPtr filter,
                   Matcher::MatchTreeSharedPtr<Envoy::Http::HttpMatchingData> match_tree) override {
@@ -80,9 +120,15 @@ struct DelegatingFactoryCallbacks : public Envoy::Http::FilterChainFactoryCallba
   void addAccessLogHandler(AccessLog::InstanceSharedPtr handler) override {
     delegated_callbacks_.addAccessLogHandler(std::move(handler));
   }
+  const StreamInfo::StreamInfo& streamInfo() const override {
+    return delegated_callbacks_.streamInfo();
+  }
 
   Envoy::Http::FilterChainFactoryCallbacks& delegated_callbacks_;
-  Matcher::MatchTreeSharedPtr<Envoy::Http::HttpMatchingData> match_tree_;
+  Matcher::MatchTreePtr<Envoy::Http::HttpMatchingData>& match_tree_;
+
+  Matcher::ActionPtr match_result_;
+  bool skip_filter_{};
 };
 } // namespace
 
@@ -120,9 +166,10 @@ Envoy::Http::FilterFactoryCb MatchWrapperConfig::createFilterFactoryFromProtoTyp
                                      validation_visitor.errors()[0]));
   }
 
-  return [filter_factory, factory_cb](Envoy::Http::FilterChainFactoryCallbacks& callbacks) -> void {
-    DelegatingFactoryCallbacks delegated_callbacks(callbacks, factory_cb());
-
+  return [filter_factory,
+          match_tree = std::make_shared<Matcher::MatchTreePtr<Envoy::Http::HttpMatchingData>>(
+              factory_cb())](Envoy::Http::FilterChainFactoryCallbacks& callbacks) -> void {
+    DelegatingFactoryCallbacks delegated_callbacks(callbacks, *match_tree);
     return filter_factory(delegated_callbacks);
   };
 }
