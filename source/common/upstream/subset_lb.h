@@ -64,7 +64,7 @@ private:
   void initSubsetSelectorMap();
   void initSelectorFallbackSubset(const envoy::config::cluster::v3::Cluster::LbSubsetConfig::
                                       LbSubsetSelector::LbSubsetSelectorFallbackPolicy&);
-  HostConstSharedPtr
+  absl::optional<HostConstSharedPtr>
   chooseHostForSelectorFallbackPolicy(const SubsetSelectorFallbackParams& fallback_params,
                                       LoadBalancerContext* context);
 
@@ -230,23 +230,26 @@ private:
                  std::function<void(LbSubsetEntryPtr)> update_cb,
                  std::function<void(LbSubsetEntryPtr, HostPredicate, const SubsetMetadata&)> cb);
 
-  HostConstSharedPtr tryChooseHostFromContext(LoadBalancerContext* context, bool& host_chosen);
-  HostConstSharedPtr
-  tryChooseHostFromMetadataMatchCriteriaSingle(const Router::MetadataMatchCriteria& match_criteria,
-                                               bool& host_chosen);
+  absl::optional<HostConstSharedPtr> tryChooseHostFromContext(LoadBalancerContext* context);
+  absl::optional<HostConstSharedPtr>
+  tryChooseHostFromMetadataMatchCriteriaSingle(const Router::MetadataMatchCriteria& match_criteria);
+
+  absl::optional<HostConstSharedPtr>
+  chooseHostByCriteria(LoadBalancerContext* context,
+                       const Router::MetadataMatchCriteria& match_criteria);
 
   absl::optional<SubsetSelectorFallbackParamsRef>
   tryFindSelectorFallbackParams(LoadBalancerContext* context);
 
   bool hostMatches(const SubsetMetadata& kvs, const Host& host);
 
-  LbSubsetEntryPtr
-  findSubset(const std::vector<Router::MetadataMatchCriterionConstSharedPtr>& matches);
-
   LbSubsetEntryPtr findOrCreateSubset(LbSubsetMap& subsets, const SubsetMetadata& kvs,
                                       uint32_t idx);
   void forEachSubset(LbSubsetMap& subsets, std::function<void(LbSubsetEntryPtr)> cb);
   void purgeEmptySubsets(LbSubsetMap& subsets);
+
+  std::pair<Router::MetadataMatchCriteriaConstPtr, const SubsetSelector*>
+  filterMatchCriteriaBySelectors(const Router::MetadataMatchCriteria&) const;
 
   std::vector<SubsetMetadata> extractSubsetMetadata(const std::set<std::string>& subset_keys,
                                                     const Host& host);
@@ -267,7 +270,11 @@ private:
   const envoy::config::cluster::v3::Cluster::LbSubsetConfig::LbSubsetFallbackPolicy
       fallback_policy_;
   const SubsetMetadata default_subset_metadata_;
+
   std::vector<SubsetSelectorPtr> subset_selectors_;
+  // Forms a trie-like structure of lexically sorted subset selectors from subset selectors
+  // configuration
+  SubsetSelectorMapPtr selectors_;
 
   const PrioritySet& original_priority_set_;
   const PrioritySet* original_local_priority_set_;
@@ -281,9 +288,6 @@ private:
 
   // Forms a trie-like structure. Requires lexically sorted Host and Route metadata.
   LbSubsetMap subsets_;
-  // Forms a trie-like structure of lexically sorted keys+fallback policy from subset
-  // selectors configuration
-  SubsetSelectorMapPtr selectors_;
 
   std::string single_key_;
   absl::flat_hash_map<HashedValue, HostConstSharedPtr> single_host_per_subset_map_;
@@ -296,6 +300,7 @@ private:
   const bool locality_weight_aware_;
   const bool scale_locality_weight_;
   const bool list_as_any_;
+  const bool allow_redundant_keys_{};
 
   TimeSource& time_source_;
 

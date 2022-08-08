@@ -732,7 +732,7 @@ public:
    * Creates a new MetadataMatchCriteria with criteria vector reduced to given names
    * @param names names of metadata keys to preserve
    * @return MetadataMatchCriteriaConstPtr the result criteria. Returns nullptr if the result
-   * criteria are empty.
+   * criteria are empty or any name is missing.
    */
   virtual MetadataMatchCriteriaConstPtr
   filterMatchCriteria(const std::set<std::string>& names) const PURE;

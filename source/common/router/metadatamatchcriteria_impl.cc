@@ -44,13 +44,19 @@ MetadataMatchCriteriaImpl::filterMatchCriteria(const std::set<std::string>& name
 
   std::vector<MetadataMatchCriterionConstSharedPtr> v;
 
-  // iterating over metadata_match_criteria_ ensures correct order without sorting
-  for (const auto& it : metadata_match_criteria_) {
-    if (names.count(it->name()) == 1) {
-      v.emplace_back(it);
+  // iterating over metadata_match_criteria_ ensures correct order without sorting.
+  auto name_iter = names.begin();
+  for (const auto& criterion : metadata_match_criteria_) {
+    if (name_iter == names.end()) {
+      break;
+    }
+    if (criterion->name() == *name_iter) {
+      v.emplace_back(criterion);
+      name_iter++;
     }
   }
-  if (v.empty()) {
+
+  if (v.empty() || v.size() != names.size()) {
     return nullptr;
   }
   return MetadataMatchCriteriaImplConstPtr(new MetadataMatchCriteriaImpl(v));

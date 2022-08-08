@@ -42,7 +42,7 @@ SubsetLoadBalancer::SubsetLoadBalancer(
       original_local_priority_set_(local_priority_set),
       locality_weight_aware_(subsets.localityWeightAware()),
       scale_locality_weight_(subsets.scaleLocalityWeight()), list_as_any_(subsets.listAsAny()),
-      time_source_(time_source),
+      allow_redundant_keys_(subsets.allowRedundantKeys()), time_source_(time_source),
       override_host_status_(LoadBalancerContextBase::createOverrideHostStatus(common_config)) {
   ASSERT(subsets.isEnabled());
 
@@ -170,9 +170,8 @@ void SubsetLoadBalancer::rebuildSingle() {
 }
 
 // When in `single_host_per_subset` mode, select a host based on the provided match_criteria.
-// Set `host_chosen` to false if there is not a match.
-HostConstSharedPtr SubsetLoadBalancer::tryChooseHostFromMetadataMatchCriteriaSingle(
-    const Router::MetadataMatchCriteria& match_criteria, bool& host_chosen) {
+absl::optional<HostConstSharedPtr> SubsetLoadBalancer::tryChooseHostFromMetadataMatchCriteriaSingle(
+    const Router::MetadataMatchCriteria& match_criteria) {
   ASSERT(!single_key_.empty());
 
   for (const auto& entry : match_criteria.metadataMatchCriteria()) {
@@ -180,15 +179,13 @@ HostConstSharedPtr SubsetLoadBalancer::tryChooseHostFromMetadataMatchCriteriaSin
       auto it = single_host_per_subset_map_.find(entry->value());
       if (it != single_host_per_subset_map_.end()) {
         if (it->second->health() != Host::Health::Unhealthy) {
-          host_chosen = true;
           stats_.lb_subsets_selected_.inc();
           return it->second;
         }
       }
-      break;
     }
   }
-  return nullptr;
+  return absl::nullopt;
 }
 
 void SubsetLoadBalancer::refreshSubsets() {
@@ -291,20 +288,9 @@ HostConstSharedPtr SubsetLoadBalancer::chooseHost(LoadBalancerContext* context) 
   }
 
   if (context) {
-    bool host_chosen;
-    HostConstSharedPtr host = tryChooseHostFromContext(context, host_chosen);
-    if (host_chosen) {
+    if (auto optional_host = tryChooseHostFromContext(context); optional_host.has_value()) {
       // Subset lookup succeeded, return this result even if it's nullptr.
-      return host;
-    }
-    // otherwise check if there is fallback policy configured for given route metadata
-    absl::optional<SubsetSelectorFallbackParamsRef> selector_fallback_params =
-        tryFindSelectorFallbackParams(context);
-    if (selector_fallback_params &&
-        selector_fallback_params->get().fallback_policy_ !=
-            envoy::config::cluster::v3::Cluster::LbSubsetConfig::LbSubsetSelector::NOT_DEFINED) {
-      // return result according to configured fallback policy
-      return chooseHostForSelectorFallbackPolicy(*selector_fallback_params, context);
+      return std::move(optional_host).value();
     }
   }
 
@@ -358,12 +344,16 @@ SubsetLoadBalancer::tryFindSelectorFallbackParams(LoadBalancerContext* context) 
   return absl::nullopt;
 }
 
-HostConstSharedPtr SubsetLoadBalancer::chooseHostForSelectorFallbackPolicy(
+absl::optional<HostConstSharedPtr> SubsetLoadBalancer::chooseHostForSelectorFallbackPolicy(
     const SubsetSelectorFallbackParams& fallback_params, LoadBalancerContext* context) {
   const auto& fallback_policy = fallback_params.fallback_policy_;
   if (fallback_policy ==
-          envoy::config::cluster::v3::Cluster::LbSubsetConfig::LbSubsetSelector::ANY_ENDPOINT &&
-      subset_any_ != nullptr) {
+      envoy::config::cluster::v3::Cluster::LbSubsetConfig::LbSubsetSelector::NOT_DEFINED) {
+    // Return nullopt and the global fallback policy will be applied.
+    return absl::nullopt;
+  } else if (fallback_policy == envoy::config::cluster::v3::Cluster::LbSubsetConfig::
+                                    LbSubsetSelector::ANY_ENDPOINT &&
+             subset_any_ != nullptr) {
     return subset_any_->priority_subset_->lb_->chooseHost(context);
   } else if (fallback_policy == envoy::config::cluster::v3::Cluster::LbSubsetConfig::
                                     LbSubsetSelector::DEFAULT_SUBSET &&
@@ -381,38 +371,77 @@ HostConstSharedPtr SubsetLoadBalancer::chooseHostForSelectorFallbackPolicy(
   }
 }
 
+std::pair<Router::MetadataMatchCriteriaConstPtr, const SubsetSelector*>
+SubsetLoadBalancer::filterMatchCriteriaBySelectors(
+    const Router::MetadataMatchCriteria& origin_match_criteria) const {
+  for (const auto& selector : subset_selectors_) {
+    auto match_criteria = origin_match_criteria.filterMatchCriteria(selector->selectorKeys());
+    if (match_criteria != nullptr) {
+      return {std::move(match_criteria), selector.get()};
+    }
+  }
+  return {};
+}
+
 // Find a host from the subsets. Sets host_chosen to false and returns nullptr if the context has
 // no metadata match criteria, if there is no matching subset, or if the matching subset contains
 // no hosts (ignoring health). Otherwise, host_chosen is true and the returns HostConstSharedPtr is
 // from the subset's load balancer (technically, it may still be nullptr).
-HostConstSharedPtr SubsetLoadBalancer::tryChooseHostFromContext(LoadBalancerContext* context,
-                                                                bool& host_chosen) {
-  host_chosen = false;
+absl::optional<HostConstSharedPtr>
+SubsetLoadBalancer::tryChooseHostFromContext(LoadBalancerContext* context) {
   const Router::MetadataMatchCriteria* match_criteria = context->metadataMatchCriteria();
   if (!match_criteria) {
-    return nullptr;
+    return absl::nullopt;
   }
 
   if (!single_key_.empty()) {
-    return tryChooseHostFromMetadataMatchCriteriaSingle(*match_criteria, host_chosen);
+    return tryChooseHostFromMetadataMatchCriteriaSingle(*match_criteria);
   }
 
-  // Route has metadata match criteria defined, see if we have a matching subset.
-  LbSubsetEntryPtr entry = findSubset(match_criteria->metadataMatchCriteria());
-  if (entry == nullptr || !entry->active()) {
-    // No matching subset or subset not active: use fallback policy.
-    return nullptr;
+  Router::MetadataMatchCriteriaConstPtr selected_match_criteria{};
+  const SubsetSelector* selected_selector{};
+
+  if (allow_redundant_keys_) {
+    auto criteria_and_selector = filterMatchCriteriaBySelectors(*match_criteria);
+
+    if (criteria_and_selector.first == nullptr) {
+      // The meatadata match criteria not match any selector's requirements.
+      return absl::nullopt;
+    }
+
+    selected_match_criteria = std::move(criteria_and_selector.first);
+    selected_selector = criteria_and_selector.second;
+
+    match_criteria = selected_match_criteria.get();
   }
 
-  host_chosen = true;
-  stats_.lb_subsets_selected_.inc();
-  return entry->priority_subset_->lb_->chooseHost(context);
+  if (auto optional_host = chooseHostByCriteria(context, *match_criteria);
+      optional_host.has_value()) {
+    return optional_host;
+  }
+
+  // No matching subset or subset not active: try fallback policy of selector.
+  if (selected_selector != nullptr) {
+    return chooseHostForSelectorFallbackPolicy(
+        {selected_selector->fallbackPolicy(), &selected_selector->fallbackKeysSubset()}, context);
+  } else {
+    absl::optional<SubsetSelectorFallbackParamsRef> selector_fallback_params =
+        tryFindSelectorFallbackParams(context);
+    if (selector_fallback_params) {
+      // return result according to configured fallback policy
+      return chooseHostForSelectorFallbackPolicy(*selector_fallback_params, context);
+    }
+  }
+  return absl::nullopt;
 }
 
 // Iterates over the given metadata match criteria (which must be lexically sorted by key) and find
-// a matching LbSubsetEntryPtr, if any.
-SubsetLoadBalancer::LbSubsetEntryPtr SubsetLoadBalancer::findSubset(
-    const std::vector<Router::MetadataMatchCriterionConstSharedPtr>& match_criteria) {
+// a matching host, if any. Return nullopt if no matching subset or subset not active.
+absl::optional<HostConstSharedPtr>
+SubsetLoadBalancer::chooseHostByCriteria(LoadBalancerContext* context,
+                                         const Router::MetadataMatchCriteria& match_criteria) {
+  const auto& match_criteria_vec = match_criteria.metadataMatchCriteria();
+
   const LbSubsetMap* subsets = &subsets_;
 
   // Because the match_criteria and the host metadata used to populate subsets_ are sorted in the
@@ -421,8 +450,8 @@ SubsetLoadBalancer::LbSubsetEntryPtr SubsetLoadBalancer::findSubset(
   // (tracked in subsets). If ever a criterion's key or value is not found, there is no subset for
   // this criteria. If we reach the last criterion, we've found the LbSubsetEntry for the criteria,
   // which may or may not have a subset attached to it.
-  for (uint32_t i = 0; i < match_criteria.size(); i++) {
-    const Router::MetadataMatchCriterion& match_criterion = *match_criteria[i];
+  for (uint32_t i = 0; i < match_criteria_vec.size(); i++) {
+    const Router::MetadataMatchCriterion& match_criterion = *match_criteria_vec[i];
     const auto& subset_it = subsets->find(match_criterion.name());
     if (subset_it == subsets->end()) {
       // No subsets with this key (at this level in the hierarchy).
@@ -437,15 +466,19 @@ SubsetLoadBalancer::LbSubsetEntryPtr SubsetLoadBalancer::findSubset(
     }
 
     const LbSubsetEntryPtr& entry = vs_it->second;
-    if (i + 1 == match_criteria.size()) {
+    if (i + 1 == match_criteria_vec.size()) {
       // We've reached the end of the criteria, and they all matched.
-      return entry;
+      if (entry == nullptr || !entry->active()) {
+        return absl::nullopt;
+      }
+      stats_.lb_subsets_selected_.inc();
+      return entry->priority_subset_->lb_->chooseHost(context);
     }
 
     subsets = &entry->children_;
   }
 
-  return nullptr;
+  return absl::nullopt;
 }
 
 void SubsetLoadBalancer::updateFallbackSubset(uint32_t priority, const HostVector& hosts_added,
