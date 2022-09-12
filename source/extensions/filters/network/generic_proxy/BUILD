@@ -43,6 +43,7 @@ envoy_cc_extension(
     deps = [
         ":proxy_lib",
         "//envoy/server:filter_config_interface",
+        "//source/extensions/filters/network/generic_proxy/codec/http",
         "//source/extensions/filters/network/generic_proxy/router:config",
         "@envoy_api//envoy/extensions/filters/network/generic_proxy/v3:pkg_cc_proto",
     ],
