@@ -4,8 +4,8 @@
 #include "envoy/network/filter.h"
 
 #include "source/common/buffer/buffer_impl.h"
-#include "source/extensions/filters/network/dubbo_proxy/message.h"
-#include "source/extensions/filters/network/dubbo_proxy/metadata.h"
+#include "source/extensions/common/dubbo/message.h"
+#include "source/extensions/common/dubbo/metadata.h"
 
 namespace Envoy {
 namespace Extensions {

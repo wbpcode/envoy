@@ -6,7 +6,7 @@
 #include "envoy/rds/config.h"
 #include "envoy/router/router.h"
 
-#include "source/extensions/filters/network/dubbo_proxy/metadata.h"
+#include "source/extensions/common/dubbo/metadata.h"
 
 namespace Envoy {
 namespace Extensions {

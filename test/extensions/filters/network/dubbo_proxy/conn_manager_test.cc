@@ -7,7 +7,7 @@
 #include "source/extensions/filters/network/dubbo_proxy/conn_manager.h"
 #include "source/extensions/filters/network/dubbo_proxy/dubbo_hessian2_serializer_impl.h"
 #include "source/extensions/filters/network/dubbo_proxy/dubbo_protocol_impl.h"
-#include "source/extensions/filters/network/dubbo_proxy/message_impl.h"
+#include "source/extensions/common/dubbo/message_impl.h"
 #include "source/extensions/filters/network/dubbo_proxy/router/rds_impl.h"
 
 #include "test/common/stats/stat_test_utility.h"

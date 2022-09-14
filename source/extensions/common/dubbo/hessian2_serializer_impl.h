@@ -1,6 +1,6 @@
 #pragma once
 
-#include "source/extensions/filters/network/dubbo_proxy/message_impl.h"
+#include "source/extensions/common/dubbo/message_impl.h"
 #include "source/extensions/filters/network/dubbo_proxy/serializer.h"
 
 namespace Envoy {
@@ -15,13 +15,13 @@ public:
   }
   SerializationType type() const override { return SerializationType::Hessian2; }
 
-  std::pair<RpcInvocationSharedPtr, bool>
-  deserializeRpcInvocation(Buffer::Instance& buffer, ContextSharedPtr context) override;
+  std::pair<RpcRequestSharedPtr, bool>
+  deserializeRpcRequest(Buffer::Instance& buffer, ContextSharedPtr context) override;
 
-  std::pair<RpcResultSharedPtr, bool> deserializeRpcResult(Buffer::Instance& buffer,
+  std::pair<RpcResponseSharedPtr, bool> deserializeRpcResponse(Buffer::Instance& buffer,
                                                            ContextSharedPtr context) override;
 
-  size_t serializeRpcResult(Buffer::Instance& output_buffer, const std::string& content,
+  size_t serializeRpcResponse(Buffer::Instance& output_buffer, const std::string& content,
                             RpcResponseType type) override;
 };
 

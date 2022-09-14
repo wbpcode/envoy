@@ -16,8 +16,8 @@
 #include "source/common/http/header_utility.h"
 #include "source/common/protobuf/protobuf.h"
 #include "source/common/router/metadatamatchcriteria_impl.h"
-#include "source/extensions/filters/network/dubbo_proxy/message_impl.h"
-#include "source/extensions/filters/network/dubbo_proxy/metadata.h"
+#include "source/extensions/common/dubbo/message_impl.h"
+#include "source/extensions/common/dubbo/metadata.h"
 #include "source/extensions/filters/network/dubbo_proxy/router/router.h"
 
 #include "absl/types/optional.h"

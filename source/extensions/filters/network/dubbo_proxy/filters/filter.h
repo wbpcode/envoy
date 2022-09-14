@@ -9,8 +9,8 @@
 #include "envoy/stream_info/stream_info.h"
 
 #include "source/extensions/filters/network/dubbo_proxy/decoder_event_handler.h"
-#include "source/extensions/filters/network/dubbo_proxy/message.h"
-#include "source/extensions/filters/network/dubbo_proxy/metadata.h"
+#include "source/extensions/common/dubbo/message.h"
+#include "source/extensions/common/dubbo/metadata.h"
 #include "source/extensions/filters/network/dubbo_proxy/protocol.h"
 #include "source/extensions/filters/network/dubbo_proxy/router/router.h"
 #include "source/extensions/filters/network/dubbo_proxy/serializer.h"

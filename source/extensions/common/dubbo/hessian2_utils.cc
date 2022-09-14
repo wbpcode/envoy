@@ -1,4 +1,4 @@
-#include "source/extensions/filters/network/dubbo_proxy/hessian_utils.h"
+#include "source/extensions/common/dubbo/hessian2_utils.h"
 
 namespace Envoy {
 namespace Extensions {
@@ -8,7 +8,7 @@ namespace DubboProxy {
 // Check
 // https://github.com/apache/dubbo/blob/master/dubbo-common/src/main/java/org/apache/dubbo/common/utils/ReflectUtils.java
 // for details of parameters type.
-uint32_t HessianUtils::getParametersNumber(const std::string& parameters_type) {
+uint32_t Hessian2Utils::getParametersNumber(const std::string& parameters_type) {
   if (parameters_type.empty()) {
     return 0;
   }

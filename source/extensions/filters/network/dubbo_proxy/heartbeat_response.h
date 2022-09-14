@@ -1,7 +1,7 @@
 #pragma once
 
 #include "source/extensions/filters/network/dubbo_proxy/filters/filter.h"
-#include "source/extensions/filters/network/dubbo_proxy/metadata.h"
+#include "source/extensions/common/dubbo/metadata.h"
 #include "source/extensions/filters/network/dubbo_proxy/protocol.h"
 #include "source/extensions/filters/network/dubbo_proxy/serializer.h"
 

@@ -16,7 +16,7 @@ namespace Extensions {
 namespace NetworkFilters {
 namespace DubboProxy {
 
-class HessianUtils {
+class Hessian2Utils {
 public:
   static uint32_t getParametersNumber(const std::string& parameters_type);
 };

@@ -1,4 +1,4 @@
-#include "source/extensions/filters/network/dubbo_proxy/message_impl.h"
+#include "source/extensions/common/dubbo/message_impl.h"
 
 #include "source/common/http/header_map_impl.h"
 
@@ -7,7 +7,7 @@ namespace Extensions {
 namespace NetworkFilters {
 namespace DubboProxy {
 
-RpcInvocationImpl::Attachment::Attachment(MapPtr&& value, size_t offset)
+RpcRequestImpl::Attachment::Attachment(MapPtr&& value, size_t offset)
     : attachment_(std::move(value)), attachment_offset_(offset) {
   headers_ = Http::RequestHeaderMapImpl::create();
 
@@ -24,7 +24,7 @@ RpcInvocationImpl::Attachment::Attachment(MapPtr&& value, size_t offset)
   }
 }
 
-void RpcInvocationImpl::Attachment::insert(const std::string& key, const std::string& value) {
+void RpcRequestImpl::Attachment::insert(const std::string& key, const std::string& value) {
   attachment_updated_ = true;
 
   ASSERT(attachment_->toMutableUntypedMap());
@@ -37,7 +37,7 @@ void RpcInvocationImpl::Attachment::insert(const std::string& key, const std::st
   headers_->addCopy(lowcase_key, value);
 }
 
-void RpcInvocationImpl::Attachment::remove(const std::string& key) {
+void RpcRequestImpl::Attachment::remove(const std::string& key) {
   attachment_updated_ = true;
 
   ASSERT(attachment_->toMutableUntypedMap());
@@ -46,7 +46,7 @@ void RpcInvocationImpl::Attachment::remove(const std::string& key) {
   headers_->remove(Http::LowerCaseString(key));
 }
 
-const std::string* RpcInvocationImpl::Attachment::lookup(const std::string& key) const {
+const std::string* RpcRequestImpl::Attachment::lookup(const std::string& key) const {
   ASSERT(attachment_->toMutableUntypedMap());
 
   auto map = attachment_->toMutableUntypedMap();
@@ -57,14 +57,14 @@ const std::string* RpcInvocationImpl::Attachment::lookup(const std::string& key)
   return nullptr;
 }
 
-void RpcInvocationImpl::assignParametersIfNeed() const {
+void RpcRequestImpl::assignParametersIfNeed() const {
   ASSERT(parameters_lazy_callback_ != nullptr);
   if (parameters_ == nullptr) {
     parameters_ = parameters_lazy_callback_();
   }
 }
 
-void RpcInvocationImpl::assignAttachmentIfNeed() const {
+void RpcRequestImpl::assignAttachmentIfNeed() const {
   ASSERT(attachment_lazy_callback_ != nullptr);
   if (attachment_ != nullptr) {
     return;
@@ -74,31 +74,31 @@ void RpcInvocationImpl::assignAttachmentIfNeed() const {
   attachment_ = attachment_lazy_callback_();
 
   if (auto g = attachment_->lookup("group"); g != nullptr) {
-    const_cast<RpcInvocationImpl*>(this)->group_ = *g;
+    const_cast<RpcRequestImpl*>(this)->group_ = *g;
   }
 }
 
-const absl::optional<std::string>& RpcInvocationImpl::serviceGroup() const {
+absl::optional<absl::string_view> RpcRequestImpl::serviceGroup() const {
   assignAttachmentIfNeed();
-  return group_;
+  return RpcRequestBase::serviceGroup();
 }
 
-const RpcInvocationImpl::Attachment& RpcInvocationImpl::attachment() const {
+const RpcRequestImpl::Attachment& RpcRequestImpl::attachment() const {
   assignAttachmentIfNeed();
   return *attachment_;
 }
 
-RpcInvocationImpl::AttachmentPtr& RpcInvocationImpl::mutableAttachment() const {
+RpcRequestImpl::AttachmentPtr& RpcRequestImpl::mutableAttachment() const {
   assignAttachmentIfNeed();
   return attachment_;
 }
 
-const RpcInvocationImpl::Parameters& RpcInvocationImpl::parameters() const {
+const RpcRequestImpl::Parameters& RpcRequestImpl::parameters() const {
   assignParametersIfNeed();
   return *parameters_;
 }
 
-RpcInvocationImpl::ParametersPtr& RpcInvocationImpl::mutableParameters() const {
+RpcRequestImpl::ParametersPtr& RpcRequestImpl::mutableParameters() const {
   assignParametersIfNeed();
   return parameters_;
 }

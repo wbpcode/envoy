@@ -2,56 +2,38 @@
 
 #include "envoy/http/header_map.h"
 
-#include "source/extensions/filters/network/dubbo_proxy/hessian_utils.h"
-#include "source/extensions/filters/network/dubbo_proxy/message.h"
+#include "source/extensions/common/dubbo/hessian2_utils.h"
+#include "source/extensions/common/dubbo/message.h"
 
 namespace Envoy {
 namespace Extensions {
 namespace NetworkFilters {
 namespace DubboProxy {
 
-class ContextImpl : public Context {
+class RpcRequestBase : public RpcRequest {
 public:
-  // DubboProxy::Context
-  size_t headerSize() const override { return header_size_; }
-  size_t bodySize() const override { return body_size_; }
-  bool isHeartbeat() const override { return is_heartbeat_; }
+  void setServiceName(absl::string_view name) { service_name_ = std::string(name); }
+  void setMethodName(absl::string_view name) { method_name_ = std::string(name); }
+  void setServiceVersion(absl::string_view version) { service_version_ = std::string(version); }
+  void setServiceGroup(absl::string_view group) { group_ = std::string(group); }
 
-  void setHeaderSize(size_t size) { header_size_ = size; }
-  void setBodySize(size_t size) { body_size_ = size; }
-  void setHeartbeat(bool heartbeat) { is_heartbeat_ = heartbeat; }
-
-private:
-  size_t header_size_{0};
-  size_t body_size_{0};
-
-  bool is_heartbeat_{false};
-};
-
-class RpcInvocationBase : public RpcInvocation {
-public:
-  ~RpcInvocationBase() override = default;
-
-  void setServiceName(const std::string& name) { service_name_ = name; }
-  const std::string& serviceName() const override { return service_name_; }
-
-  void setMethodName(const std::string& name) { method_name_ = name; }
-  const std::string& methodName() const override { return method_name_; }
-
-  void setServiceVersion(const std::string& version) { service_version_ = version; }
-  const absl::optional<std::string>& serviceVersion() const override { return service_version_; }
-
-  void setServiceGroup(const std::string& group) { group_ = group; }
-  const absl::optional<std::string>& serviceGroup() const override { return group_; }
+  // RpcRequest
+  absl::string_view serviceName() const override { return service_name_; }
+  absl::string_view methodName() const override { return method_name_; }
+  absl::string_view serviceVersion() const override { return service_version_; }
+  absl::optional<absl::string_view> serviceGroup() const override {
+    return group_.has_value() ? absl::make_optional<absl::string_view>(group_.value())
+                              : absl::nullopt;
+  }
 
 protected:
   std::string service_name_;
   std::string method_name_;
-  absl::optional<std::string> service_version_;
+  std::string service_version_;
   absl::optional<std::string> group_;
 };
 
-class RpcInvocationImpl : public RpcInvocationBase {
+class RpcRequestImpl : public RpcRequestBase {
 public:
   // Each parameter consists of a parameter binary size and Hessian2::Object.
   using Parameters = std::vector<Hessian2::ObjectPtr>;
@@ -114,7 +96,7 @@ public:
     attachment_lazy_callback_ = std::move(callback);
   }
 
-  const absl::optional<std::string>& serviceGroup() const override;
+  absl::optional<absl::string_view> serviceGroup() const override;
 
 private:
   void assignParametersIfNeed() const;
@@ -127,13 +109,18 @@ private:
   mutable AttachmentPtr attachment_{};
 };
 
-class RpcResultImpl : public RpcResult {
+class RpcResponseImpl : public RpcResponse {
 public:
-  bool hasException() const override { return has_exception_; }
   void setException(bool has_exception) { has_exception_ = has_exception; }
+  void setResponseType(RpcResponseType type) { response_type_ = type; }
+
+  // RpcResponse
+  bool hasException() const override { return has_exception_; }
+  absl::optional<RpcResponseType> responseType() const override { return response_type_; }
 
 private:
   bool has_exception_{false};
+  absl::optional<RpcResponseType> response_type_;
 };
 
 } // namespace DubboProxy

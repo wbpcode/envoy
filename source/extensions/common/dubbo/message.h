@@ -43,8 +43,8 @@ enum class ProtocolType : uint8_t {
   LastProtocolType = Dubbo,
 };
 
-// Supported serialization type
-enum class SerializationType : uint8_t {
+// Supported serialize type
+enum class SerializeType : uint8_t {
   Hessian2 = 2,
 };
 
@@ -87,54 +87,33 @@ enum class RpcResponseType : uint8_t {
   ResponseNullValueWithAttachments = 5,
 };
 
-class Context {
+/**
+ * RpcRequest represent an rpc call.
+ */
+class RpcRequest {
 public:
-  virtual ~Context() = default;
+  virtual ~RpcRequest() = default;
 
-  Buffer::Instance& originMessage() { return origin_message_; }
-  size_t messageSize() const { return headerSize() + bodySize(); }
-
-  virtual size_t headerSize() const PURE;
-  virtual size_t bodySize() const PURE;
-
-  virtual bool isHeartbeat() const PURE;
-
-protected:
-  Buffer::OwnedImpl origin_message_;
+  virtual absl::string_view serviceName() const PURE;
+  virtual absl::string_view methodName() const PURE;
+  virtual absl::string_view serviceVersion() const PURE;
+  virtual absl::optional<absl::string_view> serviceGroup() const PURE;
 };
 
-using ContextSharedPtr = std::shared_ptr<Context>;
+using RpcRequestSharedPtr = std::shared_ptr<RpcRequest>;
 
 /**
- * RpcInvocation represent an rpc call
- * See
- * https://github.com/apache/incubator-dubbo/blob/master/dubbo-rpc/dubbo-rpc-api/src/main/java/org/apache/dubbo/rpc/RpcInvocation.java
+ * RpcResponse represent the result of an rpc call.
  */
-class RpcInvocation {
+class RpcResponse {
 public:
-  virtual ~RpcInvocation() = default;
+  virtual ~RpcResponse() = default;
 
-  virtual const std::string& serviceName() const PURE;
-  virtual const std::string& methodName() const PURE;
-  virtual const absl::optional<std::string>& serviceVersion() const PURE;
-  virtual const absl::optional<std::string>& serviceGroup() const PURE;
-};
-
-using RpcInvocationSharedPtr = std::shared_ptr<RpcInvocation>;
-
-/**
- * RpcResult represent the result of an rpc call
- * See
- * https://github.com/apache/incubator-dubbo/blob/master/dubbo-rpc/dubbo-rpc-api/src/main/java/org/apache/dubbo/rpc/RpcResult.java
- */
-class RpcResult {
-public:
-  virtual ~RpcResult() = default;
-
+  virtual absl::optional<RpcResponseType> responseType() const PURE;
   virtual bool hasException() const PURE;
 };
 
-using RpcResultSharedPtr = std::shared_ptr<RpcResult>;
+using RpcResponseSharedPtr = std::shared_ptr<RpcResponse>;
 
 } // namespace DubboProxy
 } // namespace NetworkFilters

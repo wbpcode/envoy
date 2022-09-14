@@ -4,7 +4,7 @@
 #include "envoy/extensions/filters/network/dubbo_proxy/v3/route.pb.validate.h"
 
 #include "source/common/protobuf/protobuf.h"
-#include "source/extensions/filters/network/dubbo_proxy/message_impl.h"
+#include "source/extensions/common/dubbo/message_impl.h"
 #include "source/extensions/filters/network/dubbo_proxy/router/route_matcher.h"
 
 #include "test/mocks/server/factory_context.h"

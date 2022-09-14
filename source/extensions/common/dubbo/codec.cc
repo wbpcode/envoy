@@ -1,9 +1,12 @@
+#include "codec.h"
+#include "metadata.h"
 #include "source/extensions/filters/network/dubbo_proxy/dubbo_protocol_impl.h"
 
 #include "envoy/registry/registry.h"
 
 #include "source/common/common/assert.h"
-#include "source/extensions/filters/network/dubbo_proxy/message_impl.h"
+#include "source/extensions/common/dubbo/message_impl.h"
+#include <memory>
 
 namespace Envoy {
 namespace Extensions {
@@ -15,7 +18,7 @@ constexpr uint16_t MagicNumber = 0xdabb;
 constexpr uint8_t MessageTypeMask = 0x80;
 constexpr uint8_t EventMask = 0x20;
 constexpr uint8_t TwoWayMask = 0x40;
-constexpr uint8_t SerializationTypeMask = 0x1f;
+constexpr uint8_t SerializeTypeMask = 0x1f;
 constexpr uint64_t FlagOffset = 2;
 constexpr uint64_t StatusOffset = 3;
 constexpr uint64_t RequestIDOffset = 4;
@@ -23,10 +26,10 @@ constexpr uint64_t BodySizeOffset = 12;
 
 } // namespace
 
-// Consistent with the SerializationType
-bool isValidSerializationType(SerializationType type) {
+// Consistent with the SerializeType
+bool isValidSerializeType(SerializeType type) {
   switch (type) {
-  case SerializationType::Hessian2:
+  case SerializeType::Hessian2:
     break;
   default:
     return false;
@@ -53,26 +56,29 @@ bool isValidResponseStatus(ResponseStatus status) {
   return true;
 }
 
-void parseRequestInfoFromBuffer(Buffer::Instance& data, MessageMetadataSharedPtr metadata) {
-  ASSERT(data.length() >= DubboProtocolImpl::MessageSize);
+void parseRequestInfoFromBuffer(Buffer::Instance& data, MessageContext& context) {
+  ASSERT(data.length() >= DubboCodec::HeadersSize);
+
   uint8_t flag = data.peekInt<uint8_t>(FlagOffset);
   bool is_two_way = (flag & TwoWayMask) == TwoWayMask ? true : false;
-  SerializationType type = static_cast<SerializationType>(flag & SerializationTypeMask);
-  if (!isValidSerializationType(type)) {
+  SerializeType type = static_cast<SerializeType>(flag & SerializeTypeMask);
+  if (!isValidSerializeType(type)) {
     throw EnvoyException(
         absl::StrCat("invalid dubbo message serialization type ",
-                     static_cast<std::underlying_type<SerializationType>::type>(type)));
+                     static_cast<std::underlying_type<SerializeType>::type>(type)));
   }
 
-  if (!is_two_way && metadata->messageType() != MessageType::HeartbeatRequest) {
-    metadata->setMessageType(MessageType::Oneway);
+  // Normal request without two flag should be one way request.
+  if (!is_two_way && context.messageType() != MessageType::HeartbeatRequest) {
+    context.setMessageType(MessageType::Oneway);
   }
 
-  metadata->setSerializationType(type);
+  context.setTwoWayFlag(is_two_way);
+  context.setSerializeType(type);
 }
 
-void parseResponseInfoFromBuffer(Buffer::Instance& buffer, MessageMetadataSharedPtr metadata) {
-  ASSERT(buffer.length() >= DubboProtocolImpl::MessageSize);
+void parseResponseInfoFromBuffer(Buffer::Instance& buffer, MessageContext& context) {
+  ASSERT(buffer.length() >= DubboCodec::HeadersSize);
   ResponseStatus status = static_cast<ResponseStatus>(buffer.peekInt<uint8_t>(StatusOffset));
   if (!isValidResponseStatus(status)) {
     throw EnvoyException(
@@ -80,17 +86,15 @@ void parseResponseInfoFromBuffer(Buffer::Instance& buffer, MessageMetadataShared
                      static_cast<std::underlying_type<ResponseStatus>::type>(status)));
   }
 
-  metadata->setResponseStatus(status);
+  context.setResponseStatus(status);
 }
 
-std::pair<ContextSharedPtr, bool>
-DubboProtocolImpl::decodeHeader(Buffer::Instance& buffer, MessageMetadataSharedPtr metadata) {
-  if (!metadata) {
-    throw EnvoyException("invalid metadata parameter");
-  }
+DecodeStatus DubboCodec::decodeHeader(Buffer::Instance& buffer, MessageMetadata& metadata) {
+  // Empty metadata.
+  ASSERT(!metadata.hasMessageContextInfo());
 
-  if (buffer.length() < DubboProtocolImpl::MessageSize) {
-    return std::pair<ContextSharedPtr, bool>(nullptr, false);
+  if (buffer.length() < DubboCodec::HeadersSize) {
+    return DecodeStatus::Waiting;
   }
 
   uint16_t magic_number = buffer.peekBEInt<uint16_t>();
@@ -98,11 +102,15 @@ DubboProtocolImpl::decodeHeader(Buffer::Instance& buffer, MessageMetadataSharedP
     throw EnvoyException(absl::StrCat("invalid dubbo message magic number ", magic_number));
   }
 
+  auto context = std::make_shared<MessageContext>();
+
   uint8_t flag = buffer.peekInt<uint8_t>(FlagOffset);
   MessageType type =
       (flag & MessageTypeMask) == MessageTypeMask ? MessageType::Request : MessageType::Response;
   bool is_event = (flag & EventMask) == EventMask ? true : false;
+
   int64_t request_id = buffer.peekBEInt<int64_t>(RequestIDOffset);
+
   int32_t body_size = buffer.peekBEInt<int32_t>(BodySizeOffset);
 
   // The body size of the heartbeat message is zero.
@@ -110,24 +118,22 @@ DubboProtocolImpl::decodeHeader(Buffer::Instance& buffer, MessageMetadataSharedP
     throw EnvoyException(absl::StrCat("invalid dubbo message size ", body_size));
   }
 
-  metadata->setRequestId(request_id);
+  context->setRequestId(request_id);
 
   if (type == MessageType::Request) {
     if (is_event) {
       type = MessageType::HeartbeatRequest;
     }
-    metadata->setMessageType(type);
-    parseRequestInfoFromBuffer(buffer, metadata);
+    context->setMessageType(type);
+    parseRequestInfoFromBuffer(buffer, *context);
   } else {
     if (is_event) {
       type = MessageType::HeartbeatResponse;
     }
-    metadata->setMessageType(type);
-    parseResponseInfoFromBuffer(buffer, metadata);
+    context->setMessageType(type);
+    parseResponseInfoFromBuffer(buffer, *context);
   }
 
-  auto context = std::make_shared<ContextImpl>();
-  context->setHeaderSize(DubboProtocolImpl::MessageSize);
   context->setBodySize(body_size);
   context->setHeartbeat(is_event);
 
@@ -145,7 +151,7 @@ bool DubboProtocolImpl::decodeData(Buffer::Instance& buffer, ContextSharedPtr co
   switch (metadata->messageType()) {
   case MessageType::Oneway:
   case MessageType::Request: {
-    auto ret = serializer_->deserializeRpcInvocation(buffer, context);
+    auto ret = serializer_->deserializeRpcRequest(buffer, context);
     if (!ret.second) {
       return false;
     }
@@ -158,7 +164,7 @@ bool DubboProtocolImpl::decodeData(Buffer::Instance& buffer, ContextSharedPtr co
       metadata->setMessageType(MessageType::Exception);
       break;
     }
-    auto ret = serializer_->deserializeRpcResult(buffer, context);
+    auto ret = serializer_->deserializeRpcResponse(buffer, context);
     if (!ret.second) {
       return false;
     }
@@ -199,7 +205,7 @@ bool DubboProtocolImpl::encode(Buffer::Instance& buffer, const MessageMetadata& 
     ASSERT(metadata.hasResponseStatus());
     ASSERT(!content.empty());
     Buffer::OwnedImpl body_buffer;
-    size_t serialized_body_size = serializer_->serializeRpcResult(body_buffer, content, type);
+    size_t serialized_body_size = serializer_->serializeRpcResponse(body_buffer, content, type);
 
     buffer.writeBEInt<uint16_t>(MagicNumber);
     buffer.writeByte(static_cast<uint8_t>(metadata.serializationType()));

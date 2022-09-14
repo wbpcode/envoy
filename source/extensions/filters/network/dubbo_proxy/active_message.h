@@ -12,7 +12,7 @@
 #include "source/extensions/filters/network/dubbo_proxy/decoder.h"
 #include "source/extensions/filters/network/dubbo_proxy/decoder_event_handler.h"
 #include "source/extensions/filters/network/dubbo_proxy/filters/filter.h"
-#include "source/extensions/filters/network/dubbo_proxy/metadata.h"
+#include "source/extensions/common/dubbo/metadata.h"
 #include "source/extensions/filters/network/dubbo_proxy/router/router.h"
 #include "source/extensions/filters/network/dubbo_proxy/stats.h"
 
