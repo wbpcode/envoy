@@ -13,9 +13,8 @@ envoy_cc_library(
     hdrs = ["router.h"],
     deps = [
         "//envoy/router:router_interface",
-        "//source/extensions/common/dubbo:metadata_lib",
         "//source/extensions/common/dubbo:message_lib",
-
+        "//source/extensions/common/dubbo:metadata_lib",
     ],
 )
 
