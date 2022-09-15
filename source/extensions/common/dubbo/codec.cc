@@ -1,4 +1,5 @@
 #include "codec.h"
+#include "message.h"
 #include "metadata.h"
 #include "source/extensions/filters/network/dubbo_proxy/dubbo_protocol_impl.h"
 
@@ -23,6 +24,41 @@ constexpr uint64_t FlagOffset = 2;
 constexpr uint64_t StatusOffset = 3;
 constexpr uint64_t RequestIDOffset = 4;
 constexpr uint64_t BodySizeOffset = 12;
+
+void encodeHeader(Buffer::Instance& buffer, MessageContext& context) {
+  buffer.writeBEInt<uint16_t>(MagicNumber);
+  uint8_t flag = static_cast<uint8_t>(context.serializeType());
+
+  switch (context.messageType()) {
+  case MessageType::Response:
+    // Normal response
+    break;
+  case MessageType::Request:
+    // Normal request.
+    flag ^= MessageTypeMask;
+    flag ^= TwoWayMask;
+    break;
+  case MessageType::Oneway:
+    // Oneway request.
+    flag ^= MessageTypeMask;
+  case MessageType::HeartbeatRequest:
+    // Event request.
+    flag ^= MessageTypeMask;
+    flag ^= EventMask;
+  case
+
+  }
+
+  flag = flag ^ EventMask;
+  buffer.writeByte(flag);
+  buffer.writeByte(static_cast<uint8_t>(context.responseStatus().value()));
+  buffer.writeBEInt<uint64_t>(context.requestId());
+  // Body of heart beat response is null.
+  // TODO(wbpcode): Currently we only support the Hessian2 serialization scheme, so here we
+  // directly use the 'N' for null object in Hessian2. This coupling should be unnecessary.
+  buffer.writeBEInt<uint32_t>(1u);
+  buffer.writeByte('N');
+}
 
 } // namespace
 
@@ -68,7 +104,7 @@ void parseRequestInfoFromBuffer(Buffer::Instance& data, MessageContext& context)
                      static_cast<std::underlying_type<SerializeType>::type>(type)));
   }
 
-  // Normal request without two flag should be one way request.
+  // Request without two flag should be one way request.
   if (!is_two_way && context.messageType() != MessageType::HeartbeatRequest) {
     context.setMessageType(MessageType::Oneway);
   }
@@ -105,8 +141,11 @@ DecodeStatus DubboCodec::decodeHeader(Buffer::Instance& buffer, MessageMetadata&
   auto context = std::make_shared<MessageContext>();
 
   uint8_t flag = buffer.peekInt<uint8_t>(FlagOffset);
+
+  // Intial basic type of message.
   MessageType type =
       (flag & MessageTypeMask) == MessageTypeMask ? MessageType::Request : MessageType::Response;
+
   bool is_event = (flag & EventMask) == EventMask ? true : false;
 
   int64_t request_id = buffer.peekBEInt<int64_t>(RequestIDOffset);
@@ -137,73 +176,69 @@ DecodeStatus DubboCodec::decodeHeader(Buffer::Instance& buffer, MessageMetadata&
   context->setBodySize(body_size);
   context->setHeartbeat(is_event);
 
-  return std::pair<ContextSharedPtr, bool>(context, true);
+  metadata.setMessageContextInfo(std::move(context));
+
+  return DecodeStatus::Success;
 }
 
-bool DubboProtocolImpl::decodeData(Buffer::Instance& buffer, ContextSharedPtr context,
-                                   MessageMetadataSharedPtr metadata) {
-  ASSERT(serializer_);
+DecodeStatus DubboCodec::decodeData(Buffer::Instance& buffer, MessageMetadata& metadata) {
+  ASSERT(metadata.hasMessageContextInfo());
+  ASSERT(serializer_ ! = nullptr);
 
-  if ((buffer.length()) < context->bodySize()) {
-    return false;
+  auto& context = metadata.mutableMessageContextInfo();
+
+  if (buffer.length() < context.bodySize()) {
+    return DecodeStatus::Waiting;
   }
 
-  switch (metadata->messageType()) {
+  switch (context.messageType()) {
   case MessageType::Oneway:
   case MessageType::Request: {
     auto ret = serializer_->deserializeRpcRequest(buffer, context);
-    if (!ret.second) {
-      return false;
-    }
-    metadata->setInvocationInfo(ret.first);
+    metadata.setRequestInfo(std::move(ret));
     break;
   }
   case MessageType::Response: {
-    // Non `Ok` response body has no response type info and skip deserialization.
-    if (metadata->responseStatus() != ResponseStatus::Ok) {
-      metadata->setMessageType(MessageType::Exception);
-      break;
-    }
     auto ret = serializer_->deserializeRpcResponse(buffer, context);
-    if (!ret.second) {
-      return false;
+    if (ret->hasException()) {
+      context.setMessageType(MessageType::Exception);
     }
-    if (ret.first->hasException()) {
-      metadata->setMessageType(MessageType::Exception);
-    }
+    metadata.setResponseInfo(std::move(ret));
     break;
   }
   default:
     PANIC("not handled");
   }
 
-  return true;
+  return DecodeStatus::Success;
 }
 
-bool DubboProtocolImpl::encode(Buffer::Instance& buffer, const MessageMetadata& metadata,
-                               const std::string& content, RpcResponseType type) {
+void DubboCodec::encode(Buffer::Instance& buffer, MessageMetadata& metadata) {
+  ASSERT(metadata.hasMessageContextInfo());
   ASSERT(serializer_);
 
-  switch (metadata.messageType()) {
+  auto& context = metadata.mutableMessageContextInfo();
+
+  switch (context.messageType()) {
   case MessageType::HeartbeatResponse: {
-    ASSERT(metadata.hasResponseStatus());
-    ASSERT(content.empty());
+    ASSERT(context.hasResponseStatus());
+    ASSERT(!metadata.hasResponseInfo());
     buffer.writeBEInt<uint16_t>(MagicNumber);
-    uint8_t flag = static_cast<uint8_t>(metadata.serializationType());
+    uint8_t flag = static_cast<uint8_t>(context.serializeType());
     flag = flag ^ EventMask;
     buffer.writeByte(flag);
-    buffer.writeByte(static_cast<uint8_t>(metadata.responseStatus()));
-    buffer.writeBEInt<uint64_t>(metadata.requestId());
+    buffer.writeByte(static_cast<uint8_t>(context.responseStatus().value()));
+    buffer.writeBEInt<uint64_t>(context.requestId());
     // Body of heart beat response is null.
     // TODO(wbpcode): Currently we only support the Hessian2 serialization scheme, so here we
     // directly use the 'N' for null object in Hessian2. This coupling should be unnecessary.
     buffer.writeBEInt<uint32_t>(1u);
     buffer.writeByte('N');
-    return true;
+    return;
   }
   case MessageType::Response: {
     ASSERT(metadata.hasResponseStatus());
-    ASSERT(!content.empty());
+    ASSERT(metadata.has);
     Buffer::OwnedImpl body_buffer;
     size_t serialized_body_size = serializer_->serializeRpcResponse(body_buffer, content, type);
 
@@ -224,16 +259,6 @@ bool DubboProtocolImpl::encode(Buffer::Instance& buffer, const MessageMetadata& 
     PANIC("not implemented");
   }
 }
-
-class DubboProtocolConfigFactory : public ProtocolFactoryBase<DubboProtocolImpl> {
-public:
-  DubboProtocolConfigFactory() : ProtocolFactoryBase(ProtocolType::Dubbo) {}
-};
-
-/**
- * Static registration for the Dubbo protocol. @see RegisterFactory.
- */
-REGISTER_FACTORY(DubboProtocolConfigFactory, NamedProtocolConfigFactory);
 
 } // namespace DubboProxy
 } // namespace NetworkFilters

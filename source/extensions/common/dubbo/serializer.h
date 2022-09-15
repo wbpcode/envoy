@@ -32,7 +32,7 @@ public:
    * @throws EnvoyException if the data is not valid for this serialization
    */
   virtual RpcRequestSharedPtr deserializeRpcRequest(Buffer::Instance& buffer,
-                                                    Context& context) PURE;
+                                                    MessageContext& context) PURE;
 
   /**
    * deserialize result of an rpc call
@@ -44,7 +44,7 @@ public:
    * @throws EnvoyException if the data is not valid for this serialization
    */
   virtual RpcResponseSharedPtr deserializeRpcResponse(Buffer::Instance& buffer,
-                                                      Context& context) PURE;
+                                                      MessageContext& context) PURE;
 
   /**
    * Serialize response of an rpc call
@@ -54,8 +54,8 @@ public:
    * @param response rpc response.
    * @param context context information for RPC messages
    */
-  virtual void serializeRpcResponse(Buffer::Instance& buffer, RpcResponse& response,
-                                    Context& context) PURE;
+  virtual void serializeRpcResponse(Buffer::Instance& buffer, RpcResponseSharedPtr& response,
+                                    MessageContext& context) PURE;
 
   /**
    * Serialize request of an rpc call
@@ -65,8 +65,8 @@ public:
    * @param request rpc request.
    * @param context context information for RPC messages
    */
-  virtual void serializeRpcRequest(Buffer::Instance& buffer, RpcRequest& request,
-                                   Context& context) PURE;
+  virtual void serializeRpcRequest(Buffer::Instance& buffer, RpcRequestSharedPtr& request,
+                                   MessageContext& context) PURE;
 };
 
 using SerializerPtr = std::unique_ptr<Serializer>;

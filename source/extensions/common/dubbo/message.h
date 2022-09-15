@@ -52,9 +52,13 @@ enum class SerializeType : uint8_t {
 enum class MessageType : uint8_t {
   Response = 0,
   Request = 1,
+  // Special request without two-way flag.
   Oneway = 2,
+  // Special response with non-Ok response status or exception response.
   Exception = 3,
+  // Special request with event flag.
   HeartbeatRequest = 4,
+  // Speical response with event flag.
   HeartbeatResponse = 5,
 
   // ATTENTION: MAKE SURE THIS REMAINS EQUAL TO THE LAST MESSAGE TYPE
