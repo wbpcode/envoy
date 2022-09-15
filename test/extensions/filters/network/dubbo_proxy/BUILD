@@ -112,7 +112,7 @@ envoy_extension_cc_test(
     srcs = ["metadata_test.cc"],
     extension_names = ["envoy.filters.network.dubbo_proxy"],
     deps = [
-        "//source/extensions/filters/network/dubbo_proxy:metadata_lib",
+        "//source/extensions/common/dubbo:metadata_lib",
         "//source/extensions/filters/network/dubbo_proxy:serializer_interface",
     ],
 )
@@ -122,7 +122,7 @@ envoy_extension_cc_test(
     srcs = ["route_matcher_test.cc"],
     extension_names = ["envoy.filters.network.dubbo_proxy"],
     deps = [
-        "//source/extensions/filters/network/dubbo_proxy:metadata_lib",
+        "//source/extensions/common/dubbo:metadata_lib",
         "//source/extensions/filters/network/dubbo_proxy/router:route_matcher",
         "//test/mocks/server:factory_context_mocks",
         "@envoy_api//envoy/extensions/filters/network/dubbo_proxy/v3:pkg_cc_proto",
@@ -139,7 +139,7 @@ envoy_extension_cc_test(
         "//source/extensions/filters/network/dubbo_proxy:app_exception_lib",
         "//source/extensions/filters/network/dubbo_proxy:dubbo_hessian2_serializer_impl_lib",
         "//source/extensions/filters/network/dubbo_proxy:dubbo_protocol_impl_lib",
-        "//source/extensions/filters/network/dubbo_proxy:metadata_lib",
+        "//source/extensions/common/dubbo:metadata_lib",
         "//source/extensions/filters/network/dubbo_proxy/router:config",
         "//test/mocks/server:factory_context_mocks",
         "//test/test_common:registry_lib",
@@ -157,7 +157,7 @@ envoy_extension_cc_test(
         "//source/extensions/filters/network/dubbo_proxy:dubbo_hessian2_serializer_impl_lib",
         "//source/extensions/filters/network/dubbo_proxy:dubbo_protocol_impl_lib",
         "//source/extensions/filters/network/dubbo_proxy:hessian_utils_lib",
-        "//source/extensions/filters/network/dubbo_proxy:metadata_lib",
+        "//source/extensions/common/dubbo:metadata_lib",
     ],
 )
 
@@ -171,7 +171,7 @@ envoy_extension_cc_test(
         "//source/extensions/filters/network/dubbo_proxy:dubbo_protocol_impl_lib",
         "//source/extensions/filters/network/dubbo_proxy:heartbeat_response_lib",
         "//source/extensions/filters/network/dubbo_proxy:hessian_utils_lib",
-        "//source/extensions/filters/network/dubbo_proxy:metadata_lib",
+        "//source/extensions/common/dubbo:metadata_lib",
     ],
 )
 
@@ -195,7 +195,7 @@ envoy_extension_cc_test(
         ":mocks_lib",
         ":utility_lib",
         "//source/extensions/filters/network/dubbo_proxy:decoder_lib",
-        "//source/extensions/filters/network/dubbo_proxy:metadata_lib",
+        "//source/extensions/common/dubbo:metadata_lib",
     ],
 )
 

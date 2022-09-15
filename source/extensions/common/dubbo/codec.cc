@@ -1,18 +1,22 @@
 #include "codec.h"
 #include "message.h"
 #include "metadata.h"
-#include "source/extensions/filters/network/dubbo_proxy/dubbo_protocol_impl.h"
+#include "source/extensions/common/dubbo/codec.h"
 
 #include "envoy/registry/registry.h"
 
 #include "source/common/common/assert.h"
 #include "source/extensions/common/dubbo/message_impl.h"
+#include "source/extensions/common/dubbo/hessian2_serializer_impl.h"
+
+#include <cstdint>
 #include <memory>
 
 namespace Envoy {
 namespace Extensions {
-namespace NetworkFilters {
-namespace DubboProxy {
+namespace Common {
+namespace Dubbo {
+
 namespace {
 
 constexpr uint16_t MagicNumber = 0xdabb;
@@ -25,8 +29,11 @@ constexpr uint64_t StatusOffset = 3;
 constexpr uint64_t RequestIDOffset = 4;
 constexpr uint64_t BodySizeOffset = 12;
 
-void encodeHeader(Buffer::Instance& buffer, MessageContext& context) {
+void encodeHeader(Buffer::Instance& buffer, MessageContext& context, uint32_t body_size) {
+  // Magic number.
   buffer.writeBEInt<uint16_t>(MagicNumber);
+
+  // Serialize type and flag.
   uint8_t flag = static_cast<uint8_t>(context.serializeType());
 
   switch (context.messageType()) {
@@ -41,23 +48,34 @@ void encodeHeader(Buffer::Instance& buffer, MessageContext& context) {
   case MessageType::Oneway:
     // Oneway request.
     flag ^= MessageTypeMask;
+    break;
+  case MessageType::Exception:
+    // Exception response.
+    break;
   case MessageType::HeartbeatRequest:
     // Event request.
     flag ^= MessageTypeMask;
     flag ^= EventMask;
-  case
-
+    break;
+  case MessageType::HeartbeatResponse:
+    flag ^= EventMask;
+    break;
+  default:
+    PANIC_DUE_TO_CORRUPT_ENUM;
   }
-
-  flag = flag ^ EventMask;
   buffer.writeByte(flag);
-  buffer.writeByte(static_cast<uint8_t>(context.responseStatus().value()));
+
+  // Optional respnose status.
+  buffer.writeByte(context.hasResponseStatus() ? static_cast<uint8_t>(context.responseStatus())
+                                               : 0x00);
+
+  // Request id.
   buffer.writeBEInt<uint64_t>(context.requestId());
-  // Body of heart beat response is null.
-  // TODO(wbpcode): Currently we only support the Hessian2 serialization scheme, so here we
-  // directly use the 'N' for null object in Hessian2. This coupling should be unnecessary.
-  buffer.writeBEInt<uint32_t>(1u);
-  buffer.writeByte('N');
+
+  // Because the body size in the context is the size of original request or response.
+  // It may be changed after the processing of filters. So write the explict specified
+  // body size here.
+  buffer.writeBEInt<uint32_t>(body_size);
 }
 
 } // namespace
@@ -94,23 +112,13 @@ bool isValidResponseStatus(ResponseStatus status) {
 
 void parseRequestInfoFromBuffer(Buffer::Instance& data, MessageContext& context) {
   ASSERT(data.length() >= DubboCodec::HeadersSize);
-
   uint8_t flag = data.peekInt<uint8_t>(FlagOffset);
   bool is_two_way = (flag & TwoWayMask) == TwoWayMask ? true : false;
-  SerializeType type = static_cast<SerializeType>(flag & SerializeTypeMask);
-  if (!isValidSerializeType(type)) {
-    throw EnvoyException(
-        absl::StrCat("invalid dubbo message serialization type ",
-                     static_cast<std::underlying_type<SerializeType>::type>(type)));
-  }
 
   // Request without two flag should be one way request.
   if (!is_two_way && context.messageType() != MessageType::HeartbeatRequest) {
     context.setMessageType(MessageType::Oneway);
   }
-
-  context.setTwoWayFlag(is_two_way);
-  context.setSerializeType(type);
 }
 
 void parseResponseInfoFromBuffer(Buffer::Instance& buffer, MessageContext& context) {
@@ -121,8 +129,19 @@ void parseResponseInfoFromBuffer(Buffer::Instance& buffer, MessageContext& conte
         absl::StrCat("invalid dubbo message response status ",
                      static_cast<std::underlying_type<ResponseStatus>::type>(status)));
   }
-
   context.setResponseStatus(status);
+
+  if (status != ResponseStatus::Ok) {
+    context.setMessageType(MessageType::Exception);
+  }
+}
+
+DubboCodecPtr DubboCodec::codecFromSerializeType(SerializeType type) {
+  ASSERT(type == SerializeType::Hessian2);
+
+  auto codec = std::make_unique<DubboCodec>();
+  codec->initilize(std::make_unique<Hessian2SerializerImpl>());
+  return codec;
 }
 
 DecodeStatus DubboCodec::decodeHeader(Buffer::Instance& buffer, MessageMetadata& metadata) {
@@ -141,6 +160,15 @@ DecodeStatus DubboCodec::decodeHeader(Buffer::Instance& buffer, MessageMetadata&
   auto context = std::make_shared<MessageContext>();
 
   uint8_t flag = buffer.peekInt<uint8_t>(FlagOffset);
+
+  // Decode serialize type.
+  SerializeType serialize_type = static_cast<SerializeType>(flag & SerializeTypeMask);
+  if (!isValidSerializeType(serialize_type)) {
+    throw EnvoyException(
+        absl::StrCat("invalid dubbo message serialization type ",
+                     static_cast<std::underlying_type<SerializeType>::type>(serialize_type)));
+  }
+  context->setSerializeType(serialize_type);
 
   // Intial basic type of message.
   MessageType type =
@@ -174,16 +202,17 @@ DecodeStatus DubboCodec::decodeHeader(Buffer::Instance& buffer, MessageMetadata&
   }
 
   context->setBodySize(body_size);
-  context->setHeartbeat(is_event);
 
   metadata.setMessageContextInfo(std::move(context));
 
+  // Drain headers bytes.
+  buffer.drain(DubboCodec::HeadersSize);
   return DecodeStatus::Success;
 }
 
 DecodeStatus DubboCodec::decodeData(Buffer::Instance& buffer, MessageMetadata& metadata) {
   ASSERT(metadata.hasMessageContextInfo());
-  ASSERT(serializer_ ! = nullptr);
+  ASSERT(serializer_ != nullptr);
 
   auto& context = metadata.mutableMessageContextInfo();
 
@@ -192,22 +221,20 @@ DecodeStatus DubboCodec::decodeData(Buffer::Instance& buffer, MessageMetadata& m
   }
 
   switch (context.messageType()) {
+  case MessageType::Response:
+  case MessageType::Exception:
+  case MessageType::HeartbeatResponse:
+    // Handle response.
+    metadata.setResponseInfo(serializer_->deserializeRpcResponse(buffer, context));
+    break;
+  case MessageType::Request:
   case MessageType::Oneway:
-  case MessageType::Request: {
-    auto ret = serializer_->deserializeRpcRequest(buffer, context);
-    metadata.setRequestInfo(std::move(ret));
+  case MessageType::HeartbeatRequest:
+    // Handle request.
+    metadata.setRequestInfo(serializer_->deserializeRpcRequest(buffer, context));
     break;
-  }
-  case MessageType::Response: {
-    auto ret = serializer_->deserializeRpcResponse(buffer, context);
-    if (ret->hasException()) {
-      context.setMessageType(MessageType::Exception);
-    }
-    metadata.setResponseInfo(std::move(ret));
-    break;
-  }
   default:
-    PANIC("not handled");
+    PANIC_DUE_TO_CORRUPT_ENUM;
   }
 
   return DecodeStatus::Success;
@@ -219,48 +246,95 @@ void DubboCodec::encode(Buffer::Instance& buffer, MessageMetadata& metadata) {
 
   auto& context = metadata.mutableMessageContextInfo();
 
+  Buffer::OwnedImpl body_buffer;
+
   switch (context.messageType()) {
-  case MessageType::HeartbeatResponse: {
-    ASSERT(context.hasResponseStatus());
-    ASSERT(!metadata.hasResponseInfo());
-    buffer.writeBEInt<uint16_t>(MagicNumber);
-    uint8_t flag = static_cast<uint8_t>(context.serializeType());
-    flag = flag ^ EventMask;
-    buffer.writeByte(flag);
-    buffer.writeByte(static_cast<uint8_t>(context.responseStatus().value()));
-    buffer.writeBEInt<uint64_t>(context.requestId());
-    // Body of heart beat response is null.
-    // TODO(wbpcode): Currently we only support the Hessian2 serialization scheme, so here we
-    // directly use the 'N' for null object in Hessian2. This coupling should be unnecessary.
-    buffer.writeBEInt<uint32_t>(1u);
-    buffer.writeByte('N');
-    return;
-  }
-  case MessageType::Response: {
-    ASSERT(metadata.hasResponseStatus());
-    ASSERT(metadata.has);
-    Buffer::OwnedImpl body_buffer;
-    size_t serialized_body_size = serializer_->serializeRpcResponse(body_buffer, content, type);
-
-    buffer.writeBEInt<uint16_t>(MagicNumber);
-    buffer.writeByte(static_cast<uint8_t>(metadata.serializationType()));
-    buffer.writeByte(static_cast<uint8_t>(metadata.responseStatus()));
-    buffer.writeBEInt<uint64_t>(metadata.requestId());
-    buffer.writeBEInt<uint32_t>(serialized_body_size);
-
-    buffer.move(body_buffer, serialized_body_size);
-    return true;
-  }
+  case MessageType::Response:
+  case MessageType::Exception:
+  case MessageType::HeartbeatResponse:
+    serializer_->serializeRpcResponse(body_buffer, metadata);
+    break;
   case MessageType::Request:
   case MessageType::Oneway:
-  case MessageType::Exception:
-    PANIC("not implemented");
+  case MessageType::HeartbeatRequest:
+    serializer_->serializeRpcRequest(body_buffer, metadata);
+    break;
   default:
-    PANIC("not implemented");
+    PANIC_DUE_TO_CORRUPT_ENUM;
   }
+
+  encodeHeader(buffer, context, body_buffer.length());
+  buffer.move(body_buffer);
 }
 
-} // namespace DubboProxy
-} // namespace NetworkFilters
+MessageMetadataSharedPtr DirectResponseUtil::heartbeatResponse(MessageMetadata& heartbeat_request) {
+  ASSERT(heartbeat_request.hasMessageContextInfo());
+  const auto& request_context = heartbeat_request.messageContextInfo();
+  auto context = std::make_shared<MessageContext>();
+
+  // Set context.
+  context->setSerializeType(request_context.serializeType());
+  context->setMessageType(MessageType::HeartbeatResponse);
+  context->setResponseStatus(ResponseStatus::Ok);
+  context->setRequestId(request_context.requestId());
+
+  auto metadata = std::make_shared<MessageMetadata>();
+  metadata->setMessageContextInfo(std::move(context));
+  return metadata;
+}
+
+MessageMetadataSharedPtr DirectResponseUtil::localResponse(MessageMetadata& request,
+                                                           ResponseStatus status,
+                                                           absl::optional<RpcResponseType> type,
+                                                           absl::string_view content) {
+  if (!request.hasMessageContextInfo()) {
+    request.setMessageContextInfo(std::make_shared<MessageContext>());
+  }
+
+  const auto& request_context = request.messageContextInfo();
+  auto context = std::make_shared<MessageContext>();
+
+  // Set context.
+  context->setSerializeType(request_context.serializeType());
+  if (status != ResponseStatus::Ok) {
+    context->setMessageType(MessageType::Exception);
+  } else if (type.has_value() &&
+             (type.value() == RpcResponseType::ResponseWithException ||
+              type.value() == RpcResponseType::ResponseWithExceptionWithAttachments)) {
+    context->setMessageType(MessageType::Exception);
+  } else {
+    context->setMessageType(MessageType::Response);
+  }
+  context->setResponseStatus(status);
+  context->setRequestId(request_context.requestId());
+
+  // Set response.
+  auto response = std::make_unique<RpcResponseImpl>();
+  if (status == ResponseStatus::Ok && type.has_value()) {
+    // No response type for non-Ok response.
+    response->setResponseType(type.value());
+  }
+  response->setLocalRawMessage(content);
+
+  auto metadata = std::make_shared<MessageMetadata>();
+  metadata->setMessageContextInfo(std::move(context));
+  metadata->setResponseInfo(std::move(response));
+
+  return metadata;
+}
+
+absl::string_view Utility::serializeTypeToString(SerializeType type) {
+  static constexpr absl::string_view Hessian2Type = "hessian2";
+  switch (type) {
+  case SerializeType::Hessian2:
+    return Hessian2Type;
+  default:
+    PANIC_DUE_TO_CORRUPT_ENUM;
+  }
+  return "";
+}
+
+} // namespace Dubbo
+} // namespace Common
 } // namespace Extensions
 } // namespace Envoy

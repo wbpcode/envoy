@@ -12,30 +12,14 @@ DecoderStateMachine::onDecodeStreamHeader(Buffer::Instance& buffer) {
   ASSERT(!active_stream_);
 
   auto metadata = std::make_shared<MessageMetadata>();
-  auto ret = protocol_.decodeHeader(buffer, metadata);
-  if (!ret.second) {
-    ENVOY_LOG(debug, "dubbo decoder: need more data for {} protocol", protocol_.name());
+  auto status = protocol_.decodeHeader(buffer, *metadata);
+  if (status == CommonDecodeStatus::Waiting) {
+    ENVOY_LOG(debug, "dubbo decoder: need more data for dubbo protocol");
     return {ProtocolState::WaitForData};
   }
+  ASSERT(metadata->hasMessageContextInfo());
 
-  auto context = ret.first;
-  if (metadata->messageType() == MessageType::HeartbeatRequest ||
-      metadata->messageType() == MessageType::HeartbeatResponse) {
-    if (buffer.length() < (context->headerSize() + context->bodySize())) {
-      ENVOY_LOG(debug, "dubbo decoder: need more data for {} protocol heartbeat", protocol_.name());
-      return {ProtocolState::WaitForData};
-    }
-
-    ENVOY_LOG(debug, "dubbo decoder: this is the {} heartbeat message", protocol_.name());
-    buffer.drain(context->headerSize() + context->bodySize());
-    delegate_.onHeartbeat(metadata);
-    return {ProtocolState::Done};
-  }
-
-  active_stream_ = delegate_.newStream(metadata, context);
-  ASSERT(active_stream_);
-  context->originMessage().move(buffer, context->headerSize());
-
+  active_stream_ = delegate_.newStream(metadata);
   return {ProtocolState::OnDecodeStreamData};
 }
 
@@ -43,13 +27,20 @@ DecoderStateMachine::DecoderStatus
 DecoderStateMachine::onDecodeStreamData(Buffer::Instance& buffer) {
   ASSERT(active_stream_);
 
-  if (!protocol_.decodeData(buffer, active_stream_->context_, active_stream_->metadata_)) {
+  auto status = protocol_.decodeData(buffer, *active_stream_->metadata_);
+  if (status == CommonDecodeStatus::Waiting) {
     ENVOY_LOG(debug, "dubbo decoder: need more data for {} serialization, current size {}",
-              protocol_.serializer()->name(), buffer.length());
+              Utility::serializeTypeToString(protocol_.serializer()->type()), buffer.length());
     return {ProtocolState::WaitForData};
   }
 
-  active_stream_->context_->originMessage().move(buffer, active_stream_->context_->bodySize());
+  const auto& context = active_stream_->metadata_->messageContextInfo();
+  if (context.heartbeat()) {
+    delegate_.onHeartbeat(std::move(active_stream_->metadata_));
+    active_stream_ = nullptr;
+    return {ProtocolState::Done};
+  }
+
   active_stream_->onStreamDecoded();
   active_stream_ = nullptr;
 
@@ -100,7 +91,7 @@ FilterStatus DecoderBase::onData(Buffer::Instance& data, bool& buffer_underflow)
 
   ASSERT(state_machine_ != nullptr);
 
-  ENVOY_LOG(debug, "dubbo decoder: protocol {}, state {}, {} bytes available", protocol_.name(),
+  ENVOY_LOG(debug, "dubbo decoder: protocol dubbo, state {}, {} bytes available",
             ProtocolStateNameValues::name(state_machine_->currentState()), data.length());
 
   ProtocolState rv = state_machine_->run(data);

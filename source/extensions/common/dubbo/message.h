@@ -12,8 +12,8 @@
 
 namespace Envoy {
 namespace Extensions {
-namespace NetworkFilters {
-namespace DubboProxy {
+namespace Common {
+namespace Dubbo {
 
 /**
  * Stream reset reasons.
@@ -114,12 +114,11 @@ public:
   virtual ~RpcResponse() = default;
 
   virtual absl::optional<RpcResponseType> responseType() const PURE;
-  virtual bool hasException() const PURE;
 };
 
 using RpcResponseSharedPtr = std::shared_ptr<RpcResponse>;
 
-} // namespace DubboProxy
-} // namespace NetworkFilters
+} // namespace Dubbo
+} // namespace Common
 } // namespace Extensions
 } // namespace Envoy

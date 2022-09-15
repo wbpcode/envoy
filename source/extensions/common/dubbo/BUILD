@@ -23,24 +23,14 @@ envoy_cc_library(
 )
 
 envoy_cc_library(
-    name = "hessian2_decoder_lib",
-    srcs = ["hessian2_decoder.cc"],
-    hdrs = ["hessian2_decoder.h"],
+    name = "codec_lib",
+    srcs = ["codec.cc"],
+    hdrs = ["codec.h"],
     deps = [
         ":hessian2_utils_lib",
         ":message_lib",
         ":metadata_lib",
-    ],
-)
-
-envoy_cc_library(
-    name = "hessian2_encoder_lib",
-    srcs = ["hessian2_encoder.cc"],
-    hdrs = ["hessian2_encoder.h"],
-    deps = [
-        ":hessian2_utils_lib",
-        ":message_lib",
-        ":metadata_lib",
+        ":serializer_interface",
     ],
 )
 
@@ -68,5 +58,39 @@ envoy_cc_library(
         ":hessian2_utils_lib",
         "//source/common/buffer:buffer_lib",
         "//source/common/http:header_map_lib",
+    ],
+)
+
+envoy_cc_library(
+    name = "serializer_interface",
+    hdrs = [
+        "serializer.h",
+    ],
+    deps = [
+        ":hessian2_utils_lib",
+        ":message_lib",
+        ":metadata_lib",
+        "//envoy/buffer:buffer_interface",
+        "//source/common/common:assert_lib",
+        "//source/common/config:utility_lib",
+    ],
+)
+
+envoy_cc_library(
+    name = "hessian2_serializer_lib",
+    srcs = [
+        "hessian2_serializer_impl.cc",
+    ],
+    hdrs = [
+        "hessian2_serializer_impl.h",
+    ],
+    deps = [
+        ":hessian2_utils_lib",
+        ":message_lib",
+        ":metadata_lib",
+        ":serializer_interface",
+        "//envoy/buffer:buffer_interface",
+        "//source/common/common:assert_lib",
+        "//source/common/config:utility_lib",
     ],
 )

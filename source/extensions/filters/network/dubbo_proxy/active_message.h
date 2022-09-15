@@ -23,6 +23,8 @@ namespace Extensions {
 namespace NetworkFilters {
 namespace DubboProxy {
 
+using FilterIterationStartState = DubboFilters::FilterIterationStartState;
+
 class ConnectionManager;
 class ActiveMessage;
 
@@ -37,16 +39,16 @@ public:
   DubboFilters::UpstreamResponseStatus onData(Buffer::Instance& data);
 
   // StreamHandler
-  void onStreamDecoded(MessageMetadataSharedPtr metadata, ContextSharedPtr ctx) override;
+  void onStreamDecoded(MessageMetadataSharedPtr metadata) override;
 
   // ResponseDecoderCallbacks
   StreamHandler& newStream() override { return *this; }
   void onHeartbeat(MessageMetadataSharedPtr) override {}
 
-  uint64_t requestId() const { return metadata_ ? metadata_->requestId() : 0; }
+  uint64_t requestId() const { return metadata_ ? metadata_->messageContextInfo().requestId() : 0; }
 
 private:
-  FilterStatus applyMessageEncodedFilters(MessageMetadataSharedPtr metadata, ContextSharedPtr ctx);
+  FilterStatus applyMessageEncodedFilters(MessageMetadataSharedPtr metadata);
 
   ActiveMessage& parent_;
   DubboFilterStats& stats_;
@@ -72,7 +74,6 @@ public:
   const Network::Connection* connection() const override;
   DubboProxy::Router::RouteConstSharedPtr route() override;
   SerializationType serializationType() const override;
-  ProtocolType protocolType() const override;
   StreamInfo::StreamInfo& streamInfo() override;
   Event::Dispatcher& dispatcher() override;
   void resetStream() override;
@@ -93,8 +94,8 @@ public:
                              bool dual_filter);
   ~ActiveMessageDecoderFilter() override = default;
 
-  void continueDecoding() override;
-  void sendLocalReply(const DubboFilters::DirectResponse& response, bool end_stream) override;
+  void continueDecoding(FilterIterationStartState state) override;
+  void sendLocalReply(MessageMetadataSharedPtr response, bool end_stream) override;
   void startUpstreamResponse() override;
   DubboFilters::UpstreamResponseStatus upstreamData(Buffer::Instance& buffer) override;
   void resetDownstreamConnection() override;
@@ -118,7 +119,7 @@ public:
                              bool dual_filter);
   ~ActiveMessageEncoderFilter() override = default;
 
-  void continueEncoding() override;
+  void continueEncoding(FilterIterationStartState state) override;
   DubboFilters::EncoderFilterSharedPtr handler() { return handle_; }
 
 private:
@@ -139,9 +140,6 @@ public:
   ActiveMessage(ConnectionManager& parent);
   ~ActiveMessage() override;
 
-  // Indicates which filter to start the iteration with.
-  enum class FilterIterationStartState { AlwaysStartFromNext, CanStartFromCurrent };
-
   // Returns the encoder filter to start iteration with.
   std::list<ActiveMessageEncoderFilterPtr>::iterator
   commonEncodePrefix(ActiveMessageEncoderFilter* filter, FilterIterationStartState state);
@@ -155,7 +153,7 @@ public:
   void addFilter(DubboFilters::CodecFilterSharedPtr filter) override;
 
   // StreamHandler
-  void onStreamDecoded(MessageMetadataSharedPtr metadata, ContextSharedPtr ctx) override;
+  void onStreamDecoded(MessageMetadataSharedPtr metadata) override;
 
   uint64_t requestId() const;
   uint64_t streamId() const;
@@ -164,7 +162,7 @@ public:
   ProtocolType protocolType() const;
   StreamInfo::StreamInfo& streamInfo();
   Router::RouteConstSharedPtr route();
-  void sendLocalReply(const DubboFilters::DirectResponse& response, bool end_stream);
+  void sendLocalReply(MessageMetadataSharedPtr response, bool end_stream);
   void startUpstreamResponse();
   DubboFilters::UpstreamResponseStatus upstreamData(Buffer::Instance& buffer);
   void resetDownstreamConnection();
@@ -180,7 +178,6 @@ public:
   void onReset();
   void onError(const std::string& what);
   MessageMetadataSharedPtr metadata() const { return metadata_; }
-  ContextSharedPtr context() const { return context_; }
   bool pendingStreamDecoded() const { return pending_stream_decoded_; }
 
 private:
@@ -189,7 +186,6 @@ private:
 
   ConnectionManager& parent_;
 
-  ContextSharedPtr context_;
   MessageMetadataSharedPtr metadata_;
   Stats::TimespanPtr request_timer_;
   ActiveResponseDecoderPtr response_decoder_;

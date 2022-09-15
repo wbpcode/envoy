@@ -13,8 +13,8 @@
 
 namespace Envoy {
 namespace Extensions {
-namespace NetworkFilters {
-namespace DubboProxy {
+namespace Common {
+namespace Dubbo {
 
 class Hessian2Utils {
 public:

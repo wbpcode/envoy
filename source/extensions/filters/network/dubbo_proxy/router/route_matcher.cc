@@ -108,8 +108,8 @@ bool ParameterRouteEntryImpl::matchParameter(absl::string_view request_data,
 
 RouteConstSharedPtr ParameterRouteEntryImpl::matches(const MessageMetadata& metadata,
                                                      uint64_t random_value) const {
-  ASSERT(metadata.hasInvocationInfo());
-  const auto invocation = dynamic_cast<const RpcInvocationImpl*>(&metadata.invocationInfo());
+  ASSERT(metadata.hasRequestInfo());
+  const auto invocation = dynamic_cast<const RpcInvocationImpl*>(&metadata.requestInfo());
   ASSERT(invocation);
 
   const auto& parameters = invocation->parameters();
@@ -177,8 +177,8 @@ MethodRouteEntryImpl::~MethodRouteEntryImpl() = default;
 
 RouteConstSharedPtr MethodRouteEntryImpl::matches(const MessageMetadata& metadata,
                                                   uint64_t random_value) const {
-  ASSERT(metadata.hasInvocationInfo());
-  const auto invocation = dynamic_cast<const RpcInvocationImpl*>(&metadata.invocationInfo());
+  ASSERT(metadata.hasRequestInfo());
+  const auto invocation = dynamic_cast<const RpcInvocationImpl*>(&metadata.requestInfo());
   ASSERT(invocation);
 
   if (!RouteEntryImplBase::headersMatch(*invocation)) {
@@ -228,7 +228,7 @@ bool SingleRouteMatcherImpl::matchServiceVersion(const RpcInvocationImpl& invoca
   if (!version_.has_value() || version_.value().empty()) {
     return true;
   }
-  return invocation.serviceVersion().has_value() && invocation.serviceVersion().value() == version_;
+  return invocation.serviceVersion() == version_;
 }
 
 bool SingleRouteMatcherImpl::matchServiceName(const RpcInvocationImpl& invocation) const {
@@ -261,8 +261,8 @@ SingleRouteMatcherImpl::InterfaceMatcher::InterfaceMatcher(const std::string& in
 
 RouteConstSharedPtr SingleRouteMatcherImpl::route(const MessageMetadata& metadata,
                                                   uint64_t random_value) const {
-  ASSERT(metadata.hasInvocationInfo());
-  const auto invocation = dynamic_cast<const RpcInvocationImpl*>(&metadata.invocationInfo());
+  ASSERT(metadata.hasRequestInfo());
+  const auto invocation = dynamic_cast<const RpcInvocationImpl*>(&metadata.requestInfo());
   ASSERT(invocation);
 
   if (matchServiceName(*invocation) && matchServiceVersion(*invocation) &&

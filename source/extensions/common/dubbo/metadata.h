@@ -12,8 +12,8 @@
 
 namespace Envoy {
 namespace Extensions {
-namespace NetworkFilters {
-namespace DubboProxy {
+namespace Common {
+namespace Dubbo {
 
 /**
  * Context of dubbo request/response.
@@ -27,46 +27,44 @@ public:
   MessageType messageType() const { return message_type_; }
 
   void setResponseStatus(ResponseStatus status) { response_status_ = status; }
-  absl::optional<ResponseStatus> responseStatus() const { return response_status_; }
   bool hasResponseStatus() const { return response_status_.has_value(); }
+  ResponseStatus responseStatus() const {
+    ASSERT(hasResponseStatus());
+    return response_status_.value();
+  }
 
+  // Body size of dubbo request or dubbo response. Only make sense for
+  // decoding.
   void setBodySize(size_t size) { body_size_ = size; }
   size_t bodySize() const { return body_size_; }
 
   void setRequestId(int64_t id) { request_id_ = id; }
   int64_t requestId() const { return request_id_; }
 
-  void setTwoWayFlag(bool two_way) { is_two_way_ = two_way; }
-  bool isTwoWay() const { return is_two_way_; }
+  bool isTwoWay() const { return message_type_ == MessageType::Request; }
 
-  void setHeartbeat(bool heartbeat) { heartbeat_ = heartbeat; }
-  bool heartbeat() const { return heartbeat_; }
-
-  Buffer::Instance& originalBuffer() { return original_buffer_; }
+  bool heartbeat() const {
+    return message_type_ == MessageType::HeartbeatRequest ||
+           message_type_ == MessageType::HeartbeatResponse;
+  }
 
   ProtocolType protocolType() const { return ProtocolType::Dubbo; }
 
 private:
   SerializeType serialize_type_{SerializeType::Hessian2};
-
   MessageType message_type_{MessageType::Request};
-
   absl::optional<ResponseStatus> response_status_{};
 
-  size_t body_size_{};
   int64_t request_id_{};
 
-  bool heartbeat_{};
-
-  bool is_two_way_{};
-
-  Buffer::OwnedImpl original_buffer_;
+  size_t body_size_{};
 };
 
 using MessageContextSharedPtr = std::shared_ptr<MessageContext>;
 
 class MessageMetadata {
 public:
+  // Common message context.
   void setMessageContextInfo(MessageContextSharedPtr context) {
     message_context_info_ = std::move(context);
   }
@@ -74,6 +72,29 @@ public:
   const MessageContext& messageContextInfo() const { return *message_context_info_; }
   MessageContext& mutableMessageContextInfo() { return *message_context_info_; }
 
+  // Helper method to access attributes of common context.
+  MessageType messageType() const {
+    ASSERT(hasMessageContextInfo());
+    return message_context_info_->messageType();
+  }
+  bool hasResponseStatus() const {
+    ASSERT(hasMessageContextInfo());
+    return message_context_info_->hasResponseStatus();
+  }
+  ResponseStatus responseStatus() const {
+    ASSERT(hasMessageContextInfo());
+    return message_context_info_->responseStatus();
+  }
+  bool heartbeat() const {
+    ASSERT(hasMessageContextInfo());
+    return message_context_info_->heartbeat();
+  }
+  int64_t requestId() const {
+    ASSERT(hasMessageContextInfo());
+    return message_context_info_->requestId();
+  }
+
+  // Request info.
   void setRequestInfo(RpcRequestSharedPtr request_info) {
     rpc_request_info_ = std::move(request_info);
   }
@@ -81,6 +102,7 @@ public:
   const RpcRequest& requestInfo() const { return *rpc_request_info_; }
   RpcRequest& mutableRequestInfo() { return *rpc_request_info_; }
 
+  // Response info.
   void setResponseInfo(RpcResponseSharedPtr response_info) {
     rpc_response_info_ = std::move(response_info);
   }
@@ -99,7 +121,7 @@ private:
 
 using MessageMetadataSharedPtr = std::shared_ptr<MessageMetadata>;
 
-} // namespace DubboProxy
-} // namespace NetworkFilters
+} // namespace Dubbo
+} // namespace Common
 } // namespace Extensions
 } // namespace Envoy

@@ -6,11 +6,26 @@
 #include "source/common/buffer/buffer_impl.h"
 #include "source/extensions/common/dubbo/message.h"
 #include "source/extensions/common/dubbo/metadata.h"
+#include "source/extensions/common/dubbo/codec.h"
 
 namespace Envoy {
 namespace Extensions {
 namespace NetworkFilters {
 namespace DubboProxy {
+
+using MessageMetadata = Envoy::Extensions::Common::Dubbo::MessageMetadata;
+using MessageMetadataSharedPtr = Envoy::Extensions::Common::Dubbo::MessageMetadataSharedPtr;
+using Protocol = Envoy::Extensions::Common::Dubbo::DubboCodec;
+using ProtocolPtr = std::unique_ptr<Protocol>;
+using CommonDecodeStatus = Envoy::Extensions::Common::Dubbo::DecodeStatus;
+using MessageType = Envoy::Extensions::Common::Dubbo::MessageType;
+using ResponseStatus = Envoy::Extensions::Common::Dubbo::ResponseStatus;
+using ProtocolType = Envoy::Extensions::Common::Dubbo::ProtocolType;
+using SerializationType = Envoy::Extensions::Common::Dubbo::SerializeType;
+using Serializer = Envoy::Extensions::Common::Dubbo::Serializer;
+using SerializerPtr = Envoy::Extensions::Common::Dubbo::SerializerPtr;
+using Utility = Envoy::Extensions::Common::Dubbo::Utility;
+using DirectResponseUtil = Envoy::Extensions::Common::Dubbo::DirectResponseUtil;
 
 enum class FilterStatus : uint8_t {
   // Continue filter chain iteration.
@@ -30,11 +45,9 @@ public:
   /**
    * Indicates that the message had been decoded.
    * @param metadata MessageMetadataSharedPtr describing the message
-   * @param ctx the message context information
    * @return FilterStatus to indicate if filter chain iteration should continue
    */
-  virtual FilterStatus onMessageDecoded(MessageMetadataSharedPtr metadata,
-                                        ContextSharedPtr ctx) PURE;
+  virtual FilterStatus onMessageDecoded(MessageMetadataSharedPtr metadata) PURE;
 };
 
 using StreamDecoderSharedPtr = std::shared_ptr<StreamDecoder>;
@@ -46,11 +59,9 @@ public:
   /**
    * Indicates that the message had been encoded.
    * @param metadata MessageMetadataSharedPtr describing the message
-   * @param ctx the message context information
    * @return FilterStatus to indicate if filter chain iteration should continue
    */
-  virtual FilterStatus onMessageEncoded(MessageMetadataSharedPtr metadata,
-                                        ContextSharedPtr ctx) PURE;
+  virtual FilterStatus onMessageEncoded(MessageMetadataSharedPtr metadata) PURE;
 };
 
 using StreamEncoderSharedPtr = std::shared_ptr<StreamEncoder>;
@@ -62,10 +73,9 @@ public:
   /**
    * Indicates that the message had been decoded.
    * @param metadata MessageMetadataSharedPtr describing the message
-   * @param ctx the message context information
    * @return FilterStatus to indicate if filter chain iteration should continue
    */
-  virtual void onStreamDecoded(MessageMetadataSharedPtr metadata, ContextSharedPtr ctx) PURE;
+  virtual void onStreamDecoded(MessageMetadataSharedPtr metadata) PURE;
 };
 
 using StreamDecoderSharedPtr = std::shared_ptr<StreamDecoder>;

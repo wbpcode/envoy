@@ -31,11 +31,11 @@ public:
   void onDestroy() override;
   void setDecoderFilterCallbacks(DubboFilters::DecoderFilterCallbacks& callbacks) override;
 
-  FilterStatus onMessageDecoded(MessageMetadataSharedPtr metadata, ContextSharedPtr ctx) override;
+  FilterStatus onMessageDecoded(MessageMetadataSharedPtr metadata) override;
 
   // DubboFilter::EncoderFilter
   void setEncoderFilterCallbacks(DubboFilters::EncoderFilterCallbacks& callbacks) override;
-  FilterStatus onMessageEncoded(MessageMetadataSharedPtr metadata, ContextSharedPtr ctx) override;
+  FilterStatus onMessageEncoded(MessageMetadataSharedPtr metadata) override;
 
   // Upstream::LoadBalancerContextBase
   const Envoy::Router::MetadataMatchCriteria* metadataMatchCriteria() override;
@@ -53,8 +53,7 @@ public:
 private:
   struct UpstreamRequest : public Tcp::ConnectionPool::Callbacks {
     UpstreamRequest(Router& parent, Upstream::TcpPoolData& pool_data,
-                    MessageMetadataSharedPtr& metadata, SerializationType serialization_type,
-                    ProtocolType protocol_type);
+                    MessageMetadataSharedPtr& metadata);
     ~UpstreamRequest() override;
 
     FilterStatus start();
@@ -81,8 +80,6 @@ private:
     Tcp::ConnectionPool::Cancellable* conn_pool_handle_{};
     Tcp::ConnectionPool::ConnectionDataPtr conn_data_;
     Upstream::HostDescriptionConstSharedPtr upstream_host_;
-    SerializerPtr serializer_;
-    ProtocolPtr protocol_;
 
     bool request_complete_ : 1;
     bool response_started_ : 1;
@@ -91,6 +88,8 @@ private:
   };
 
   void cleanup();
+
+  ProtocolPtr protocol_;
 
   Upstream::ClusterManager& cluster_manager_;
   Envoy::Router::MetadataMatchCriteriaConstPtr metadata_match_;

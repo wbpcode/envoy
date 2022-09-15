@@ -1,5 +1,6 @@
 #include "source/extensions/filters/network/dubbo_proxy/active_message.h"
 
+#include "decoder_event_handler.h"
 #include "source/common/stats/timespan_impl.h"
 #include "source/extensions/filters/network/dubbo_proxy/app_exception.h"
 #include "source/extensions/filters/network/dubbo_proxy/conn_manager.h"
@@ -28,14 +29,13 @@ DubboFilters::UpstreamResponseStatus ActiveResponseDecoder::onData(Buffer::Insta
   return response_status_;
 }
 
-void ActiveResponseDecoder::onStreamDecoded(MessageMetadataSharedPtr metadata,
-                                            ContextSharedPtr ctx) {
+void ActiveResponseDecoder::onStreamDecoded(MessageMetadataSharedPtr metadata) {
   ASSERT(metadata->messageType() == MessageType::Response ||
          metadata->messageType() == MessageType::Exception);
   ASSERT(metadata->hasResponseStatus());
 
   metadata_ = metadata;
-  if (applyMessageEncodedFilters(metadata, ctx) != FilterStatus::Continue) {
+  if (applyMessageEncodedFilters(metadata) != FilterStatus::Continue) {
     response_status_ = DubboFilters::UpstreamResponseStatus::Complete;
     return;
   }
@@ -44,7 +44,10 @@ void ActiveResponseDecoder::onStreamDecoded(MessageMetadataSharedPtr metadata,
     throw DownstreamConnectionCloseException("Downstream has closed or closing");
   }
 
-  response_connection_.write(ctx->originMessage(), false);
+  Buffer::OwnedImpl response_buffer;
+  protocol_->encode(response_buffer, *metadata_);
+
+  response_connection_.write(response_buffer, false);
   ENVOY_LOG(debug,
             "dubbo response: the upstream response message has been forwarded to the downstream");
 
@@ -71,15 +74,13 @@ void ActiveResponseDecoder::onStreamDecoded(MessageMetadataSharedPtr metadata,
             metadata->requestId());
 }
 
-FilterStatus ActiveResponseDecoder::applyMessageEncodedFilters(MessageMetadataSharedPtr metadata,
-                                                               ContextSharedPtr ctx) {
-  parent_.encoder_filter_action_ = [metadata,
-                                    ctx](DubboFilters::EncoderFilter* filter) -> FilterStatus {
-    return filter->onMessageEncoded(metadata, ctx);
+FilterStatus ActiveResponseDecoder::applyMessageEncodedFilters(MessageMetadataSharedPtr metadata) {
+  parent_.encoder_filter_action_ = [metadata](DubboFilters::EncoderFilter* filter) -> FilterStatus {
+    return filter->onMessageEncoded(metadata);
   };
 
-  auto status = parent_.applyEncoderFilters(
-      nullptr, ActiveMessage::FilterIterationStartState::CanStartFromCurrent);
+  auto status =
+      parent_.applyEncoderFilters(nullptr, FilterIterationStartState::CanStartFromCurrent);
   switch (status) {
   case FilterStatus::StopIteration:
     break;
@@ -106,8 +107,6 @@ SerializationType ActiveMessageFilterBase::serializationType() const {
   return parent_.serializationType();
 }
 
-ProtocolType ActiveMessageFilterBase::protocolType() const { return parent_.protocolType(); }
-
 Event::Dispatcher& ActiveMessageFilterBase::dispatcher() { return parent_.dispatcher(); }
 
 void ActiveMessageFilterBase::resetStream() { parent_.resetStream(); }
@@ -120,14 +119,7 @@ ActiveMessageDecoderFilter::ActiveMessageDecoderFilter(ActiveMessage& parent,
                                                        bool dual_filter)
     : ActiveMessageFilterBase(parent, dual_filter), handle_(filter) {}
 
-void ActiveMessageDecoderFilter::continueDecoding() {
-  ASSERT(parent_.context());
-  auto state = ActiveMessage::FilterIterationStartState::AlwaysStartFromNext;
-  if (0 != parent_.context()->originMessage().length()) {
-    state = ActiveMessage::FilterIterationStartState::CanStartFromCurrent;
-    ENVOY_LOG(warn, "The original message data is not consumed, triggering the decoder filter from "
-                    "the current location");
-  }
+void ActiveMessageDecoderFilter::continueDecoding(FilterIterationStartState state) {
   const FilterStatus status = parent_.applyDecoderFilters(this, state);
   if (status == FilterStatus::Continue) {
     ENVOY_LOG(debug, "dubbo response: start upstream");
@@ -139,9 +131,9 @@ void ActiveMessageDecoderFilter::continueDecoding() {
   }
 }
 
-void ActiveMessageDecoderFilter::sendLocalReply(const DubboFilters::DirectResponse& response,
+void ActiveMessageDecoderFilter::sendLocalReply(MessageMetadataSharedPtr response,
                                                 bool end_stream) {
-  parent_.sendLocalReply(response, end_stream);
+  parent_.sendLocalReply(std::move(response), end_stream);
 }
 
 void ActiveMessageDecoderFilter::startUpstreamResponse() { parent_.startUpstreamResponse(); }
@@ -161,14 +153,7 @@ ActiveMessageEncoderFilter::ActiveMessageEncoderFilter(ActiveMessage& parent,
                                                        bool dual_filter)
     : ActiveMessageFilterBase(parent, dual_filter), handle_(filter) {}
 
-void ActiveMessageEncoderFilter::continueEncoding() {
-  ASSERT(parent_.context());
-  auto state = ActiveMessage::FilterIterationStartState::AlwaysStartFromNext;
-  if (0 != parent_.context()->originMessage().length()) {
-    state = ActiveMessage::FilterIterationStartState::CanStartFromCurrent;
-    ENVOY_LOG(warn, "The original message data is not consumed, triggering the encoder filter from "
-                    "the current location");
-  }
+void ActiveMessageEncoderFilter::continueEncoding(FilterIterationStartState state) {
   const FilterStatus status = parent_.applyEncoderFilters(this, state);
   if (FilterStatus::Continue == status) {
     ENVOY_LOG(debug, "All encoding filters have been executed");
@@ -235,13 +220,12 @@ ActiveMessage::commonDecodePrefix(ActiveMessageDecoderFilter* filter,
   return std::next(filter->entry());
 }
 
-void ActiveMessage::onStreamDecoded(MessageMetadataSharedPtr metadata, ContextSharedPtr ctx) {
+void ActiveMessage::onStreamDecoded(MessageMetadataSharedPtr metadata) {
   parent_.stats().request_decoding_success_.inc();
 
   metadata_ = metadata;
-  context_ = ctx;
-  filter_action_ = [metadata, ctx](DubboFilters::DecoderFilter* filter) -> FilterStatus {
-    return filter->onMessageDecoded(metadata, ctx);
+  filter_action_ = [metadata](DubboFilters::DecoderFilter* filter) -> FilterStatus {
+    return filter->onMessageDecoded(metadata);
   };
 
   auto status = applyDecoderFilters(nullptr, FilterIterationStartState::CanStartFromCurrent);
@@ -348,7 +332,7 @@ FilterStatus ActiveMessage::applyEncoderFilters(ActiveMessageEncoderFilter* filt
   return FilterStatus::Continue;
 }
 
-void ActiveMessage::sendLocalReply(const DubboFilters::DirectResponse& response, bool end_stream) {
+void ActiveMessage::sendLocalReply(MessageMetadataSharedPtr response, bool end_stream) {
   ASSERT(metadata_);
   parent_.sendLocalReply(*metadata_, response, end_stream);
 
@@ -364,9 +348,7 @@ void ActiveMessage::startUpstreamResponse() {
 
   ASSERT(response_decoder_ == nullptr);
 
-  auto protocol =
-      NamedProtocolConfigFactory::getFactory(protocolType()).createProtocol(serializationType());
-
+  auto protocol = Protocol::codecFromSerializeType(serializationType());
   // Create a response message decoder.
   response_decoder_ = std::make_unique<ActiveResponseDecoder>(
       *this, parent_.stats(), parent_.connection(), std::move(protocol));
@@ -467,7 +449,9 @@ void ActiveMessage::onError(const std::string& what) {
 
   ASSERT(metadata_);
   ENVOY_LOG(error, "Bad response: {}", what);
-  sendLocalReply(AppException(ResponseStatus::BadResponse, what), false);
+  sendLocalReply(DirectResponseUtil::localResponse(*metadata_, ResponseStatus::BadResponse,
+                                                   absl::nullopt, what),
+                 false);
   parent_.deferredMessage(*this);
 }
 

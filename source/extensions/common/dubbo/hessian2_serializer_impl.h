@@ -1,31 +1,26 @@
 #pragma once
 
 #include "source/extensions/common/dubbo/message_impl.h"
-#include "source/extensions/filters/network/dubbo_proxy/serializer.h"
+#include "source/extensions/common/dubbo/serializer.h"
 
 namespace Envoy {
 namespace Extensions {
-namespace NetworkFilters {
-namespace DubboProxy {
+namespace Common {
+namespace Dubbo {
 
-class DubboHessian2SerializerImpl : public Serializer {
+class Hessian2SerializerImpl : public Serializer {
 public:
-  const std::string& name() const override {
-    return ProtocolSerializerNames::get().fromType(ProtocolType::Dubbo, type());
-  }
-  SerializationType type() const override { return SerializationType::Hessian2; }
-
-  std::pair<RpcRequestSharedPtr, bool>
-  deserializeRpcRequest(Buffer::Instance& buffer, ContextSharedPtr context) override;
-
-  std::pair<RpcResponseSharedPtr, bool> deserializeRpcResponse(Buffer::Instance& buffer,
-                                                           ContextSharedPtr context) override;
-
-  size_t serializeRpcResponse(Buffer::Instance& output_buffer, const std::string& content,
-                            RpcResponseType type) override;
+  // Serializer
+  SerializeType type() const override { return SerializeType::Hessian2; }
+  RpcRequestSharedPtr deserializeRpcRequest(Buffer::Instance& buffer,
+                                            MessageContext& context) override;
+  RpcResponseSharedPtr deserializeRpcResponse(Buffer::Instance& buffer,
+                                              MessageContext& context) override;
+  void serializeRpcResponse(Buffer::Instance& buffer, MessageMetadata& metadata) override;
+  void serializeRpcRequest(Buffer::Instance& buffer, MessageMetadata& metadata) override;
 };
 
-} // namespace DubboProxy
-} // namespace NetworkFilters
+} // namespace Dubbo
+} // namespace Common
 } // namespace Extensions
 } // namespace Envoy

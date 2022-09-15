@@ -7,12 +7,17 @@
 #include "envoy/router/router.h"
 
 #include "source/extensions/common/dubbo/metadata.h"
+#include "source/extensions/common/dubbo/message_impl.h"
 
 namespace Envoy {
 namespace Extensions {
 namespace NetworkFilters {
 namespace DubboProxy {
 namespace Router {
+
+using MessageMetadata = Envoy::Extensions::Common::Dubbo::MessageMetadata;
+using MessageMetadataSharedPtr = Envoy::Extensions::Common::Dubbo::MessageMetadataSharedPtr;
+using RpcInvocationImpl = Envoy::Extensions::Common::Dubbo::RpcRequestImpl;
 
 /**
  * RouteEntry is an individual resolved route entry.

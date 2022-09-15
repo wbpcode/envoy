@@ -4,11 +4,12 @@
 
 #include "source/extensions/common/dubbo/hessian2_utils.h"
 #include "source/extensions/common/dubbo/message.h"
+#include <string>
 
 namespace Envoy {
 namespace Extensions {
-namespace NetworkFilters {
-namespace DubboProxy {
+namespace Common {
+namespace Dubbo {
 
 class RpcRequestBase : public RpcRequest {
 public:
@@ -98,9 +99,14 @@ public:
 
   absl::optional<absl::string_view> serviceGroup() const override;
 
+  Buffer::Instance& messageBuffer() { return message_buffer_; }
+
 private:
   void assignParametersIfNeed() const;
   void assignAttachmentIfNeed() const;
+
+  // Original request message from downstream.
+  Buffer::OwnedImpl message_buffer_;
 
   AttachmentLazyCallback attachment_lazy_callback_;
   ParametersLazyCallback parameters_lazy_callback_;
@@ -111,19 +117,31 @@ private:
 
 class RpcResponseImpl : public RpcResponse {
 public:
-  void setException(bool has_exception) { has_exception_ = has_exception; }
   void setResponseType(RpcResponseType type) { response_type_ = type; }
 
   // RpcResponse
-  bool hasException() const override { return has_exception_; }
   absl::optional<RpcResponseType> responseType() const override { return response_type_; }
 
+  Buffer::Instance& messageBuffer() { return message_buffer_; }
+
+  void setLocalRawMessage(absl::string_view val) { local_raw_message_ = std::string(val); }
+  absl::optional<absl::string_view> localRawMessage() {
+    return local_raw_message_.has_value()
+               ? absl::make_optional<absl::string_view>(local_raw_message_.value())
+               : absl::nullopt;
+  }
+
 private:
-  bool has_exception_{false};
+  // Original response message from upstream.
+  Buffer::OwnedImpl message_buffer_;
+
+  // Optional raw content for local direct response.
+  absl::optional<std::string> local_raw_message_;
+
   absl::optional<RpcResponseType> response_type_;
 };
 
-} // namespace DubboProxy
-} // namespace NetworkFilters
+} // namespace Dubbo
+} // namespace Common
 } // namespace Extensions
 } // namespace Envoy

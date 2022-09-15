@@ -5,8 +5,7 @@
 #include "source/common/buffer/buffer_impl.h"
 #include "source/common/common/logger.h"
 #include "source/extensions/filters/network/dubbo_proxy/decoder_event_handler.h"
-#include "source/extensions/filters/network/dubbo_proxy/protocol.h"
-#include "source/extensions/filters/network/dubbo_proxy/serializer.h"
+#include "source/extensions/common/dubbo/hessian2_serializer_impl.h"
 
 namespace Envoy {
 namespace Extensions {
@@ -41,21 +40,19 @@ private:
 };
 
 struct ActiveStream {
-  ActiveStream(StreamHandler& handler, MessageMetadataSharedPtr metadata, ContextSharedPtr context)
-      : handler_(handler), metadata_(metadata), context_(context) {}
-  ~ActiveStream() {
-    metadata_.reset();
-    context_.reset();
-  }
+  ActiveStream(StreamHandler& handler, MessageMetadataSharedPtr metadata)
+      : handler_(handler), metadata_(metadata) {}
+  ~ActiveStream() = default;
 
   void onStreamDecoded() {
-    ASSERT(metadata_ && context_);
-    handler_.onStreamDecoded(metadata_, context_);
+    ASSERT(metadata_);
+    ASSERT(metadata_->hasMessageContextInfo());
+    ASSERT(metadata_->hasRequestInfo() || metadata_->hasResponseInfo());
+    handler_.onStreamDecoded(std::move(metadata_));
   }
 
   StreamHandler& handler_;
   MessageMetadataSharedPtr metadata_;
-  ContextSharedPtr context_;
 };
 
 using ActiveStreamPtr = std::unique_ptr<ActiveStream>;
@@ -65,8 +62,7 @@ public:
   class Delegate {
   public:
     virtual ~Delegate() = default;
-    virtual ActiveStream* newStream(MessageMetadataSharedPtr metadata,
-                                    ContextSharedPtr context) PURE;
+    virtual ActiveStream* newStream(MessageMetadataSharedPtr metadata) PURE;
     virtual void onHeartbeat(MessageMetadataSharedPtr metadata) PURE;
   };
 
@@ -112,7 +108,7 @@ private:
   Protocol& protocol_;
   Delegate& delegate_;
 
-  ProtocolState state_;
+  ProtocolState state_{};
   ActiveStream* active_stream_{nullptr};
 };
 
@@ -157,9 +153,9 @@ template <typename T> class Decoder : public DecoderBase {
 public:
   Decoder(Protocol& protocol, T& callbacks) : DecoderBase(protocol), callbacks_(callbacks) {}
 
-  ActiveStream* newStream(MessageMetadataSharedPtr metadata, ContextSharedPtr context) override {
+  ActiveStream* newStream(MessageMetadataSharedPtr metadata) override {
     ASSERT(!stream_);
-    stream_ = std::make_unique<ActiveStream>(callbacks_.newStream(), metadata, context);
+    stream_ = std::make_unique<ActiveStream>(callbacks_.newStream(), metadata);
     return stream_.get();
   }
 

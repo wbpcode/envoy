@@ -14,8 +14,7 @@
 #include "source/extensions/filters/network/dubbo_proxy/decoder.h"
 #include "source/extensions/filters/network/dubbo_proxy/decoder_event_handler.h"
 #include "source/extensions/filters/network/dubbo_proxy/filters/filter.h"
-#include "source/extensions/filters/network/dubbo_proxy/protocol.h"
-#include "source/extensions/filters/network/dubbo_proxy/serializer.h"
+#include "source/extensions/common/dubbo/serializer.h"
 #include "source/extensions/filters/network/dubbo_proxy/stats.h"
 
 namespace Envoy {
@@ -73,7 +72,7 @@ public:
   ProtocolType downstreamProtocolType() const { return protocol_->type(); }
 
   void deferredMessage(ActiveMessage& message);
-  void sendLocalReply(MessageMetadata& metadata, const DubboFilters::DirectResponse& response,
+  void sendLocalReply(MessageMetadata& metadata, MessageMetadataSharedPtr response,
                       bool end_stream);
 
   // This function is for testing only.
@@ -91,7 +90,6 @@ private:
   DubboFilterStats& stats_;
   Random::RandomGenerator& random_generator_;
 
-  SerializerPtr serializer_;
   ProtocolPtr protocol_;
   RequestDecoderPtr decoder_;
   Network::ReadFilterCallbacks* read_callbacks_{};

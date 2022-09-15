@@ -11,9 +11,8 @@
 #include "source/extensions/filters/network/dubbo_proxy/decoder_event_handler.h"
 #include "source/extensions/common/dubbo/message.h"
 #include "source/extensions/common/dubbo/metadata.h"
-#include "source/extensions/filters/network/dubbo_proxy/protocol.h"
 #include "source/extensions/filters/network/dubbo_proxy/router/router.h"
-#include "source/extensions/filters/network/dubbo_proxy/serializer.h"
+#include "source/extensions/common/dubbo/serializer.h"
 
 namespace Envoy {
 namespace Extensions {
@@ -27,35 +26,6 @@ enum class UpstreamResponseStatus : uint8_t {
   Reset = 2,    // The upstream response is invalid and its connection must be reset.
   Retry = 3,    // The upstream response is failure need to retry.
 };
-
-class DirectResponse {
-public:
-  virtual ~DirectResponse() = default;
-
-  enum class ResponseType : uint8_t {
-    // DirectResponse encodes MessageType::Reply with success payload
-    SuccessReply,
-
-    // DirectResponse encodes MessageType::Reply with an exception payload
-    ErrorReply,
-
-    // DirectResponse encodes MessageType::Exception
-    Exception,
-  };
-
-  /**
-   * Encodes the response via the given Protocol.
-   * @param metadata the MessageMetadata for the request that generated this response
-   * @param proto the Protocol to be used for message encoding
-   * @param buffer the Buffer into which the message should be encoded
-   * @return ResponseType indicating whether the message is a successful or error reply or an
-   *         exception
-   */
-  virtual ResponseType encode(MessageMetadata& metadata, Protocol& protocol,
-                              Buffer::Instance& buffer) const PURE;
-};
-
-using DirectResponsePtr = std::unique_ptr<DirectResponse>;
 
 /**
  * Decoder filter callbacks add additional callbacks.
@@ -90,11 +60,6 @@ public:
   virtual SerializationType serializationType() const PURE;
 
   /**
-   * @return ProtocolType the originating protocol.
-   */
-  virtual ProtocolType protocolType() const PURE;
-
-  /**
    * @return StreamInfo for logging purposes.
    */
   virtual StreamInfo::StreamInfo& streamInfo() PURE;
@@ -110,6 +75,8 @@ public:
   virtual void resetStream() PURE;
 };
 
+enum class FilterIterationStartState { AlwaysStartFromNext, CanStartFromCurrent };
+
 /**
  * Decoder filter callbacks add additional callbacks.
  */
@@ -123,14 +90,15 @@ public:
    * methods. The connection manager will callbacks to the next filter in the chain. Further note
    * that if the request is not complete, the calling filter may receive further callbacks and must
    * return an appropriate status code depending on what the filter needs to do.
+   * @param state start state of filter iteration.
    */
-  virtual void continueDecoding() PURE;
+  virtual void continueDecoding(FilterIterationStartState state) PURE;
 
   /**
    * Create a locally generated response using the provided response object.
-   * @param response DirectResponsePtr the response to send to the downstream client
+   * @param response the response to send to the downstream client
    */
-  virtual void sendLocalReply(const DirectResponse& response, bool end_stream) PURE;
+  virtual void sendLocalReply(MessageMetadataSharedPtr response, bool end_stream) PURE;
 
   /**
    * Indicates the start of an upstream response. May only be called once.
@@ -167,7 +135,7 @@ public:
    * that if the request is not complete, the calling filter may receive further callbacks and must
    * return an appropriate status code depending on what the filter needs to do.
    */
-  virtual void continueEncoding() PURE;
+  virtual void continueEncoding(FilterIterationStartState state) PURE;
 };
 
 /**

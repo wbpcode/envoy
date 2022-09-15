@@ -13,8 +13,8 @@
 
 namespace Envoy {
 namespace Extensions {
-namespace NetworkFilters {
-namespace DubboProxy {
+namespace Common {
+namespace Dubbo {
 
 class Serializer {
 public:
@@ -51,27 +51,23 @@ public:
    * If successful, the buffer is written to the serialized data
    *
    * @param buffer store the serialized data
-   * @param response rpc response.
-   * @param context context information for RPC messages
+   * @param metadata metadata that contains context information and rpc response.
    */
-  virtual void serializeRpcResponse(Buffer::Instance& buffer, RpcResponseSharedPtr& response,
-                                    MessageContext& context) PURE;
+  virtual void serializeRpcResponse(Buffer::Instance& buffer, MessageMetadata& metadata) PURE;
 
   /**
    * Serialize request of an rpc call
    * If successful, the buffer is written to the serialized data
    *
    * @param buffer store the serialized data
-   * @param request rpc request.
-   * @param context context information for RPC messages
+   * @param metadata metadata that contains context information and rpc request.
    */
-  virtual void serializeRpcRequest(Buffer::Instance& buffer, RpcRequestSharedPtr& request,
-                                   MessageContext& context) PURE;
+  virtual void serializeRpcRequest(Buffer::Instance& buffer, MessageMetadata& metadata) PURE;
 };
 
 using SerializerPtr = std::unique_ptr<Serializer>;
 
-} // namespace DubboProxy
-} // namespace NetworkFilters
+} // namespace Dubbo
+} // namespace Common
 } // namespace Extensions
 } // namespace Envoy

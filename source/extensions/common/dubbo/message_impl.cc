@@ -4,8 +4,8 @@
 
 namespace Envoy {
 namespace Extensions {
-namespace NetworkFilters {
-namespace DubboProxy {
+namespace Common {
+namespace Dubbo {
 
 RpcRequestImpl::Attachment::Attachment(MapPtr&& value, size_t offset)
     : attachment_(std::move(value)), attachment_offset_(offset) {
@@ -103,7 +103,7 @@ RpcRequestImpl::ParametersPtr& RpcRequestImpl::mutableParameters() const {
   return parameters_;
 }
 
-} // namespace DubboProxy
-} // namespace NetworkFilters
+} // namespace Dubbo
+} // namespace Common
 } // namespace Extensions
 } // namespace Envoy

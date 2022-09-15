@@ -1,22 +1,38 @@
-#include "source/extensions/filters/network/dubbo_proxy/dubbo_hessian2_serializer_impl.h"
+#include "source/extensions/common/dubbo/hessian2_serializer_impl.h"
 
 #include "envoy/common/exception.h"
 
+#include "message.h"
+#include "metadata.h"
 #include "source/common/common/assert.h"
 #include "source/common/common/macros.h"
 #include "source/extensions/common/dubbo/hessian2_utils.h"
 #include "source/extensions/common/dubbo/message_impl.h"
 
 #include "hessian2/object.hpp"
+#include <cstddef>
 
 namespace Envoy {
 namespace Extensions {
-namespace NetworkFilters {
-namespace DubboProxy {
+namespace Common {
+namespace Dubbo {
 
-std::pair<RpcRequestSharedPtr, bool>
-DubboHessian2SerializerImpl::deserializeRpcRequest(Buffer::Instance& buffer,
-                                                      ContextSharedPtr context) {
+RpcRequestSharedPtr Hessian2SerializerImpl::deserializeRpcRequest(Buffer::Instance& buffer,
+                                                                  MessageContext& context) {
+  ASSERT(context.bodySize() <= buffer.length());
+
+  // Handle heartbeat.
+  if (context.heartbeat()) {
+    buffer.drain(context.bodySize());
+    return nullptr;
+  }
+
+  // Handle normal request or oneway request.
+  ASSERT(context.messageType() == MessageType::Request ||
+         context.messageType() == MessageType::Oneway);
+  ASSERT(context.bodySize() <= buffer.length());
+  auto request = std::make_shared<RpcRequestImpl>();
+
   Hessian2::Decoder decoder(std::make_unique<BufferReader>(buffer));
 
   // TODO(zyfjeff): Add format checker
@@ -25,9 +41,9 @@ DubboHessian2SerializerImpl::deserializeRpcRequest(Buffer::Instance& buffer,
   auto service_version = decoder.decode<std::string>();
   auto method_name = decoder.decode<std::string>();
 
-  if (context->bodySize() < decoder.offset()) {
+  if (context.bodySize() < decoder.offset()) {
     throw EnvoyException(fmt::format("RpcRequest size({}) larger than body size({})",
-                                     decoder.offset(), context->bodySize()));
+                                     decoder.offset(), context.bodySize()));
   }
 
   if (dubbo_version == nullptr || service_name == nullptr || service_version == nullptr ||
@@ -35,21 +51,21 @@ DubboHessian2SerializerImpl::deserializeRpcRequest(Buffer::Instance& buffer,
     throw EnvoyException(fmt::format("RpcRequest has no request metadata"));
   }
 
-  auto invo = std::make_shared<RpcRequestImpl>();
-  invo->setServiceName(*service_name);
-  invo->setServiceVersion(*service_version);
-  invo->setMethodName(*method_name);
+  request->setServiceName(*service_name);
+  request->setServiceVersion(*service_version);
+  request->setMethodName(*method_name);
 
-  size_t parsed_size = context->headerSize() + decoder.offset();
-
+  // Move original request message to the raw buffer to delay the decoding of complex body.
+  request->messageBuffer().move(buffer, context.bodySize());
+  const size_t parsed_size = decoder.offset();
   auto delayed_decoder = std::make_shared<Hessian2::Decoder>(
-      std::make_unique<BufferReader>(context->originMessage(), parsed_size));
+      std::make_unique<BufferReader>(request->messageBuffer(), parsed_size));
 
-  invo->setParametersLazyCallback([delayed_decoder]() -> RpcRequestImpl::ParametersPtr {
+  request->setParametersLazyCallback([delayed_decoder]() -> RpcRequestImpl::ParametersPtr {
     auto params = std::make_unique<RpcRequestImpl::Parameters>();
 
     if (auto types = delayed_decoder->decode<std::string>(); types != nullptr && !types->empty()) {
-      uint32_t number = HessianUtils::getParametersNumber(*types);
+      uint32_t number = Hessian2Utils::getParametersNumber(*types);
       for (uint32_t i = 0; i < number; i++) {
         if (auto result = delayed_decoder->decode<Hessian2::Object>(); result != nullptr) {
           params->push_back(std::move(result));
@@ -61,7 +77,7 @@ DubboHessian2SerializerImpl::deserializeRpcRequest(Buffer::Instance& buffer,
     return params;
   });
 
-  invo->setAttachmentLazyCallback([delayed_decoder]() -> RpcRequestImpl::AttachmentPtr {
+  request->setAttachmentLazyCallback([delayed_decoder]() -> RpcRequestImpl::AttachmentPtr {
     size_t offset = delayed_decoder->offset();
 
     auto result = delayed_decoder->decode<Hessian2::Object>();
@@ -76,16 +92,33 @@ DubboHessian2SerializerImpl::deserializeRpcRequest(Buffer::Instance& buffer,
     }
   });
 
-  return std::pair<RpcRequestSharedPtr, bool>(invo, true);
+  return request;
 }
 
-std::pair<RpcResponseSharedPtr, bool>
-DubboHessian2SerializerImpl::deserializeRpcResponse(Buffer::Instance& buffer,
-                                                  ContextSharedPtr context) {
-  ASSERT(buffer.length() >= context->bodySize());
-  bool has_value = true;
+RpcResponseSharedPtr Hessian2SerializerImpl::deserializeRpcResponse(Buffer::Instance& buffer,
+                                                                    MessageContext& context) {
+  ASSERT(context.bodySize() <= buffer.length());
 
-  auto result = std::make_shared<RpcResponseImpl>();
+  // Handle heartbeat.
+  if (context.heartbeat()) {
+    buffer.drain(context.bodySize());
+    return nullptr;
+  }
+
+  // Handle normal response or exception response.
+  ASSERT(context.messageType() == MessageType::Response ||
+         context.messageType() == MessageType::Exception);
+  auto response = std::make_shared<RpcResponseImpl>();
+
+  // Non `Ok` response body has no response type info and skip deserialization.
+  if (context.messageType() == MessageType::Exception) {
+    ASSERT(context.hasResponseStatus());
+    ASSERT(context.responseStatus() != ResponseStatus::Ok);
+    response->messageBuffer().move(buffer, context.bodySize());
+    return response;
+  }
+
+  bool has_value = true;
 
   Hessian2::Decoder decoder(std::make_unique<BufferReader>(buffer));
   auto type_value = decoder.decode<int32_t>();
@@ -94,11 +127,12 @@ DubboHessian2SerializerImpl::deserializeRpcResponse(Buffer::Instance& buffer,
   }
 
   RpcResponseType type = static_cast<RpcResponseType>(*type_value);
+  response->setResponseType(type);
 
   switch (type) {
   case RpcResponseType::ResponseWithException:
   case RpcResponseType::ResponseWithExceptionWithAttachments:
-    result->setException(true);
+    context.setMessageType(MessageType::Exception);
     break;
   case RpcResponseType::ResponseWithNullValue:
     has_value = false;
@@ -106,7 +140,6 @@ DubboHessian2SerializerImpl::deserializeRpcResponse(Buffer::Instance& buffer,
   case RpcResponseType::ResponseNullValueWithAttachments:
   case RpcResponseType::ResponseWithValue:
   case RpcResponseType::ResponseValueWithAttachments:
-    result->setException(false);
     break;
   default:
     throw EnvoyException(fmt::format("not supported return type {}", static_cast<uint8_t>(type)));
@@ -114,48 +147,86 @@ DubboHessian2SerializerImpl::deserializeRpcResponse(Buffer::Instance& buffer,
 
   size_t total_size = decoder.offset();
 
-  if (context->bodySize() < total_size) {
+  if (context.bodySize() < total_size) {
     throw EnvoyException(fmt::format("RpcResponse size({}) large than body size({})", total_size,
-                                     context->bodySize()));
+                                     context.bodySize()));
   }
 
-  if (!has_value && context->bodySize() != total_size) {
+  if (!has_value && context.bodySize() != total_size) {
     throw EnvoyException(
         fmt::format("RpcResponse is no value, but the rest of the body size({}) not equal 0",
-                    (context->bodySize() - total_size)));
+                    (context.bodySize() - total_size)));
   }
 
-  return std::pair<RpcResponseSharedPtr, bool>(result, true);
+  response->messageBuffer().move(buffer, context.bodySize());
+  return response;
 }
 
-size_t DubboHessian2SerializerImpl::serializeRpcResponse(Buffer::Instance& output_buffer,
-                                                       const std::string& content,
-                                                       RpcResponseType type) {
-  size_t origin_length = output_buffer.length();
-  Hessian2::Encoder encoder(std::make_unique<BufferWriter>(output_buffer));
+void Hessian2SerializerImpl::serializeRpcResponse(Buffer::Instance& buffer,
+                                                  MessageMetadata& metadata) {
+  ASSERT(metadata.hasMessageContextInfo());
+  const auto& context = metadata.messageContextInfo();
 
-  // The serialized response type is compact int.
-  bool result = encoder.encode(static_cast<std::underlying_type<RpcResponseType>::type>(type));
-  result |= encoder.encode(content);
+  if (context.heartbeat()) {
+    buffer.writeByte('N');
+    return;
+  }
 
-  ASSERT(result);
+  ASSERT(dynamic_cast<RpcResponseImpl*>(&metadata.mutableResponseInfo()) != nullptr);
+  auto* typed_response_info = dynamic_cast<RpcResponseImpl*>(&metadata.mutableResponseInfo());
 
-  return output_buffer.length() - origin_length;
+  if (typed_response_info->localRawMessage().has_value()) {
+    // Local direct response.
+    Hessian2::Encoder encoder(std::make_unique<BufferWriter>(buffer));
+
+    if (typed_response_info->responseType().has_value()) {
+      encoder.encode(static_cast<int32_t>(typed_response_info->responseType().value()));
+    }
+    encoder.encode<absl::string_view>(typed_response_info->localRawMessage().value());
+  } else {
+    // Update of dubbo response is not supported for now. And there is no retry for response
+    // encoding. So, it is safe to move the data directly.
+    buffer.move(typed_response_info->messageBuffer());
+  }
 }
 
-class DubboHessian2SerializerConfigFactory
-    : public SerializerFactoryBase<DubboHessian2SerializerImpl> {
-public:
-  DubboHessian2SerializerConfigFactory()
-      : SerializerFactoryBase(ProtocolType::Dubbo, SerializationType::Hessian2) {}
-};
+void Hessian2SerializerImpl::serializeRpcRequest(Buffer::Instance& buffer,
+                                                 MessageMetadata& metadata) {
 
-/**
- * Static registration for the Hessian protocol. @see RegisterFactory.
- */
-REGISTER_FACTORY(DubboHessian2SerializerConfigFactory, NamedSerializerConfigFactory);
+  ASSERT(metadata.hasMessageContextInfo());
+  const auto& context = metadata.messageContextInfo();
 
-} // namespace DubboProxy
-} // namespace NetworkFilters
+  if (context.heartbeat()) {
+    buffer.writeByte('N');
+    return;
+  }
+
+  ASSERT(metadata.hasRequestInfo());
+  ASSERT(metadata.messageContextInfo().messageType() == MessageType::Request ||
+         metadata.messageContextInfo().messageType() == MessageType::Oneway);
+
+  ASSERT(dynamic_cast<RpcRequestImpl*>(&metadata.mutableRequestInfo()) != nullptr);
+  auto* typed_request_info = dynamic_cast<RpcRequestImpl*>(&metadata.mutableRequestInfo());
+
+  // Create a copy for possible retry.
+  Buffer::OwnedImpl copy_of_message = typed_request_info->messageBuffer();
+
+  if (typed_request_info->hasAttachment() && typed_request_info->attachment().attachmentUpdated()) {
+    const size_t attachment_offset = typed_request_info->attachment().attachmentOffset();
+    ASSERT(attachment_offset <= copy_of_message.length());
+
+    // Move the parameters to buffer.
+    buffer.move(copy_of_message, attachment_offset);
+
+    // Re-encode the dubbo attachment.
+    Hessian2::Encoder encoder(std::make_unique<BufferWriter>(buffer));
+    encoder.encode(typed_request_info->attachment().attachment());
+  } else {
+    buffer.move(copy_of_message);
+  }
+}
+
+} // namespace Dubbo
+} // namespace Common
 } // namespace Extensions
 } // namespace Envoy
