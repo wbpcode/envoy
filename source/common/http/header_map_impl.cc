@@ -1,6 +1,7 @@
 #include "source/common/http/header_map_impl.h"
 
 #include <cstdint>
+#include <cstring>
 #include <list>
 #include <memory>
 #include <string>
@@ -198,6 +199,117 @@ HeaderString::Type HeaderString::type() const {
   return Type(buffer_.index());
 }
 
+// Initialize as a Type::Reference
+NewHeaderString::NewHeaderString(absl::string_view ref_value)
+    : data_(const_cast<char*>(ref_value.data())), size_(ref_value.size()) {
+  ASSERT(valid());
+}
+
+NewHeaderString::NewHeaderString(NewHeaderString&& move_value) noexcept {
+  data_ = move_value.data_;
+  size_ = move_value.size_;
+  stack_capacity_ = move_value.stack_capacity_;
+
+  move_value.data_ = nullptr;
+  move_value.size_ = 0;
+  move_value.stack_capacity_ = 0;
+}
+
+bool NewHeaderString::valid() const { return validHeaderString(getStringView()); }
+
+void NewHeaderString::append(const char* data, uint32_t data_size) {
+  if (data_size == 0) {
+    return;
+  }
+
+  // Make sure the requested memory allocation is below uint32_t::max
+  const uint64_t new_capacity = static_cast<uint64_t>(data_size) + size();
+  validateCapacity(new_capacity);
+  ASSERT(validHeaderString(absl::string_view(data, data_size)));
+
+  // Reference mode or no enough stack memory.
+  if (stack_capacity_ < new_capacity) {
+    char* stack = allocMemory(new_capacity);
+    // Copy old data.
+    memcpy(stack, data_, size_);
+    freeMemory(); // Free old stack if exist.
+    takeMemroy(stack, new_capacity);
+  }
+
+  memcpy(data_ + size_, data, data_size);
+}
+
+void NewHeaderString::rtrim() {
+  ASSERT(type() == Type::Inline);
+  absl::string_view original = getStringView();
+  absl::string_view rtrimmed = StringUtil::rtrim(original);
+  size_ = rtrimmed.size();
+}
+
+absl::string_view NewHeaderString::getStringView() const { return absl::string_view{data_, size_}; }
+
+void NewHeaderString::clear() {
+  freeMemory();
+  data_ = nullptr;
+  size_ = 0;
+  stack_capacity_ = 0;
+}
+
+void NewHeaderString::setCopy(const char* data, uint32_t size) {
+  ASSERT(validHeaderString(absl::string_view(data, size)));
+
+  if (isReference()) {
+    takeMemroy(allocMemory(size), size);
+  } else if (stack_capacity_ < size) {
+    freeMemory();
+    takeMemroy(allocMemory(size), size);
+  }
+
+  memcpy(data_, data, size);
+  size_ = size;
+
+  ASSERT(valid());
+}
+
+void NewHeaderString::setCopy(absl::string_view view) {
+  this->setCopy(view.data(), static_cast<uint32_t>(view.size()));
+}
+
+void NewHeaderString::setInteger(uint64_t value) {
+  // Initialize the size to the max length, copy the actual data, and then
+  // reduce the size (but not the capacity) as needed
+  // Note: instead of using the inner_buffer, attempted the following:
+  // resize buffer_ to MaxIntegerLength, apply StringUtil::itoa to the buffer_.data(), and then
+  // resize buffer_ to int_length (the number of digits in value).
+  // However it was slower than the following approach.
+  char inner_buffer[MaxIntegerLength];
+  const uint32_t int_length = StringUtil::itoa(inner_buffer, MaxIntegerLength, value);
+
+  this->setCopy(inner_buffer, int_length);
+}
+
+void NewHeaderString::setReference(absl::string_view ref_value) {
+  freeMemory();
+  data_ = const_cast<char*>(ref_value.data());
+  size_ = ref_value.size();
+  ASSERT(valid());
+}
+
+void NewHeaderString::setCopyUnvalidatedForTestOnly(absl::string_view view) {
+  auto data = view.data();
+  auto size = view.size();
+
+  if (isReference()) {
+    takeMemroy(allocMemory(size), size);
+  } else if (stack_capacity_ < size) {
+    freeMemory();
+    takeMemroy(allocMemory(size), size);
+  }
+
+  memcpy(data_, data, size);
+  size_ = size;
+}
+
 // Specialization needed for HeaderMapImpl::HeaderList::insert() when key is LowerCaseString.
 // A fully specialized template must be defined once in the program, hence this may not be in
 // a header file.
@@ -346,7 +458,6 @@ void HeaderMapImpl::copyFrom(HeaderMap& lhs, const HeaderMap& header_map) {
 }
 
 namespace {
-
 // This is currently only used in tests and is not optimized for performance.
 HeaderMap::ConstIterateCb
 collectAllHeaders(std::vector<std::pair<absl::string_view, absl::string_view>>* dest) {

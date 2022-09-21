@@ -241,6 +241,141 @@ private:
   Type type() const;
 };
 
+class NewHeaderString {
+public:
+  /**
+   * Default constructor. Sets up for inline storage.
+   */
+  NewHeaderString() = default;
+
+  /**
+   * Constructor for a string reference.
+   * @param ref_value MUST point to data that will live beyond the lifetime of any request/response
+   *        using the string (since a codec may optimize for zero copy).
+   */
+  explicit NewHeaderString(absl::string_view ref_value);
+
+  NewHeaderString(NewHeaderString&& move_value) noexcept;
+  ~NewHeaderString() { freeMemory(); }
+
+  /**
+   * Append data to an existing string. If the string is a reference string the reference data is
+   * not copied.
+   */
+  void append(const char* data, uint32_t size);
+
+  /**
+   * Transforms the inlined vector data using the given UnaryOperation (conforms
+   * to std::transform).
+   * @param unary_op the operations to be performed on each of the elements.
+   */
+  template <typename UnaryOperation> void inlineTransform(UnaryOperation&& unary_op) {
+    ASSERT(type() == Type::Inline);
+    std::transform(data_, data_ + size_, data_, unary_op);
+  }
+
+  /**
+   * Trim trailing whitespaces from the HeaderString. Only supported by the "Inline" HeaderString
+   * representation.
+   */
+  void rtrim();
+
+  /**
+   * Get an absl::string_view. It will NOT be NUL terminated!
+   *
+   * @return an absl::string_view.
+   */
+  absl::string_view getStringView() const;
+
+  /**
+   * Return the string to a default state. Reference strings are not touched. Both inline/dynamic
+   * strings are reset to zero size.
+   */
+  void clear();
+
+  /**
+   * @return whether the string is empty or not.
+   */
+  bool empty() const { return size() == 0; }
+
+  // Looking for find? Use getStringView().find()
+
+  /**
+   * Set the value of the string by copying data into it. This overwrites any existing string.
+   */
+  void setCopy(const char* data, uint32_t size);
+
+  /**
+   * Set the value of the string by copying data into it. This overwrites any existing string.
+   */
+  void setCopy(absl::string_view view);
+
+  /**
+   * Set the value of the string to an integer. This overwrites any existing string.
+   */
+  void setInteger(uint64_t value);
+
+  /**
+   * Set the value of the string to a string reference.
+   * @param ref_value MUST point to data that will live beyond the lifetime of any request/response
+   *        using the string (since a codec may optimize for zero copy).
+   */
+  void setReference(absl::string_view ref_value);
+
+  /**
+   * @return whether the string is a reference or an InlinedVector.
+   */
+  bool isReference() const { return type() == Type::Reference; }
+
+  /**
+   * @return the size of the string, not including the null terminator.
+   */
+  uint32_t size() const { return size_; }
+
+  bool operator==(const char* rhs) const {
+    return getStringView() == absl::NullSafeStringView(rhs);
+  }
+  bool operator==(absl::string_view rhs) const { return getStringView() == rhs; }
+  bool operator!=(const char* rhs) const {
+    return getStringView() != absl::NullSafeStringView(rhs);
+  }
+  bool operator!=(absl::string_view rhs) const { return getStringView() != rhs; }
+
+  // Test only method that does not have validation and allows setting arbitrary values.
+  void setCopyUnvalidatedForTestOnly(absl::string_view view);
+
+private:
+  static char* allocMemory(size_t capacity) { return new char[capacity]; }
+
+  enum class Type { Reference, Inline };
+
+  bool valid() const;
+
+  /**
+   * @return the type of backing storage for the string.
+   */
+  Type type() const { return stack_capacity_ > 0 ? Type::Inline : Type::Reference; }
+
+  void takeMemroy(char* stack, size_t capacity) {
+    ASSERT(stack_capacity_ == 0);
+    data_ = stack;
+    stack_capacity_ = capacity;
+  }
+  void freeMemory() {
+    if (stack_capacity_ > 0) {
+      delete[] data_;
+      data_ = nullptr;
+      size_ = 0;
+      stack_capacity_ = 0;
+    }
+  }
+
+  char* data_{};
+  size_t size_{};
+
+  size_t stack_capacity_{};
+};
+
 /**
  * Encapsulates an individual header entry (including both key and value).
  */
