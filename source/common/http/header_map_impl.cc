@@ -258,7 +258,7 @@ void NewHeaderString::clear() {
 void NewHeaderString::setCopy(const char* data, uint32_t size) {
   ASSERT(validHeaderString(absl::string_view(data, size)));
 
-  if (isReference()) {
+  if (stack_capacity_ == 0) {
     takeMemroy(allocMemory(size), size);
   } else if (stack_capacity_ < size) {
     freeMemory();
