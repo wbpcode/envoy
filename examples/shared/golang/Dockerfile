@@ -1,4 +1,4 @@
-FROM debian:bullseye-slim@sha256:77f46c1cf862290e750e913defffb2828c889d291a93bdd10a7a0597720948fc as os-base
+FROM debian:bullseye-slim@sha256:e0e49a44f5b6527b6c3f1b8f1bece7b7d20253280e53afaf4a15dd4370346d17 as os-base
 RUN rm -f /etc/apt/apt.conf.d/docker-clean \
     && echo 'Binary::apt::APT::Keep-Downloaded-Packages "true";' | tee /etc/apt/apt.conf.d/keep-cache
 
