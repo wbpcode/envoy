@@ -770,7 +770,7 @@ public:
                   const absl::optional<envoy::config::core::v3::BindConfig>& bind_config,
                   Runtime::Loader& runtime, TransportSocketMatcherPtr&& socket_matcher,
                   Stats::ScopeSharedPtr&& stats_scope, bool added_via_api,
-                  Server::Configuration::TransportSocketFactoryContext&);
+                  Server::Configuration::TransportSocketFactoryContext& factory_context);
 
   static LazyClusterTrafficStats generateStats(Stats::Scope& scope,
                                                const ClusterTrafficStatNames& cluster_stat_names);
@@ -795,12 +795,6 @@ public:
     return common_lb_config_;
   }
   std::chrono::milliseconds connectTimeout() const override { return connect_timeout_; }
-  const absl::optional<std::chrono::milliseconds> idleTimeout() const override {
-    return idle_timeout_;
-  }
-  const absl::optional<std::chrono::milliseconds> tcpPoolIdleTimeout() const override {
-    return tcp_pool_idle_timeout_;
-  }
   const absl::optional<std::chrono::milliseconds> maxConnectionDuration() const override {
     return max_connection_duration_;
   }
@@ -810,22 +804,16 @@ public:
     return per_connection_buffer_limit_bytes_;
   }
   uint64_t features() const override { return features_; }
-  const Http::Http1Settings& http1Settings() const override {
-    return http_protocol_options_->http1_settings_;
-  }
-  const envoy::config::core::v3::Http2ProtocolOptions& http2Options() const override {
-    return http_protocol_options_->http2_options_;
-  }
-  const envoy::config::core::v3::Http3ProtocolOptions& http3Options() const override {
-    return http_protocol_options_->http3_options_;
-  }
-  const envoy::config::core::v3::HttpProtocolOptions& commonHttpProtocolOptions() const override {
-    return http_protocol_options_->common_http_protocol_options_;
-  }
   void configureLbPolicies(const envoy::config::cluster::v3::Cluster& config,
                            Server::Configuration::ServerFactoryContext& context);
   ProtocolOptionsConfigConstSharedPtr
   extensionProtocolOptions(const std::string& name) const override;
+  const HttpProtocolOptionsConfig& httpProtocolOptions() const override {
+    return *http_protocol_options_;
+  }
+  const TcpProtocolOptionsConfig& tcpProtocolOptions() const override {
+    return *tcp_protocol_options_;
+  }
   LoadBalancerType lbType() const override { return lb_type_; }
   envoy::config::cluster::v3::Cluster::DiscoveryType type() const override { return type_; }
 
@@ -863,8 +851,6 @@ public:
     return *upstream_config_;
   }
   bool maintenanceMode() const override;
-  uint64_t maxRequestsPerConnection() const override { return max_requests_per_connection_; }
-  uint32_t maxResponseHeadersCount() const override { return max_response_headers_count_; }
   const std::string& name() const override { return name_; }
   const std::string& observabilityName() const override { return observability_name_; }
   ResourceManager& resourceManager(ResourcePriority priority) const override;
@@ -915,36 +901,11 @@ public:
   bool setLocalInterfaceNameOnUpstreamConnections() const override {
     return set_local_interface_name_on_upstream_connections_;
   }
-  const absl::optional<envoy::config::core::v3::UpstreamHttpProtocolOptions>&
-  upstreamHttpProtocolOptions() const override {
-    return http_protocol_options_->upstream_http_protocol_options_;
-  }
-
-  const absl::optional<const envoy::config::core::v3::AlternateProtocolsCacheOptions>&
-  alternateProtocolsCacheOptions() const override {
-    return http_protocol_options_->alternate_protocol_cache_options_;
-  }
-
   absl::optional<std::string> edsServiceName() const override { return eds_service_name_; }
 
   void createNetworkFilterChain(Network::Connection&) const override;
   std::vector<Http::Protocol>
   upstreamHttpProtocol(absl::optional<Http::Protocol> downstream_protocol) const override;
-
-  // Http::FilterChainFactory
-  bool createFilterChain(Http::FilterChainManager& manager,
-                         bool only_create_if_configured) const override {
-    if (!has_configured_http_filters_ && only_create_if_configured) {
-      return false;
-    }
-    Http::FilterChainUtility::createFilterChainForFactories(manager, http_filter_factories_);
-    return true;
-  }
-  bool createUpgradeFilterChain(absl::string_view, const UpgradeMap*,
-                                Http::FilterChainManager&) const override {
-    // Upgrade filter chains not yet supported for upstream filters.
-    return false;
-  }
 
   Http::Http1::CodecStats& http1CodecStats() const override;
   Http::Http2::CodecStats& http2CodecStats() const override;
@@ -991,10 +952,7 @@ private:
       extension_protocol_options_;
   const std::shared_ptr<const HttpProtocolOptionsConfigImpl> http_protocol_options_;
   const std::shared_ptr<const TcpProtocolOptionsConfigImpl> tcp_protocol_options_;
-  const uint64_t max_requests_per_connection_;
   const std::chrono::milliseconds connect_timeout_;
-  absl::optional<std::chrono::milliseconds> idle_timeout_;
-  absl::optional<std::chrono::milliseconds> tcp_pool_idle_timeout_;
   absl::optional<std::chrono::milliseconds> max_connection_duration_;
   const float per_upstream_preconnect_ratio_;
   const float peekahead_ratio_;
@@ -1025,16 +983,13 @@ private:
   std::unique_ptr<const envoy::config::cluster::v3::Cluster::CustomClusterType> cluster_type_;
   const std::unique_ptr<Server::Configuration::CommonFactoryContext> factory_context_;
   std::vector<Network::FilterFactoryCb> filter_factories_;
-  Http::FilterChainUtility::FilterFactoriesList http_filter_factories_;
   mutable Http::Http1::CodecStats::AtomicPtr http1_codec_stats_;
   mutable Http::Http2::CodecStats::AtomicPtr http2_codec_stats_;
   mutable Http::Http3::CodecStats::AtomicPtr http3_codec_stats_;
-  UpstreamHttpFactoryContextImpl upstream_context_;
 
   // Keep small values like bools and enums at the end of the class to reduce
   // overhead via alignment
   const uint32_t per_connection_buffer_limit_bytes_;
-  const uint32_t max_response_headers_count_;
   LoadBalancerType lb_type_;
   const envoy::config::cluster::v3::Cluster::DiscoveryType type_;
   const bool drain_connections_on_host_removal_ : 1;
@@ -1042,8 +997,6 @@ private:
   const bool warm_hosts_ : 1;
   const bool set_local_interface_name_on_upstream_connections_ : 1;
   const bool added_via_api_ : 1;
-  // true iff the cluster proto specified upstream http filters.
-  bool has_configured_http_filters_ : 1;
 };
 
 /**

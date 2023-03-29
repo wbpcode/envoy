@@ -1007,9 +1007,6 @@ ClusterInfoImpl::ClusterInfoImpl(
                         factory_context.messageValidationVisitor())),
       tcp_protocol_options_(extensionProtocolOptionsTyped<TcpProtocolOptionsConfigImpl>(
           "envoy.extensions.upstreams.tcp.v3.TcpProtocolOptions")),
-      max_requests_per_connection_(PROTOBUF_GET_WRAPPED_OR_DEFAULT(
-          http_protocol_options_->common_http_protocol_options_, max_requests_per_connection,
-          config.max_requests_per_connection().value())),
       connect_timeout_(
           std::chrono::milliseconds(PROTOBUF_GET_MS_OR_DEFAULT(config, connect_timeout, 5000))),
       per_upstream_preconnect_ratio_(PROTOBUF_GET_WRAPPED_OR_DEFAULT(
@@ -1054,13 +1051,8 @@ ClusterInfoImpl::ClusterInfoImpl(
                         : nullptr),
       factory_context_(
           std::make_unique<FactoryContextImpl>(*stats_scope_, runtime, factory_context)),
-      upstream_context_(server_context, init_manager, *stats_scope_),
       per_connection_buffer_limit_bytes_(
           PROTOBUF_GET_WRAPPED_OR_DEFAULT(config, per_connection_buffer_limit_bytes, 1024 * 1024)),
-      max_response_headers_count_(PROTOBUF_GET_WRAPPED_OR_DEFAULT(
-          http_protocol_options_->common_http_protocol_options_, max_headers_count,
-          runtime_.snapshot().getInteger(Http::MaxResponseHeadersCountOverrideKey,
-                                         Http::DEFAULT_MAX_HEADERS_COUNT))),
       type_(config.type()),
       drain_connections_on_host_removal_(config.ignore_health_on_host_removal()),
       connection_pool_per_downstream_connection_(
@@ -1069,19 +1061,13 @@ ClusterInfoImpl::ClusterInfoImpl(
                   common_lb_config_.ignore_new_hosts_until_first_hc()),
       set_local_interface_name_on_upstream_connections_(
           config.upstream_connection_options().set_local_interface_name_on_upstream_connections()),
-      added_via_api_(added_via_api), has_configured_http_filters_(false) {
+      added_via_api_(added_via_api) {
 #ifdef WIN32
   if (set_local_interface_name_on_upstream_connections_) {
     throw EnvoyException("set_local_interface_name_on_upstream_connections_ cannot be set to true "
                          "on Windows platforms");
   }
 #endif
-
-  if (config.has_max_requests_per_connection() &&
-      http_protocol_options_->common_http_protocol_options_.has_max_requests_per_connection()) {
-    throw EnvoyException("Only one of max_requests_per_connection from Cluster or "
-                         "HttpProtocolOptions can be specified");
-  }
 
   // If load_balancing_policy is set we will use it directly, ignoring lb_policy.
   if (config.has_load_balancing_policy()) {
@@ -1127,28 +1113,11 @@ ClusterInfoImpl::ClusterInfoImpl(
                                      name_));
   }
 
-  if (http_protocol_options_->common_http_protocol_options_.has_idle_timeout()) {
-    idle_timeout_ = std::chrono::milliseconds(DurationUtil::durationToMilliseconds(
-        http_protocol_options_->common_http_protocol_options_.idle_timeout()));
-    if (idle_timeout_.value().count() == 0) {
-      idle_timeout_ = absl::nullopt;
-    }
-  } else {
-    idle_timeout_ = std::chrono::hours(1);
-  }
-
-  if (tcp_protocol_options_ && tcp_protocol_options_->idleTimeout().has_value()) {
-    tcp_pool_idle_timeout_ = tcp_protocol_options_->idleTimeout();
-    if (tcp_pool_idle_timeout_.value().count() == 0) {
-      tcp_pool_idle_timeout_ = absl::nullopt;
-    }
-  } else {
-    tcp_pool_idle_timeout_ = std::chrono::minutes(10);
-  }
-
-  if (http_protocol_options_->common_http_protocol_options_.has_max_connection_duration()) {
+  // TODO(wbpcode): the max connection duration is used by both HTTP and TCP. However, this is
+  // configured in the HTTP protocol options.
+  if (http_protocol_options_->commonHttpProtocolOptions().has_max_connection_duration()) {
     max_connection_duration_ = std::chrono::milliseconds(DurationUtil::durationToMilliseconds(
-        http_protocol_options_->common_http_protocol_options_.max_connection_duration()));
+        http_protocol_options_->commonHttpProtocolOptions().max_connection_duration()));
     if (max_connection_duration_.value().count() == 0) {
       max_connection_duration_ = absl::nullopt;
     }
@@ -1184,31 +1153,6 @@ ClusterInfoImpl::ClusterInfoImpl(
     Network::FilterFactoryCb callback =
         factory.createFilterFactoryFromProto(*message, *factory_context_);
     filter_factories_.push_back(std::move(callback));
-  }
-
-  if (http_protocol_options_) {
-    Http::FilterChainUtility::FiltersList http_filters = http_protocol_options_->http_filters_;
-    has_configured_http_filters_ = !http_filters.empty();
-    if (http_filters.empty()) {
-      auto* codec_filter = http_filters.Add();
-      codec_filter->set_name("envoy.filters.http.upstream_codec");
-      codec_filter->mutable_typed_config()->PackFrom(
-          envoy::extensions::filters::http::upstream_codec::v3::UpstreamCodec::default_instance());
-    }
-    if (http_filters[http_filters.size() - 1].name() != "envoy.filters.http.upstream_codec") {
-      throw EnvoyException(
-          fmt::format("The codec filter is the only valid terminal upstream filter"));
-    }
-    std::shared_ptr<Http::UpstreamFilterConfigProviderManager> filter_config_provider_manager =
-        Http::FilterChainUtility::createSingletonUpstreamFilterConfigProviderManager(
-            upstream_context_.getServerFactoryContext());
-
-    std::string prefix = stats_scope_->symbolTable().toString(stats_scope_->prefix());
-    Http::FilterChainHelper<Server::Configuration::UpstreamHttpFactoryContext,
-                            Server::Configuration::UpstreamHttpFilterConfigFactory>
-        helper(*filter_config_provider_manager, upstream_context_.getServerFactoryContext(),
-               upstream_context_, prefix);
-    helper.processFilters(http_filters, "upstream http", "upstream http", http_filter_factories_);
   }
 }
 

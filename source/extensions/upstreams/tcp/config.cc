@@ -18,6 +18,12 @@ ProtocolOptionsConfigImpl::ProtocolOptionsConfigImpl(
   if (options.has_idle_timeout()) {
     idle_timeout_ =
         std::chrono::milliseconds(DurationUtil::durationToMilliseconds(options.idle_timeout()));
+
+    if (idle_timeout_.value().count() == 0) {
+      idle_timeout_ = absl::nullopt;
+    }
+  } else {
+    idle_timeout_ = std::chrono::minutes(10);
   }
 }
 

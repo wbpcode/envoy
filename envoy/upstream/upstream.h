@@ -819,6 +819,81 @@ public:
 using ProtocolOptionsConfigConstSharedPtr = std::shared_ptr<const ProtocolOptionsConfig>;
 
 /**
+ * HTTP protocol options for given cluster.
+ * This includes the information and interfaces for building an upstream HTTP filter chain.
+ */
+class HttpProtocolOptionsConfig : public ProtocolOptionsConfig, public Http::FilterChainFactory {
+public:
+  /**
+   * @return const Http::Http1Settings& for HTTP/1.1 connections created on behalf of this cluster.
+   *         @see Http::Http1Settings.
+   */
+  virtual const Http::Http1Settings& http1Settings() const PURE;
+
+  /**
+   * @return const envoy::config::core::v3::Http2ProtocolOptions& for HTTP/2 connections
+   * created on behalf of this cluster.
+   *         @see envoy::config::core::v3::Http2ProtocolOptions.
+   */
+  virtual const envoy::config::core::v3::Http2ProtocolOptions& http2Options() const PURE;
+
+  /**
+   * @return const envoy::config::core::v3::Http3ProtocolOptions& for HTTP/3 connections
+   * created on behalf of this cluster. @see envoy::config::core::v3::Http3ProtocolOptions.
+   */
+  virtual const envoy::config::core::v3::Http3ProtocolOptions& http3Options() const PURE;
+
+  /**
+   * @return const envoy::config::core::v3::HttpProtocolOptions for all of HTTP versions.
+   */
+  virtual const envoy::config::core::v3::HttpProtocolOptions&
+  commonHttpProtocolOptions() const PURE;
+
+  /**
+   * @return http protocol options for upstream connection
+   */
+  virtual const absl::optional<envoy::config::core::v3::UpstreamHttpProtocolOptions>&
+  upstreamHttpProtocolOptions() const PURE;
+
+  /**
+   * @return alternate protocols cache options for upstream connections.
+   */
+  virtual const absl::optional<const envoy::config::core::v3::AlternateProtocolsCacheOptions>&
+  alternateProtocolsCacheOptions() const PURE;
+
+  /**
+   * @return the idle timeout for upstream HTTP connection pool connections.
+   */
+  virtual absl::optional<std::chrono::milliseconds> idleTimeout() const PURE;
+
+  /**
+   * @return uint64_t the maximum number of outbound requests that a connection pool will make on
+   *         each upstream connection. This can be used to increase spread if the backends cannot
+   *         tolerate imbalance. 0 indicates no maximum.
+   */
+  virtual uint64_t maxRequestsPerConnection() const PURE;
+
+  /**
+   * @return uint32_t the maximum number of response headers. The default value is 100. Results in a
+   * reset if the number of headers exceeds this value.
+   */
+  virtual uint32_t maxResponseHeadersCount() const PURE;
+
+  /**
+   * @return bool whether the HTTP protocol options of cluster has configured HTTP filters.
+   */
+  virtual bool hasConfiguredHttpFilters() const PURE;
+};
+
+class TcpProtocolOptionsConfig : public ProtocolOptionsConfig {
+public:
+  /**
+   * @return the idle timeout for each connection in TCP connection pool.
+   */
+  virtual absl::optional<std::chrono::milliseconds> idleTimeout() const PURE;
+};
+
+/**
  *  Base class for all cluster typed metadata factory.
  */
 class ClusterTypedMetadataFactory : public Envoy::Config::TypedMetadataFactory {};
@@ -835,9 +910,9 @@ using AddressSelectFn = std::function<const Network::Address::InstanceConstShare
 
 /**
  * Information about a given upstream cluster.
- * This includes the information and interfaces for building an upstream filter chain.
+ * This includes the information and interfaces for building an upstream network filter chain.
  */
-class ClusterInfo : public Http::FilterChainFactory {
+class ClusterInfo {
 public:
   struct Features {
     // Whether the upstream supports HTTP2. This is used when creating connection pools.
@@ -854,7 +929,7 @@ public:
     static constexpr uint64_t HTTP3 = 0x10;
   };
 
-  ~ClusterInfo() override = default;
+  virtual ~ClusterInfo() = default;
 
   /**
    * @return bool whether the cluster was added via API (if false the cluster was present in the
@@ -866,16 +941,6 @@ public:
    * @return the connect timeout for upstream hosts that belong to this cluster.
    */
   virtual std::chrono::milliseconds connectTimeout() const PURE;
-
-  /**
-   * @return the idle timeout for upstream HTTP connection pool connections.
-   */
-  virtual const absl::optional<std::chrono::milliseconds> idleTimeout() const PURE;
-
-  /**
-   * @return the idle timeout for each connection in TCP connection pool.
-   */
-  virtual const absl::optional<std::chrono::milliseconds> tcpPoolIdleTimeout() const PURE;
 
   /**
    * @return optional maximum connection duration timeout for manager connections.
@@ -903,31 +968,6 @@ public:
   virtual uint64_t features() const PURE;
 
   /**
-   * @return const Http::Http1Settings& for HTTP/1.1 connections created on behalf of this cluster.
-   *         @see Http::Http1Settings.
-   */
-  virtual const Http::Http1Settings& http1Settings() const PURE;
-
-  /**
-   * @return const envoy::config::core::v3::Http2ProtocolOptions& for HTTP/2 connections
-   * created on behalf of this cluster.
-   *         @see envoy::config::core::v3::Http2ProtocolOptions.
-   */
-  virtual const envoy::config::core::v3::Http2ProtocolOptions& http2Options() const PURE;
-
-  /**
-   * @return const envoy::config::core::v3::Http3ProtocolOptions& for HTTP/3 connections
-   * created on behalf of this cluster. @see envoy::config::core::v3::Http3ProtocolOptions.
-   */
-  virtual const envoy::config::core::v3::Http3ProtocolOptions& http3Options() const PURE;
-
-  /**
-   * @return const envoy::config::core::v3::HttpProtocolOptions for all of HTTP versions.
-   */
-  virtual const envoy::config::core::v3::HttpProtocolOptions&
-  commonHttpProtocolOptions() const PURE;
-
-  /**
    * @param name std::string containing the well-known name of the extension for which protocol
    *        options are desired
    * @return std::shared_ptr<const Derived> where Derived is a subclass of ProtocolOptionsConfig
@@ -937,6 +977,20 @@ public:
   std::shared_ptr<const Derived> extensionProtocolOptionsTyped(const std::string& name) const {
     return std::dynamic_pointer_cast<const Derived>(extensionProtocolOptions(name));
   }
+
+  /**
+   * Get HTTP protocol options. This is specialization of extensionProtocolOptionsTyped for HTTP
+   * protocol.
+   * @return const HttpProtocolOptionsConfig& the HTTP protocol options to use for this cluster.
+   */
+  virtual const HttpProtocolOptionsConfig& httpProtocolOptions() const PURE;
+
+  /**
+   * Get TCP protocol options. This is specialization of extensionProtocolOptionsTyped for TCP
+   * protocol.
+   * @return const TcpProtocolOptionsConfig& the TCP protocol options to use for this cluster.
+   */
+  virtual const TcpProtocolOptionsConfig& tcpProtocolOptions() const PURE;
 
   /**
    * @return const ProtobufWkt::Message& the validated load balancing policy configuration to use
@@ -1017,19 +1071,6 @@ public:
    *         on each call.
    */
   virtual bool maintenanceMode() const PURE;
-
-  /**
-   * @return uint64_t the maximum number of outbound requests that a connection pool will make on
-   *         each upstream connection. This can be used to increase spread if the backends cannot
-   *         tolerate imbalance. 0 indicates no maximum.
-   */
-  virtual uint64_t maxRequestsPerConnection() const PURE;
-
-  /**
-   * @return uint32_t the maximum number of response headers. The default value is 100. Results in a
-   * reset if the number of headers exceeds this value.
-   */
-  virtual uint32_t maxResponseHeadersCount() const PURE;
 
   /**
    * @return the human readable name of the cluster.
@@ -1158,18 +1199,6 @@ public:
    */
   virtual std::vector<Http::Protocol>
   upstreamHttpProtocol(absl::optional<Http::Protocol> downstream_protocol) const PURE;
-
-  /**
-   * @return http protocol options for upstream connection
-   */
-  virtual const absl::optional<envoy::config::core::v3::UpstreamHttpProtocolOptions>&
-  upstreamHttpProtocolOptions() const PURE;
-
-  /**
-   * @return alternate protocols cache options for upstream connections.
-   */
-  virtual const absl::optional<const envoy::config::core::v3::AlternateProtocolsCacheOptions>&
-  alternateProtocolsCacheOptions() const PURE;
 
   /**
    * @return the Http1 Codec Stats.

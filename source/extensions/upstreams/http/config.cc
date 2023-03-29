@@ -163,9 +163,54 @@ uint64_t ProtocolOptionsConfigImpl::parseFeatures(const envoy::config::cluster::
   return features;
 }
 
+void ProtocolOptionsConfigImpl::initialize(
+    const envoy::config::cluster::v3::Cluster& cluster_config, FiltersList http_filters) {
+  if (common_http_protocol_options_.has_idle_timeout()) {
+    idle_timeout_ = std::chrono::milliseconds(
+        DurationUtil::durationToMilliseconds(common_http_protocol_options_.idle_timeout()));
+    if (idle_timeout_.value().count() == 0) {
+      idle_timeout_ = absl::nullopt;
+    }
+  } else {
+    idle_timeout_ = std::chrono::hours(1);
+  }
+
+  if (cluster_config.has_max_requests_per_connection() &&
+      common_http_protocol_options_.has_max_requests_per_connection()) {
+    throw EnvoyException("Only one of max_requests_per_connection from Cluster or "
+                         "HttpProtocolOptions can be specified");
+  }
+
+  has_configured_http_filters_ = !http_filters.empty();
+  if (http_filters.empty()) {
+    auto* codec_filter = http_filters.Add();
+    codec_filter->set_name("envoy.filters.http.upstream_codec");
+    codec_filter->mutable_typed_config()->PackFrom(
+        envoy::extensions::filters::http::upstream_codec::v3::UpstreamCodec::default_instance());
+  }
+  if (http_filters[http_filters.size() - 1].name() != "envoy.filters.http.upstream_codec") {
+    throw EnvoyException(
+        fmt::format("The codec filter is the only valid terminal upstream filter"));
+  }
+  std::shared_ptr<Envoy::Http::UpstreamFilterConfigProviderManager> filter_config_provider_manager =
+      Envoy::Http::FilterChainUtility::createSingletonUpstreamFilterConfigProviderManager(
+          upstream_context_.getServerFactoryContext());
+
+  std::string prefix =
+      upstream_context_.scope().symbolTable().toString(upstream_context_.scope().prefix());
+  Envoy::Http::FilterChainHelper<Server::Configuration::UpstreamHttpFactoryContext,
+                                 Server::Configuration::UpstreamHttpFilterConfigFactory>
+      helper(*filter_config_provider_manager, upstream_context_.getServerFactoryContext(),
+             upstream_context_, prefix);
+  helper.processFilters(http_filters, "upstream http", "upstream http", http_filter_factories_);
+}
+
 ProtocolOptionsConfigImpl::ProtocolOptionsConfigImpl(
+    const envoy::config::cluster::v3::Cluster& cluster_config,
     const envoy::extensions::upstreams::http::v3::HttpProtocolOptions& options,
-    ProtobufMessage::ValidationVisitor& validation_visitor)
+    ProtobufMessage::ValidationVisitor& validation_visitor,
+    Server::Configuration::ServerFactoryContext& server_context, Init::Manager& init_manager,
+    Stats::Scope& scope)
     : http1_settings_(
           Envoy::Http::Http1::parseHttp1Settings(getHttpOptions(options), validation_visitor)),
       http2_options_(Http2::Utility::initializeAndValidateOptions(getHttp2Options(options))),
@@ -179,22 +224,48 @@ ProtocolOptionsConfigImpl::ProtocolOptionsConfigImpl(
       http_filters_(options.http_filters()),
       alternate_protocol_cache_options_(getAlternateProtocolsCacheOptions(options)),
       header_validator_factory_(createHeaderValidatorFactory(options, validation_visitor)),
+      upstream_context_(server_context, init_manager, scope),
+      max_requests_per_connection_(PROTOBUF_GET_WRAPPED_OR_DEFAULT(
+          common_http_protocol_options_, max_requests_per_connection,
+          cluster_config.max_requests_per_connection().value())),
+      max_response_headers_count_(
+          PROTOBUF_GET_WRAPPED_OR_DEFAULT(common_http_protocol_options_, max_headers_count,
+                                          server_context.runtime().snapshot().getInteger(
+                                              Envoy::Http::MaxResponseHeadersCountOverrideKey,
+                                              Envoy::Http::DEFAULT_MAX_HEADERS_COUNT))),
       use_downstream_protocol_(options.has_use_downstream_protocol_config()),
       use_http2_(useHttp2(options)), use_http3_(useHttp3(options)),
-      use_alpn_(options.has_auto_config()) {}
+      use_alpn_(options.has_auto_config()) {
+  initialize(cluster_config, options.http_filters());
+}
 
 ProtocolOptionsConfigImpl::ProtocolOptionsConfigImpl(
+    const envoy::config::cluster::v3::Cluster& cluster_config,
     const envoy::config::core::v3::Http1ProtocolOptions& http1_settings,
     const envoy::config::core::v3::Http2ProtocolOptions& http2_options,
     const envoy::config::core::v3::HttpProtocolOptions& common_options,
     const absl::optional<envoy::config::core::v3::UpstreamHttpProtocolOptions> upstream_options,
     bool use_downstream_protocol, bool use_http2,
-    ProtobufMessage::ValidationVisitor& validation_visitor)
+    ProtobufMessage::ValidationVisitor& validation_visitor,
+
+    Server::Configuration::ServerFactoryContext& server_context, Init::Manager& init_manager,
+    Stats::Scope& scope)
     : http1_settings_(Envoy::Http::Http1::parseHttp1Settings(http1_settings, validation_visitor)),
       http2_options_(Http2::Utility::initializeAndValidateOptions(http2_options)),
       common_http_protocol_options_(common_options),
       upstream_http_protocol_options_(upstream_options),
-      use_downstream_protocol_(use_downstream_protocol), use_http2_(use_http2) {}
+      upstream_context_(server_context, init_manager, scope),
+      max_requests_per_connection_(PROTOBUF_GET_WRAPPED_OR_DEFAULT(
+          common_http_protocol_options_, max_requests_per_connection,
+          cluster_config.max_requests_per_connection().value())),
+      max_response_headers_count_(
+          PROTOBUF_GET_WRAPPED_OR_DEFAULT(common_http_protocol_options_, max_headers_count,
+                                          server_context.runtime().snapshot().getInteger(
+                                              Envoy::Http::MaxResponseHeadersCountOverrideKey,
+                                              Envoy::Http::DEFAULT_MAX_HEADERS_COUNT))),
+      use_downstream_protocol_(use_downstream_protocol), use_http2_(use_http2) {
+  initialize(cluster_config, {});
+}
 
 LEGACY_REGISTER_FACTORY(ProtocolOptionsConfigFactory, Server::Configuration::ProtocolOptionsFactory,
                         "envoy.upstreams.http.http_protocol_options");
