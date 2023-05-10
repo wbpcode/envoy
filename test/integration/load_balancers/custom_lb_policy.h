@@ -60,7 +60,8 @@ class CustomLbFactory : public Upstream::TypedLoadBalancerFactoryBase<
 public:
   CustomLbFactory() : TypedLoadBalancerFactoryBase("envoy.load_balancers.custom_lb") {}
 
-  Upstream::ThreadAwareLoadBalancerPtr create(const Upstream::ClusterInfo&,
+  Upstream::ThreadAwareLoadBalancerPtr create(const ProtobufTypes::MessagePtr&,
+                                              const Upstream::ClusterInfo&,
                                               const Upstream::PrioritySet&, Runtime::Loader&,
                                               Random::RandomGenerator&, TimeSource&) override {
     return std::make_unique<ThreadAwareLbImpl>();

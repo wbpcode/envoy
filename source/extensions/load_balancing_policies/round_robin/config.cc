@@ -9,16 +9,14 @@ namespace Extensions {
 namespace LoadBalancingPolices {
 namespace RoundRobin {
 
-Upstream::LoadBalancerPtr RoundRobinCreator::operator()(Upstream::LoadBalancerParams params,
-                                                        const Upstream::ClusterInfo& cluster_info,
-                                                        const Upstream::PrioritySet&,
-                                                        Runtime::Loader& runtime,
-                                                        Random::RandomGenerator& random,
-                                                        TimeSource& time_source) {
+Upstream::LoadBalancerPtr RoundRobinCreator::operator()(
+    Upstream::LoadBalancerParams params, const ProtobufTypes::MessagePtr& lb_config,
+    const Upstream::ClusterInfo& cluster_info, const Upstream::PrioritySet&,
+    Runtime::Loader& runtime, Random::RandomGenerator& random, TimeSource& time_source) {
 
   const auto* typed_config =
       dynamic_cast<const envoy::extensions::load_balancing_policies::round_robin::v3::RoundRobin*>(
-          cluster_info.loadBalancingPolicy().get());
+          lb_config.get());
 
   // The load balancing policy configuration will be loaded and validated in the main thread when we
   // load the cluster configuration. So we can assume the configuration is valid here.

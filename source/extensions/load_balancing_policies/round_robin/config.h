@@ -13,11 +13,10 @@ namespace LoadBalancingPolices {
 namespace RoundRobin {
 
 struct RoundRobinCreator : public Logger::Loggable<Logger::Id::upstream> {
-  Upstream::LoadBalancerPtr operator()(Upstream::LoadBalancerParams params,
-                                       const Upstream::ClusterInfo& cluster_info,
-                                       const Upstream::PrioritySet& priority_set,
-                                       Runtime::Loader& runtime, Random::RandomGenerator& random,
-                                       TimeSource& time_source);
+  Upstream::LoadBalancerPtr
+  operator()(Upstream::LoadBalancerParams params, const ProtobufTypes::MessagePtr& lb_config,
+             const Upstream::ClusterInfo& cluster_info, const Upstream::PrioritySet& priority_set,
+             Runtime::Loader& runtime, Random::RandomGenerator& random, TimeSource& time_source);
 };
 
 class Factory : public Common::FactoryBase<

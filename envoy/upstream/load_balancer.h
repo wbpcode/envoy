@@ -241,15 +241,18 @@ public:
   /**
    * @return ThreadAwareLoadBalancerPtr a new thread-aware load balancer.
    *
+   * @param lb_config supplies the typed proto configuration of the load balancing policy.
+   * A dynamic_cast should be performed to the expected proto type.
    * @param cluster_info supplies the cluster info.
-   * @param priority_set supplies the priority set.
+   * @param priority_set supplies the priority set on the main thread.
    * @param runtime supplies the runtime loader.
    * @param random supplies the random generator.
    * @param time_source supplies the time source.
    */
   virtual ThreadAwareLoadBalancerPtr
-  create(const ClusterInfo& cluster_info, const PrioritySet& priority_set, Runtime::Loader& runtime,
-         Random::RandomGenerator& random, TimeSource& time_source) PURE;
+  create(const ProtobufTypes::MessagePtr& lb_config, const ClusterInfo& cluster_info,
+         const PrioritySet& priority_set, Runtime::Loader& runtime, Random::RandomGenerator& random,
+         TimeSource& time_source) PURE;
 
   std::string category() const override { return "envoy.load_balancing_policies"; }
 };

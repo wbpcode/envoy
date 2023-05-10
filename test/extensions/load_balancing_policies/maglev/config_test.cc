@@ -32,10 +32,8 @@ TEST(MaglevConfigTest, Validate) {
 
     auto messsage_ptr = factory.createEmptyConfigProto();
 
-    EXPECT_CALL(cluster_info, loadBalancingPolicy()).WillOnce(testing::ReturnRef(messsage_ptr));
-
     auto thread_aware_lb =
-        factory.create(cluster_info, main_thread_priority_set, context.runtime_loader_,
+        factory.create(messsage_ptr, cluster_info, main_thread_priority_set, context.runtime_loader_,
                        context.api_.random_, context.time_system_);
     EXPECT_NE(nullptr, thread_aware_lb);
 
@@ -64,9 +62,7 @@ TEST(MaglevConfigTest, Validate) {
     auto messsage_ptr = factory.createEmptyConfigProto();
     messsage_ptr->MergeFrom(config_msg);
 
-    EXPECT_CALL(cluster_info, loadBalancingPolicy()).WillOnce(testing::ReturnRef(messsage_ptr));
-
-    EXPECT_THROW_WITH_MESSAGE(factory.create(cluster_info, main_thread_priority_set,
+    EXPECT_THROW_WITH_MESSAGE(factory.create(messsage_ptr, cluster_info, main_thread_priority_set,
                                              context.runtime_loader_, context.api_.random_,
                                              context.time_system_),
                               EnvoyException, "The table size of maglev must be prime number");

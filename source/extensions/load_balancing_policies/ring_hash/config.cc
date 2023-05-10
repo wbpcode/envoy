@@ -7,14 +7,15 @@ namespace Extensions {
 namespace LoadBalancingPolices {
 namespace RingHash {
 
-Upstream::ThreadAwareLoadBalancerPtr Factory::create(const Upstream::ClusterInfo& cluster_info,
+Upstream::ThreadAwareLoadBalancerPtr Factory::create(const ProtobufTypes::MessagePtr& lb_config,
+                                                     const Upstream::ClusterInfo& cluster_info,
                                                      const Upstream::PrioritySet& priority_set,
                                                      Runtime::Loader& runtime,
                                                      Random::RandomGenerator& random, TimeSource&) {
 
   const auto* typed_config =
       dynamic_cast<const envoy::extensions::load_balancing_policies::ring_hash::v3::RingHash*>(
-          cluster_info.loadBalancingPolicy().get());
+          lb_config.get());
 
   // Assume legacy config.
   if (!typed_config) {

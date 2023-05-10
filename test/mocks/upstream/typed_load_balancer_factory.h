@@ -15,8 +15,9 @@ public:
   // Upstream::TypedLoadBalancerFactory
   MOCK_METHOD(std::string, name, (), (const));
   MOCK_METHOD(ThreadAwareLoadBalancerPtr, create,
-              (const ClusterInfo& cluster_info, const PrioritySet& priority_set,
-               Runtime::Loader& runtime, Random::RandomGenerator& random, TimeSource& time_source));
+              (const ProtobufTypes::MessagePtr& lb_config, const ClusterInfo& cluster_info,
+               const PrioritySet& priority_set, Runtime::Loader& runtime,
+               Random::RandomGenerator& random, TimeSource& time_source));
 
   ProtobufTypes::MessagePtr createEmptyConfigProto() override {
     // Using Struct instead of a custom per-filter empty config proto

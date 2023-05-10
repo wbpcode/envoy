@@ -14,13 +14,12 @@ class FactoryBase : public Upstream::TypedLoadBalancerFactory {
 public:
   FactoryBase(absl::string_view name) : name_(name) {}
 
-  Upstream::ThreadAwareLoadBalancerPtr create(const Upstream::ClusterInfo& cluster_info,
-                                              const Upstream::PrioritySet& priority_set,
-                                              Runtime::Loader& runtime,
-                                              Envoy::Random::RandomGenerator& random,
-                                              TimeSource& time_source) override {
-    return std::make_unique<ThreadAwareLb>(
-        std::make_shared<LbFactory>(cluster_info, priority_set, runtime, random, time_source));
+  Upstream::ThreadAwareLoadBalancerPtr
+  create(const ProtobufTypes::MessagePtr& lb_config, const Upstream::ClusterInfo& cluster_info,
+         const Upstream::PrioritySet& priority_set, Runtime::Loader& runtime,
+         Envoy::Random::RandomGenerator& random, TimeSource& time_source) override {
+    return std::make_unique<ThreadAwareLb>(std::make_shared<LbFactory>(
+        lb_config, cluster_info, priority_set, runtime, random, time_source));
   }
 
   ProtobufTypes::MessagePtr createEmptyConfigProto() override {
@@ -32,18 +31,20 @@ public:
 private:
   class LbFactory : public Upstream::LoadBalancerFactory {
   public:
-    LbFactory(const Upstream::ClusterInfo& cluster_info, const Upstream::PrioritySet& priority_set,
-              Runtime::Loader& runtime, Envoy::Random::RandomGenerator& random,
-              TimeSource& time_source)
-        : cluster_info_(cluster_info), priority_set_(priority_set), runtime_(runtime),
-          random_(random), time_source_(time_source) {}
+    LbFactory(const ProtobufTypes::MessagePtr& lb_config, const Upstream::ClusterInfo& cluster_info,
+              const Upstream::PrioritySet& priority_set, Runtime::Loader& runtime,
+              Envoy::Random::RandomGenerator& random, TimeSource& time_source)
+        : lb_config_(lb_config), cluster_info_(cluster_info), priority_set_(priority_set),
+          runtime_(runtime), random_(random), time_source_(time_source) {}
 
     Upstream::LoadBalancerPtr create() override { PANIC("not implemented"); }
     Upstream::LoadBalancerPtr create(Upstream::LoadBalancerParams params) override {
-      return Impl()(params, cluster_info_, priority_set_, runtime_, random_, time_source_);
+      return Impl()(params, lb_config_, cluster_info_, priority_set_, runtime_, random_,
+                    time_source_);
     }
 
   public:
+    const ProtobufTypes::MessagePtr& lb_config_;
     const Upstream::ClusterInfo& cluster_info_;
     const Upstream::PrioritySet& priority_set_;
     Runtime::Loader& runtime_;

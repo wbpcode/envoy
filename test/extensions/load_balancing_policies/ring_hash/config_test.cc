@@ -31,11 +31,10 @@ TEST(RingHashConfigTest, Validate) {
     EXPECT_EQ("envoy.load_balancing_policies.ring_hash", factory.name());
 
     auto messsage_ptr = factory.createEmptyConfigProto();
-    EXPECT_CALL(cluster_info, loadBalancingPolicy()).WillOnce(testing::ReturnRef(messsage_ptr));
 
     auto thread_aware_lb =
-        factory.create(cluster_info, main_thread_priority_set, context.runtime_loader_,
-                       context.api_.random_, context.time_system_);
+        factory.create(messsage_ptr, cluster_info, main_thread_priority_set,
+                       context.runtime_loader_, context.api_.random_, context.time_system_);
     EXPECT_NE(nullptr, thread_aware_lb);
 
     thread_aware_lb->initialize();
@@ -64,11 +63,9 @@ TEST(RingHashConfigTest, Validate) {
     auto messsage_ptr = factory.createEmptyConfigProto();
     messsage_ptr->MergeFrom(config_msg);
 
-    EXPECT_CALL(cluster_info, loadBalancingPolicy()).WillOnce(testing::ReturnRef(messsage_ptr));
-
     EXPECT_THROW_WITH_MESSAGE(
-        factory.create(cluster_info, main_thread_priority_set, context.runtime_loader_,
-                       context.api_.random_, context.time_system_),
+        factory.create(messsage_ptr, cluster_info, main_thread_priority_set,
+                       context.runtime_loader_, context.api_.random_, context.time_system_),
         EnvoyException, "ring hash: minimum_ring_size (4) > maximum_ring_size (2)");
   }
 }

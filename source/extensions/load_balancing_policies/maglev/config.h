@@ -18,11 +18,10 @@ class Factory : public Upstream::TypedLoadBalancerFactoryBase<
 public:
   Factory() : TypedLoadBalancerFactoryBase("envoy.load_balancing_policies.maglev") {}
 
-  Upstream::ThreadAwareLoadBalancerPtr create(const Upstream::ClusterInfo& cluster_info,
-                                              const Upstream::PrioritySet& priority_set,
-                                              Runtime::Loader& runtime,
-                                              Random::RandomGenerator& random,
-                                              TimeSource& time_source) override;
+  Upstream::ThreadAwareLoadBalancerPtr
+  create(const ProtobufTypes::MessagePtr& lb_config, const Upstream::ClusterInfo& cluster_info,
+         const Upstream::PrioritySet& priority_set, Runtime::Loader& runtime,
+         Random::RandomGenerator& random, TimeSource& time_source) override;
 };
 
 } // namespace Maglev
