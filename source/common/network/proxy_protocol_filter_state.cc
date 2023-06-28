@@ -5,8 +5,11 @@
 namespace Envoy {
 namespace Network {
 
-const std::string& ProxyProtocolFilterState::key() {
-  CONSTRUCT_ON_FIRST_USE(std::string, "envoy.network.proxy_protocol_options");
+REGISTER_INLINE_KEY(StreamInfo::FilterStateInlineMapScope, proxy_protocol_options_inline_key,
+                    "envoy.network.proxy_protocol_options");
+
+const StreamInfo::InlineKey ProxyProtocolFilterState::key() {
+  return proxy_protocol_options_inline_key;
 }
 
 } // namespace Network

@@ -3,8 +3,11 @@
 namespace Envoy {
 namespace Network {
 
-const std::string& Http11ProxyInfoFilterState::key() {
-  CONSTRUCT_ON_FIRST_USE(std::string, "envoy.network.transport_socket.http_11_proxy.info");
+REGISTER_INLINE_KEY(StreamInfo::FilterStateInlineMapScope, http11_proxy_info_inline_key,
+                    "envoy.network.transport_socket.http_11_proxy.info");
+
+const StreamInfo::InlineKey Http11ProxyInfoFilterState::key() {
+  return http11_proxy_info_inline_key;
 }
 
 } // namespace Network

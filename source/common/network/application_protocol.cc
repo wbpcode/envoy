@@ -5,8 +5,10 @@
 namespace Envoy {
 namespace Network {
 
-const std::string& ApplicationProtocols::key() {
-  CONSTRUCT_ON_FIRST_USE(std::string, "envoy.network.application_protocols");
-}
+REGISTER_INLINE_KEY(StreamInfo::FilterStateInlineMapScope, application_protocols_inline_key,
+                    "envoy.network.application_protocols");
+
+const StreamInfo::InlineKey ApplicationProtocols::key() { return application_protocols_inline_key; }
+
 } // namespace Network
 } // namespace Envoy

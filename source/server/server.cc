@@ -27,6 +27,7 @@
 #include "source/common/api/api_impl.h"
 #include "source/common/api/os_sys_calls_impl.h"
 #include "source/common/common/enum_to_int.h"
+#include "source/common/common/inline_map_registry.h"
 #include "source/common/common/mutex_tracer_impl.h"
 #include "source/common/common/utility.h"
 #include "source/common/config/utility.h"
@@ -472,6 +473,13 @@ void InstanceImpl::initialize(Network::Address::InstanceConstSharedPtr local_add
     ENVOY_LOG(info, "  {}: {} bytes: {}", info.name_, info.size_,
               absl::StrJoin(info.registered_headers_, ","));
   }
+
+  // Finalize all managed inline map registries.
+  InlineMapRegistry::finalize();
+  ENVOY_LOG(info, "Inline map registry info:");
+  for (const auto& registry : InlineMapRegistry::descriptors()) {
+    ENVOY_LOG(info, "  {}: {}", registry.first, absl::StrJoin(registry.second->inlineKeys(), ","));
+  };
 
   // Initialize the regex engine and inject to singleton.
   // Needs to happen before stats store initialization because the stats
