@@ -18,7 +18,7 @@ class MockFilterChainOptions : public FilterChainOptions {
 public:
   MockFilterChainOptions() = default;
 
-  MOCK_METHOD(bool, filterDisabled, (absl::string_view), (const));
+  MOCK_METHOD(absl::optional<bool>, filterDisabled, (absl::string_view), (const));
 };
 
 TEST(FilterChainUtilityTest, CreateFilterChainForFactoriesWithRouteDisabled) {
@@ -44,9 +44,9 @@ TEST(FilterChainUtilityTest, CreateFilterChainForFactoriesWithRouteDisabled) {
 
   {
 
-    EXPECT_CALL(options, filterDisabled("filter_0")).WillOnce(Return(true));
-    EXPECT_CALL(options, filterDisabled("filter_1")).WillOnce(Return(false));
-    EXPECT_CALL(options, filterDisabled("filter_2")).WillOnce(Return(true));
+    EXPECT_CALL(options, filterDisabled("filter_0")).WillOnce(Return(absl::optional<bool>(true)));
+    EXPECT_CALL(options, filterDisabled("filter_1")).WillOnce(Return(absl::optional<bool>(false)));
+    EXPECT_CALL(options, filterDisabled("filter_2")).WillOnce(Return(absl::optional<bool>(true)));
 
     // Only filter_1 should be added.
     EXPECT_CALL(manager, applyFilterFactoryCb(_, _));

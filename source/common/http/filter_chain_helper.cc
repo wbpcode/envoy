@@ -35,9 +35,9 @@ void FilterChainUtility::createFilterChainForFactories(
     Http::FilterChainManager& manager, const FilterChainOptions& options,
     const FilterFactoriesList& filter_factories) {
   bool added_missing_config_filter = false;
-  for (const auto& filter_config_provider : filter_factories) {
+  for (const auto& [filter_config_provider, disabled] : filter_factories) {
     // If this filter is disabled explicitly, skip trying to create it.
-    if (options.filterDisabled(filter_config_provider->name())) {
+    if (options.filterDisabled(filter_config_provider->name()).value_or(disabled)) {
       continue;
     }
 

@@ -912,8 +912,11 @@ private:
   public:
     FilterChainOptionsImpl(Router::RouteConstSharedPtr route) : route_(std::move(route)) {}
 
-    bool filterDisabled(absl::string_view config_name) const override {
-      return route_ != nullptr && route_->filterDisabled(config_name);
+    absl::optional<bool> filterDisabled(absl::string_view config_name) const override {
+      if (route_ == nullptr) {
+        return absl::nullopt;
+      }
+      return route_->filterDisabled(config_name);
     }
 
   private:

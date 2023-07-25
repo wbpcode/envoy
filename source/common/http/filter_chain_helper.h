@@ -22,8 +22,12 @@ using UpstreamFilterConfigProviderManager =
 
 class FilterChainUtility : Logger::Loggable<Logger::Id::config> {
 public:
-  using FilterFactoriesList =
-      std::list<Filter::FilterConfigProviderPtr<Filter::NamedHttpFilterFactoryCb>>;
+  struct FilterConfig {
+    Filter::FilterConfigProviderPtr<Filter::NamedHttpFilterFactoryCb> provider;
+    bool disabled{false};
+  };
+
+  using FilterFactoriesList = std::list<FilterConfig>;
   using FiltersList = Protobuf::RepeatedPtrField<
       envoy::extensions::filters::network::http_connection_manager::v3::HttpFilter>;
 
@@ -48,8 +52,12 @@ public:
 template <class FilterCtx, class NeutralNamedHttpFilterFactory>
 class FilterChainHelper : Logger::Loggable<Logger::Id::config> {
 public:
-  using FilterFactoriesList =
-      std::list<Filter::FilterConfigProviderPtr<Filter::NamedHttpFilterFactoryCb>>;
+  struct FilterConfig {
+    Filter::FilterConfigProviderPtr<Filter::NamedHttpFilterFactoryCb> provider;
+    bool disabled{false};
+  };
+
+  using FilterFactoriesList = std::list<FilterConfig>;
   using FilterConfigProviderManager =
       Filter::FilterConfigProviderManager<Filter::NamedHttpFilterFactoryCb, FilterCtx>;
 
@@ -91,8 +99,8 @@ private:
         envoy::extensions::filters::network::http_connection_manager::v3::HttpFilter::
             ConfigTypeCase::kConfigDiscovery) {
       processDynamicFilterConfig(proto_config.name(), proto_config.config_discovery(),
-                                 filter_factories, filter_chain_type,
-                                 last_filter_in_current_config);
+                                 filter_factories, filter_chain_type, last_filter_in_current_config,
+                                 proto_config.disabled());
       return;
     }
 
@@ -122,7 +130,7 @@ private:
               MessageUtil::getJsonStringFromMessageOrError(
                   static_cast<const Protobuf::Message&>(proto_config.typed_config())));
 #endif
-    filter_factories.push_back(std::move(filter_config_provider));
+    filter_factories.push_back({std::move(filter_config_provider), proto_config.disabled()});
   }
 
   void
@@ -130,7 +138,7 @@ private:
                              const envoy::config::core::v3::ExtensionConfigSource& config_discovery,
                              FilterFactoriesList& filter_factories,
                              const std::string& filter_chain_type,
-                             bool last_filter_in_current_config) {
+                             bool last_filter_in_current_config, bool disabled) {
     ENVOY_LOG(debug, "      dynamic filter name: {}", name);
     if (config_discovery.apply_default_config_without_warming() &&
         !config_discovery.has_default_config()) {
@@ -150,7 +158,7 @@ private:
     auto filter_config_provider = filter_config_provider_manager_.createDynamicFilterConfigProvider(
         config_discovery, name, server_context_, factory_context_, last_filter_in_current_config,
         filter_chain_type, nullptr);
-    filter_factories.push_back(std::move(filter_config_provider));
+    filter_factories.push_back({std::move(filter_config_provider), disabled});
   }
 
   FilterConfigProviderManager& filter_config_provider_manager_;
