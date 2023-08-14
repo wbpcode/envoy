@@ -1,53 +1,69 @@
 #pragma once
 
-#include <memory>
-#include <string>
-
-#include "envoy/access_log/access_log.h"
-#include "envoy/common/pure.h"
-#include "envoy/config/typed_config.h"
 #include "envoy/http/header_map.h"
-#include "envoy/server/factory_context.h"
-#include "envoy/stream_info/stream_info.h"
+
+#include "envoy/formatter/substitution_formatter_base.h"
 
 namespace Envoy {
 namespace Formatter {
 
 /**
- * Interface for substitution formatter.
- * Formatters provide a complete substitution output line for the given headers/trailers/stream.
+ * Interface for substitution formatter context for HTTP access logs.
  */
-class Formatter {
+class HttpFormatterContext {
 public:
-  virtual ~Formatter() = default;
+  virtual ~HttpFormatterContext() = default;
 
   /**
-   * Return a formatted substitution line.
-   * @param request_headers supplies the request headers.
-   * @param response_headers supplies the response headers.
-   * @param response_trailers supplies the response trailers.
-   * @param stream_info supplies the stream info.
-   * @param local_reply_body supplies the local reply body.
-   * @return std::string string containing the complete formatted substitution line.
+   * @return const Http::RequestHeaderMap& the request headers. Empty request header map if no
+   * request headers are available.
    */
-  virtual std::string format(const Http::RequestHeaderMap& request_headers,
-                             const Http::ResponseHeaderMap& response_headers,
-                             const Http::ResponseTrailerMap& response_trailers,
-                             const StreamInfo::StreamInfo& stream_info,
-                             absl::string_view local_reply_body,
-                             AccessLog::AccessLogType access_log_type) const PURE;
+  virtual const Http::RequestHeaderMap& requestHeaders() const PURE;
+
+  /**
+   * @return const Http::ResponseHeaderMap& the response headers. Empty respnose header map if
+   * no response headers are available.
+   */
+  virtual const Http::ResponseHeaderMap& responseHeaders() const PURE;
+
+  /**
+   * @return const Http::ResponseTrailerMap& the response trailers. Empty response trailer map
+   * if no response trailers are available.
+   */
+  virtual const Http::ResponseTrailerMap& responseTrailers() const PURE;
+
+  /**
+   * @return absl::string_view the local reply body. Empty if no local reply body.
+   */
+  virtual absl::string_view localReplyBody() const PURE;
+
+  /**
+   * @return AccessLog::AccessLogType the type of access log. NotSet if this is not used for
+   * access logging.
+   */
+  virtual AccessLog::AccessLogType accessLogType() const PURE;
+
+  static constexpr absl::string_view category() { return "http"; }
 };
 
+// Alias of FormatterBase<HttpFormatterContext> for backward compatibility.
+using Formatter = FormatterBase<HttpFormatterContext>;
 using FormatterPtr = std::unique_ptr<Formatter>;
-using FormatterConstSharedPtr = std::shared_ptr<const Formatter>;
 
-/**
- * Interface for substitution provider.
- * FormatterProviders extract information from the given headers/trailers/stream.
- */
-class FormatterProvider {
+class FormatterProvider : public FormatterProviderBase<HttpFormatterContext> {
 public:
-  virtual ~FormatterProvider() = default;
+  // FormatterProviderBase<HttpFormatterContext>
+  absl::optional<std::string> format(const HttpFormatterContext& context,
+                                     const StreamInfo::StreamInfo& info) const override {
+    return format(context.requestHeaders(), context.responseHeaders(), context.responseTrailers(),
+                  info, context.localReplyBody(), context.accessLogType());
+  }
+  ProtobufWkt::Value formatValue(const HttpFormatterContext& context,
+                                 const StreamInfo::StreamInfo& info) const override {
+    return formatValue(context.requestHeaders(), context.responseHeaders(),
+                       context.responseTrailers(), info, context.localReplyBody(),
+                       context.accessLogType());
+  }
 
   /**
    * Extract a value from the provided headers/trailers/stream.
@@ -82,55 +98,19 @@ public:
                                          absl::string_view local_reply_body,
                                          AccessLog::AccessLogType access_log_type) const PURE;
 };
-
 using FormatterProviderPtr = std::unique_ptr<FormatterProvider>;
 
-/**
- * Interface for command parser.
- * CommandParser returns a FormatterProviderPtr after successfully parsing an access log format
- * token, nullptr otherwise.
- */
-class CommandParser {
-public:
-  virtual ~CommandParser() = default;
-
-  /**
-   * Return a FormatterProviderPtr if subcommand and max_length
-   * are correct for the formatter provider associated
-   * with command.
-   * @param command - name of the FormatterProvider
-   * @param subcommand - command specific data. (optional)
-   * @param max_length - length to which the output produced by FormatterProvider
-   *   should be truncated to (optional)
-   *
-   * @return FormattterProviderPtr substitution provider for the parsed command
-   */
-  virtual FormatterProviderPtr parse(const std::string& command, const std::string& subcommand,
-                                     absl::optional<size_t>& max_length) const PURE;
-};
-
+using CommandParser = CommandParserBase<HttpFormatterContext>;
 using CommandParserPtr = std::unique_ptr<CommandParser>;
+using CommandParserSharedPtr = std::shared_ptr<CommandParser>;
 
 /**
  * Implemented by each custom CommandParser and registered via Registry::registerFactory()
  * or the convenience class RegisterFactory.
  */
-class CommandParserFactory : public Config::TypedFactory {
+class CommandParserFactory : public CommandParserFactoryBase<HttpFormatterContext> {
 public:
-  ~CommandParserFactory() override = default;
-
-  /**
-   * Creates a particular CommandParser implementation.
-   *
-   * @param config supplies the configuration for the command parser.
-   * @param context supplies the factory context.
-   * @return CommandParserPtr the CommandParser which will be used in
-   * SubstitutionFormatParser::parse() when evaluating an access log format string.
-   */
-  virtual CommandParserPtr
-  createCommandParserFromProto(const Protobuf::Message& config,
-                               Server::Configuration::CommonFactoryContext& context) PURE;
-
+  // Use "envoy.formatter" as category name of HTTP formatter for backward compatibility.
   std::string category() const override { return "envoy.formatter"; }
 };
 
