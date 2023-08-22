@@ -125,13 +125,17 @@ private:
 /**
  * Composite formatter implementation.
  */
-class FormatterImpl : public Formatter {
+template<class FormatterContext>
+class FormatterBaseImpl : public FormatterBase<FormatterContext> {
 public:
   FormatterImpl(const std::string& format, bool omit_empty_values = false);
   FormatterImpl(const std::string& format, bool omit_empty_values,
                 const std::vector<CommandParserPtr>& command_parsers);
 
   // Formatter::format
+  std::string formatWithContext(const HttpFormatterContext& context,
+                                const StreamInfo::StreamInfo& stream_info) const override;
+
   std::string format(const Http::RequestHeaderMap& request_headers,
                      const Http::ResponseHeaderMap& response_headers,
                      const Http::ResponseTrailerMap& response_trailers,
@@ -158,12 +162,7 @@ public:
   StructFormatter(const ProtobufWkt::Struct& format_mapping, bool preserve_types,
                   bool omit_empty_values, const std::vector<CommandParserPtr>& commands);
 
-  ProtobufWkt::Struct format(const Http::RequestHeaderMap& request_headers,
-                             const Http::ResponseHeaderMap& response_headers,
-                             const Http::ResponseTrailerMap& response_trailers,
-                             const StreamInfo::StreamInfo& stream_info,
-                             absl::string_view local_reply_body,
-                             AccessLog::AccessLogType access_log_type) const;
+  ProtobufWkt::Struct format(const HttpFormatterContext& context, const StreamInfo::StreamInfo& context) const;
 
 private:
   struct StructFormatMapWrapper;
