@@ -131,22 +131,28 @@ FormatterImpl::FormatterImpl(const std::string& format, bool omit_empty_values,
   providers_ = SubstitutionFormatParser::parse(format, command_parsers);
 }
 
+std::string FormatterImpl::formatWithContext(const HttpFormatterContext& context,
+                                             const StreamInfo::StreamInfo& stream_info) const {
+  std::string log_line;
+  log_line.reserve(256);
+
+  for (const FormatterProviderPtr& provider : providers_) {
+    const auto bit = provider->formatWithContext(context, stream_info);
+    log_line += bit.value_or(empty_value_string_);
+  }
+
+  return log_line;
+}
+
 std::string FormatterImpl::format(const Http::RequestHeaderMap& request_headers,
                                   const Http::ResponseHeaderMap& response_headers,
                                   const Http::ResponseTrailerMap& response_trailers,
                                   const StreamInfo::StreamInfo& stream_info,
                                   absl::string_view local_reply_body,
                                   AccessLog::AccessLogType access_log_type) const {
-  std::string log_line;
-  log_line.reserve(256);
-
-  for (const FormatterProviderPtr& provider : providers_) {
-    const auto bit = provider->format(request_headers, response_headers, response_trailers,
-                                      stream_info, local_reply_body, access_log_type);
-    log_line += bit.value_or(empty_value_string_);
-  }
-
-  return log_line;
+  HttpFormatterContext formatter_context{&request_headers, &response_headers, &response_trailers,
+                                         local_reply_body, access_log_type};
+  return formatWithContext(formatter_context, stream_info);
 }
 
 std::string JsonFormatterImpl::format(const Http::RequestHeaderMap& request_headers,

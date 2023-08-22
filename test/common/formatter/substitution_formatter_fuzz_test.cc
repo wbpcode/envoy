@@ -23,8 +23,8 @@ DEFINE_PROTO_FUZZER(const test::common::substitution::TestCase& input) {
     const std::unique_ptr<TestStreamInfo> stream_info =
         Fuzz::fromStreamInfo(input.stream_info(), time_system);
     for (const auto& it : formatters) {
-      it->format(request_headers, response_headers, response_trailers, *stream_info,
-                 absl::string_view(), AccessLog::AccessLogType::NotSet);
+      it->formatWithContext({&request_headers, &response_headers, &response_trailers},
+                            *stream_info);
     }
     ENVOY_LOG_MISC(trace, "Success");
   } catch (const EnvoyException& e) {
