@@ -43,6 +43,10 @@ envoy_cc_library(
 envoy_cc_library(
     name = "trace_context_interface",
     hdrs = ["trace_context.h"],
+    external_deps = [
+        "abseil_strings",
+        "abseil_optional",
+    ],
 )
 
 envoy_cc_library(

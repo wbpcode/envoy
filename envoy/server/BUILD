@@ -263,6 +263,9 @@ envoy_cc_library(
 envoy_cc_library(
     name = "process_context_interface",
     hdrs = ["process_context.h"],
+    external_deps = [
+        "abseil_optional",
+    ],
 )
 
 envoy_cc_library(

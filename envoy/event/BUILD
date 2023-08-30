@@ -56,6 +56,10 @@ envoy_cc_library(
     deps = [
         "//source/common/common:interval_value",
     ],
+    external_deps =[
+"abseil_variant",
+        "abseil_flat_hash_map",
+    ],
 )
 
 envoy_cc_library(

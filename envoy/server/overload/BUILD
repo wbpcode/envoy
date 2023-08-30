@@ -37,4 +37,7 @@ envoy_cc_library(
 envoy_cc_library(
     name = "load_shed_point_interface",
     hdrs = ["load_shed_point.h"],
+    external_deps = [
+        "abseil_strings",
+    ],
 )

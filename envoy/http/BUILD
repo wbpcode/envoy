@@ -163,6 +163,12 @@ envoy_cc_library(
 envoy_cc_library(
     name = "query_params_interface",
     hdrs = ["query_params.h"],
+    external_deps = [
+        "abseil_strings",
+    ],
+    deps = [
+        "@com_google_absl//absl/container:btree",
+    ],
 )
 
 envoy_cc_library(

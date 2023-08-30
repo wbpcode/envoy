@@ -11,6 +11,9 @@ envoy_package()
 envoy_cc_library(
     name = "watcher_interface",
     hdrs = ["watcher.h"],
+    external_deps = [
+        "abseil_strings",
+    ],
 )
 
 envoy_cc_library(

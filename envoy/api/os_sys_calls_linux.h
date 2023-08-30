@@ -19,7 +19,9 @@ public:
   /**
    * @see sched_getaffinity (man 2 sched_getaffinity)
    */
-  virtual SysCallIntResult sched_getaffinity(pid_t pid, size_t cpusetsize, cpu_set_t* mask) PURE;
+  virtual SysCallIntResult
+  sched_getaffinity(pid_t pid, size_t cpusetsize, // NOLINT(readability-identifier-naming)
+                    cpu_set_t* mask) PURE;
 };
 
 using LinuxOsSysCallsPtr = std::unique_ptr<LinuxOsSysCalls>;

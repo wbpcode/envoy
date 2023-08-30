@@ -91,7 +91,7 @@ public:
 #endif
   bool operator==(const RefcountPtr& a) const { return ptr_ == a.ptr_; }
   bool operator!=(const RefcountPtr& a) const { return ptr_ != a.ptr_; }
-  uint32_t use_count() const { return ptr_->use_count(); }
+  uint32_t use_count() const { return ptr_->use_count(); } // NOLINT(readability-identifier-naming)
   void reset() {
     resetInternal();
     ptr_ = nullptr;
@@ -144,7 +144,7 @@ public:
   /**
    * @return the number of references to the object.
    */
-  virtual uint32_t use_count() const PURE;
+  virtual uint32_t use_count() const PURE; // NOLINT(readability-identifier-naming)
 };
 
 // Delegation helper for RefcountPtr. This can be instantiated in a class, but
@@ -165,7 +165,7 @@ struct RefcountHelper {
     ASSERT(ref_count_ >= 1);
     return --ref_count_ == 0;
   }
-  uint32_t use_count() const { return ref_count_; }
+  uint32_t use_count() const { return ref_count_; } // NOLINT(readability-identifier-naming)
 
   std::atomic<uint32_t> ref_count_{0};
 };
