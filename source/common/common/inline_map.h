@@ -210,12 +210,13 @@ public:
   InlineMap(InlineMap&& rhs) noexcept
       : descriptor_(rhs.descriptor_), dynamic_entries_(std::move(rhs.dynamic_entries_)),
         inline_entries_(std::move(rhs.inline_entries_)),
-        inline_entries_size_(rhs.inline_entries_size_),
-        inline_entries_valid_(rhs.inline_entries_valid_) {
+        inline_entries_size_(rhs.inline_entries_size_) /*,
+         inline_entries_valid_(rhs.inline_entries_valid_) */
+  {
 
     // Clear the moved map.
     rhs.inline_entries_size_ = 0;
-    rhs.inline_entries_valid_ = nullptr;
+    // rhs.inline_entries_valid_ = nullptr;
   }
 
   ~InlineMap() { clear(); }
@@ -400,8 +401,13 @@ public:
     }
 
     const uint64_t inline_keys_num = descriptor_.inlineKeysNum();
-    for (uint64_t i = 0; i < inline_keys_num; ++i) {
-      clearInlineMapEntry(i);
+    for (uint64_t i = 0; i < inline_keys_num;) {
+      if (inline_entries_[inline_keys_num * sizeof(Value) + i / 8] != 0) {
+        for (uint64_t e = 0; e < 8; e++) {
+          clearInlineMapEntry(i + e);
+        }
+      }
+      i += 8;
     }
   }
 
@@ -448,13 +454,13 @@ private:
   void lazyInitializeInlineEntriesMemory() {
     if (inline_entries_ == nullptr) {
       const uint64_t value_memory_size = descriptor_.inlineKeysNum() * sizeof(Value);
-      const uint64_t valid_memory_size = descriptor_.inlineKeysNum() * sizeof(bool);
+      const uint64_t valid_memory_size = descriptor_.inlineKeysNum() / 8 + 1;
       const uint64_t memory_size = value_memory_size + valid_memory_size;
 
       inline_entries_.reset(new uint8_t[memory_size]);
       memset(inline_entries_.get(), 0, memory_size);
 
-      inline_entries_valid_ = reinterpret_cast<bool*>(inline_entries_.get() + value_memory_size);
+      // inline_entries_valid_ = reinterpret_cast<bool*>(inline_entries_.get() + value_memory_size);
     }
   }
 
@@ -510,7 +516,13 @@ private:
       // If the inline entries is not allocated, then the inline entry is not valid.
       return false;
     }
-    return inline_entries_valid_[inline_entry_id];
+
+    const uint64_t offset = descriptor_.inlineKeysNum() * sizeof(Value) + inline_entry_id / 8;
+    const uint8_t offset_value = inline_entries_[offset];
+
+    return offset_value & (1 << (inline_entry_id % 8));
+
+    // return inline_entries_valid_[inline_entry_id];
   }
   void setInlineEntryValid(uint64_t inline_entry_id, bool flag) {
     ASSERT(inline_entry_id < descriptor_.inlineKeysNum());
@@ -523,7 +535,16 @@ private:
       inline_entries_size_--;
     }
 
-    inline_entries_valid_[inline_entry_id] = flag;
+    const uint64_t offset = descriptor_.inlineKeysNum() * sizeof(Value) + inline_entry_id / 8;
+    const uint8_t offset_value = inline_entries_[offset];
+
+    if (flag) {
+      inline_entries_[offset] = offset_value | (1 << (inline_entry_id % 8));
+    } else {
+      inline_entries_[offset] = offset_value & ~(1 << (inline_entry_id % 8));
+    }
+
+    // inline_entries_valid_[inline_entry_id] = flag;
   }
 
   // Helper function to get the inline entries array by the inline entries storage.
@@ -547,7 +568,7 @@ private:
 
   // These are flags to indicate if the inline entries are valid. We keep pointer here to
   // avoid computing the offset every time.
-  bool* inline_entries_valid_{};
+  // bool* inline_entries_valid_{};
 };
 
 } // namespace Envoy
