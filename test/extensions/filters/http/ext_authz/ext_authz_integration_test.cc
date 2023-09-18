@@ -43,7 +43,8 @@ class ExtAuthzGrpcIntegrationTest
       public TestWithParam<std::tuple<Network::Address::IpVersion, Grpc::ClientType, bool>>,
       public HttpIntegrationTest {
 public:
-  ExtAuthzGrpcIntegrationTest() : HttpIntegrationTest(Http::CodecType::HTTP1, ipVersion()) {}
+  ExtAuthzGrpcIntegrationTest()
+      : HttpIntegrationTest(Http::CodecType::HTTP1, ExtAuthzGrpcIntegrationTest::ipVersion()) {}
 
   static std::string protocolTestParamsToString(
       const TestParamInfo<std::tuple<Network::Address::IpVersion, Grpc::ClientType, bool>>&
