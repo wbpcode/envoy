@@ -40,7 +40,7 @@ public:
    * @return the request stream handler to handle following stream frames (if exist)
    * of the request.
    */
-  virtual StreamHandler* onDecodingSuccess(StreamRequestPtr request, bool end_stream) PURE;
+  virtual StreamHandler* onDecodingSuccess(RequestPtr request, bool end_stream) PURE;
 
   /**
    * If request decoding failure then this method will be called.
@@ -73,10 +73,12 @@ public:
 
   /**
    * If response decoding success then this method will be called.
-   * @param options extended options from response.
-   * @return the response stream handler to handle the current response stream.
+   * @param response the decoded response.
+   * @param end_stream whether the response is ended.
+   * @return the response stream handler to handle following stream frames (if exist)
+   * of the response.
    */
-  virtual StreamHandler* onDecodingSuccess(StreamResponsePtr response, bool end_stream) PURE;
+  virtual StreamHandler* onDecodingSuccess(ResponsePtr response, bool end_stream) PURE;
 
   /**
    * If response decoding failure then this method will be called.
