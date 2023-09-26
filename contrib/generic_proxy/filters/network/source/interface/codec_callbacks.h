@@ -70,18 +70,56 @@ private:
 };
 
 /**
- * Decoder callback of request.
+ * Interface of request stream handler. This is used to handle the request stream and possible
+ * multiple request frames.
  */
-class RequestDecoderCallback {
+class RequestStreamHandler {
+  virtual ~RequestStreamHandler() = default;
+
+  /**
+   * Called only once for same request stream when the request stream is started.
+   */
+  virtual void onRequestStart(RequestPtr request, bool end_stream) PURE;
+
+  /**
+   * Called when a request frame is received. This could be called zero or multiple times for same
+   * request stream.
+   */
+  virtual void onRequestFrame(StreamFramePtr stream_frame, bool end_stream) PURE;
+};
+
+/**
+ * Interface of response stream handler. This is used to handle the response stream and possible
+ * multiple response frames.
+ */
+class ResponseStreamHandler {
+  virtual ~ResponseStreamHandler() = default;
+
+  /**
+   * Called only once for same response stream when the response stream is started.
+   */
+  virtual void onResponseStart(ResponsePtr response, bool end_stream) PURE;
+
+  /**
+   * Called when a response frame is received. This could be called zero or multiple times for same
+   * response stream.
+   */
+  virtual void onResponseFrame(StreamFramePtr stream_frame, bool end_stream) PURE;
+};
+
+/**
+ * Callback of downstream request decoder and upstream response encoder.
+ */
+class ServerCodecCallbacks {
 public:
-  virtual ~RequestDecoderCallback() = default;
+  virtual ~ServerCodecCallbacks() = default;
 
   /**
    * If request decoding success then this method will be called.
-   * @param request request from decoding.
    * @param options extended options from request.
+   * @return the request stream handler to handle the current request stream.
    */
-  virtual void onDecodingSuccess(RequestPtr request, ExtendedOptions options) PURE;
+  virtual RequestStreamHandler* onDecodingSuccess(ExtendedOptions opts) PURE;
 
   /**
    * If request decoding failure then this method will be called.
@@ -106,18 +144,18 @@ public:
 };
 
 /**
- * Decoder callback of Response.
+ * Callback of upstream response decoder and downstream request encoder.
  */
-class ResponseDecoderCallback {
+class ClientCodecCallbacks {
 public:
-  virtual ~ResponseDecoderCallback() = default;
+  virtual ~ClientCodecCallbacks() = default;
 
   /**
    * If response decoding success then this method will be called.
-   * @param response response from decoding.
    * @param options extended options from response.
+   * @return the response stream handler to handle the current response stream.
    */
-  virtual void onDecodingSuccess(ResponsePtr response, ExtendedOptions options) PURE;
+  virtual ResponseStreamHandler* onDecodingSuccess(ExtendedOptions opts) PURE;
 
   /**
    * If response decoding failure then this method will be called.
@@ -139,34 +177,6 @@ public:
    * the custom codec the full power to control the upstream connection.
    */
   virtual OptRef<Network::Connection> connection() PURE;
-};
-
-/**
- * Encoder callback of request.
- */
-class RequestEncoderCallback {
-public:
-  virtual ~RequestEncoderCallback() = default;
-
-  /**
-   * If request encoding success then this method will be called.
-   * @param buffer encoding result buffer.
-   */
-  virtual void onEncodingSuccess(Buffer::Instance& buffer) PURE;
-};
-
-/**
- * Encoder callback of Response.
- */
-class ResponseEncoderCallback {
-public:
-  virtual ~ResponseEncoderCallback() = default;
-
-  /**
-   * If response encoding success then this method will be called.
-   * @param buffer encoding result buffer.
-   */
-  virtual void onEncodingSuccess(Buffer::Instance& buffer) PURE;
 };
 
 } // namespace GenericProxy

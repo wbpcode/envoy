@@ -94,7 +94,7 @@ public:
                              Upstream::HostDescriptionConstSharedPtr host) PURE;
 };
 
-class PendingResponseCallback : public ResponseDecoderCallback {
+class PendingResponseCallback : public ClientCodecCallbacks {
 public:
   virtual void onConnectionClose(Network::ConnectionEvent event) PURE;
 };
@@ -130,13 +130,49 @@ public:
 
 class DecoderFilterCallback : public virtual StreamFilterCallbacks {
 public:
+  /**
+   * Send local reply directly to downstream connection. This should be called only once
+   * for each request.
+   * NOTE: different from the local reply in HTTP connection manager, this local reply
+   * is sent directly to downstream connection without any filter chain iteration.
+   */
   virtual void sendLocalReply(Status status, ResponseUpdateFunction&& cb = nullptr) PURE;
 
+  /**
+   * Called in async callback to continue filter chain iteration if the filter chain is
+   * stopped by one filter.
+   */
   virtual void continueDecoding() PURE;
 
-  virtual void upstreamResponse(ResponsePtr response, ExtendedOptions options) PURE;
-
+  /**
+   * Called when the downstream request is sent to upstream server and the request
+   * doest not expect any response from upstream.
+   */
   virtual void completeDirectly() PURE;
+
+  /**
+   * Called when the upstream response data is recieved and response options are ready.
+   * This should be called only once for each request.
+   * @param options supplies the stream options from upstream response.
+   */
+  virtual void onResponseOptions(ExtendedOptions options) PURE;
+
+  /**
+   * Called when the upstream response data is recieved and response is ready.
+   * This should be called only once for each request and only after onResponseOptions.
+   * @param response supplies the response from upstream.
+   * @param end_stream whether the response is ended.
+   */
+  virtual void onResponseStart(ResponsePtr response, bool end_stream) PURE;
+
+  /**
+   * Called when the upstream response data is recieved and response frame is ready.
+   * This could be called zero or multiple times for same request.
+   * This should be called only after onResponseStart.
+   * @param frame supplies the response frame from upstream.
+   * @param end_stream whether the response is ended.
+   */
+  virtual void onResponseFrame(StreamFramePtr frame, bool end_stream) PURE;
 
   /**
    * Try to create a new upstream connection and bind it to the current downstream connection.
@@ -165,7 +201,9 @@ public:
   virtual void onDestroy() PURE;
 
   virtual void setDecoderFilterCallbacks(DecoderFilterCallback& callbacks) PURE;
-  virtual FilterStatus onStreamDecoded(Request& request) PURE;
+
+  virtual FilterStatus onRequestStart(Request& request, bool end_stream) PURE;
+  virtual FilterStatus onRequestFrame(StreamFrame& frame, bool end_stream) PURE;
 };
 
 class EncoderFilter {
@@ -175,7 +213,9 @@ public:
   virtual void onDestroy() PURE;
 
   virtual void setEncoderFilterCallbacks(EncoderFilterCallback& callbacks) PURE;
-  virtual FilterStatus onStreamEncoded(Response& response) PURE;
+
+  virtual FilterStatus onResponseStart(Response& response, bool end_stream) PURE;
+  virtual FilterStatus onResponseFrame(StreamFrame& frame, bool end_stream) PURE;
 };
 
 class StreamFilter : public DecoderFilter, public EncoderFilter {};

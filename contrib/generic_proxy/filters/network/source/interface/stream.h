@@ -16,10 +16,19 @@ namespace Extensions {
 namespace NetworkFilters {
 namespace GenericProxy {
 
-class StreamBase {
+/**
+ * Stream frame interface. This is used to represent the stream frame of request or response.
+ */
+class StreamFrame {
 public:
-  virtual ~StreamBase() = default;
+  virtual ~StreamFrame() = default;
+};
 
+using StreamFramePtr = std::unique_ptr<StreamFrame>;
+using StreamFrameSharedPtr = std::shared_ptr<StreamFrame>;
+
+class StreamBase : public StreamFrame {
+public:
   using IterateCallback = std::function<bool(absl::string_view key, absl::string_view val)>;
 
   /**
@@ -76,9 +85,13 @@ public:
 };
 
 /**
- * Using interface that provided by the TraceContext as the interface of generic request.
+ * Interface of generic request. This is used to represent the generic request. It could be treated
+ * as specilization of StreamFrame that contains the request specific information.
+ * NOTE: using interface that provided by the TraceContext as the interface of generic request here
+ * to simplify the tracing integration. This is not a good design. This should be changed in the
+ * future.
  */
-class Request : public Tracing::TraceContext {
+class Request : public Tracing::TraceContext, public StreamFrame {
 public:
   // Used for matcher.
   static constexpr absl::string_view name() { return "generic_proxy"; }
@@ -98,6 +111,10 @@ enum class Event {
 using Status = absl::Status;
 using StatusCode = absl::StatusCode;
 
+/**
+ * Interface of generic response. This is used to represent the generic response. It could be
+ * treated as specilization of StreamFrame that contains the response specific information.
+ */
 class Response : public StreamBase {
 public:
   /**

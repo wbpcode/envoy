@@ -14,49 +14,89 @@ namespace NetworkFilters {
 namespace GenericProxy {
 
 /**
- * Decoder of request.
+ * Decoder of downstream request and encoder of upstream response.
  */
-class RequestDecoder {
+class ServerCodec {
 public:
-  virtual ~RequestDecoder() = default;
+  virtual ~ServerCodec() = default;
 
-  // The decode() method may be called multiple times for single request or response.
-  // So an independent setDecoderCallback() is used to set decoding callback.
-  virtual void setDecoderCallback(RequestDecoderCallback& callback) PURE;
+  /**
+   * Set codec callback.
+   * @param callbacks supplies the codec callbacks.
+   */
+  virtual void setCodecCallbacks(ServerCodecCallbacks& callbacks) PURE;
+
+  /**
+   * Decode the request stream from the buffer. The codec could read buffer from
+   * connection directly. But it will requires the codec to handle the connection
+   * event which is not the responsibility of the codec. So we let the generic
+   * proxy to read the buffer from the connection and pass the buffer to the codec.
+   * @param buffer supplies the request buffer to decode.
+   */
   virtual void decode(Buffer::Instance& buffer) PURE;
+
+  /**
+   * Encode the response stream to downstream connection.
+   * @param request_opts options of request that the response is for.
+   * @param response_opts options of response.
+   * @param response supplies the response to encode.
+   * @param end_stream whether the response is ended.
+   */
+  virtual void encode(ExtendedOptions request_opts, ExtendedOptions response_opts,
+                      const Response& response, bool end_stream) PURE;
+
+  /**
+   * Encode the response frame to downstream connection.
+   * @param request_opts options of request that the response is for.
+   * @param response_opts options of response.
+   * @param frame supplies the response frame to encode.
+   * @param end_stream whether the response is ended.
+   */
+  virtual void encode(ExtendedOptions request_opts, ExtendedOptions response_opts,
+                      const StreamFrame& frame, bool end_stream) PURE;
 };
 
 /**
  * Decoder of response.
  */
-class ResponseDecoder {
+class ClientCodec {
 public:
-  virtual ~ResponseDecoder() = default;
+  virtual ~ClientCodec() = default;
 
-  // The decode() method may be called multiple times for single request or response.
-  // So an independent setDecoderCallback() is used to set decoding callback.
-  virtual void setDecoderCallback(ResponseDecoderCallback& callback) PURE;
+  /**
+   * Set codec callback.
+   * @param callbacks supplies the codec callbacks.
+   */
+  virtual void setCodecCallback(ClientCodecCallbacks& callbacks) PURE;
+
+  /**
+   * Decode the response stream from the buffer. The codec could read buffer from
+   * connection directly. But it will requires the codec to handle the connection
+   * event which is not the responsibility of the codec. So we let the generic
+   * proxy to read the buffer from the connection and pass the buffer to the codec.
+   * @param buffer supplies the response buffer to decode.
+   */
   virtual void decode(Buffer::Instance& buffer) PURE;
-};
 
-/*
- * Encoder of request.
- */
-class RequestEncoder {
-public:
-  virtual ~RequestEncoder() = default;
+  /**
+   * Encode the request stream to upstream connection.
+   * @param request_opts options of request.
+   * @param response_opts options of response that the request is for.
+   * @param request supplies the request to encode.
+   * @param end_stream whether the request is ended.
+   */
+  virtual void encode(ExtendedOptions request_opts, ExtendedOptions response_opts,
+                      const Request& request, bool end_stream) PURE;
 
-  virtual void encode(const Request&, RequestEncoderCallback& callback) PURE;
-};
-
-/*
- * Encoder of response.
- */
-class ResponseEncoder {
-public:
-  virtual ~ResponseEncoder() = default;
-
-  virtual void encode(const Response&, ResponseEncoderCallback& callback) PURE;
+  /**
+   * Encode the request frame to upstream connection.
+   * @param request_opts options of request.
+   * @param response_opts options of response that the request is for.
+   * @param frame supplies the request frame to encode.
+   * @param end_stream whether the request is ended.
+   */
+  virtual void encode(ExtendedOptions request_opts, ExtendedOptions response_opts,
+                      const StreamFrame& frame, bool end_stream) PURE;
 };
 
 class MessageCreator {
@@ -66,13 +106,13 @@ public:
   /**
    * Create local response message for local reply.
    */
-  virtual ResponsePtr response(Status status, const Request& origin_request) PURE;
+  virtual std::pair<ExtendedOptions, ResponsePtr>
+  response(Status status, ExtendedOptions request_opts, const Request& request) PURE;
 };
 
-using RequestDecoderPtr = std::unique_ptr<RequestDecoder>;
-using ResponseDecoderPtr = std::unique_ptr<ResponseDecoder>;
-using RequestEncoderPtr = std::unique_ptr<RequestEncoder>;
-using ResponseEncoderPtr = std::unique_ptr<ResponseEncoder>;
+using ServerCodecPtr = std::unique_ptr<ServerCodec>;
+using ClientCodecPtr = std::unique_ptr<ClientCodec>;
+
 using MessageCreatorPtr = std::unique_ptr<MessageCreator>;
 
 /**
@@ -124,24 +164,14 @@ public:
   virtual ~CodecFactory() = default;
 
   /*
-   * Create request decoder.
+   * Create server codec for decoding downstream request and encoding upstream response.
    */
-  virtual RequestDecoderPtr requestDecoder() const PURE;
+  virtual ServerCodecPtr serverCodec() const PURE;
 
   /*
-   * Create response decoder.
+   * Create client codec for decoding upstream response and encoding downstream request.
    */
-  virtual ResponseDecoderPtr responseDecoder() const PURE;
-
-  /*
-   * Create request encoder.
-   */
-  virtual RequestEncoderPtr requestEncoder() const PURE;
-
-  /*
-   * Create response encoder.
-   */
-  virtual ResponseEncoderPtr responseEncoder() const PURE;
+  virtual ClientCodecPtr clientCodec() const PURE;
 
   /**
    * Create message creator.
