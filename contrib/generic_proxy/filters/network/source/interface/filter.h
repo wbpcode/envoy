@@ -13,7 +13,7 @@ namespace Extensions {
 namespace NetworkFilters {
 namespace GenericProxy {
 
-using ResponseUpdateFunction = std::function<void(Response&)>;
+using ResponseUpdateFunction = std::function<void(StreamResponse&)>;
 
 /**
  * The stream filter callbacks are passed to all filters to use for writing response data and
@@ -67,14 +67,14 @@ public:
   virtual OptRef<const Tracing::Config> tracingConfig() const PURE;
 
   /**
-   * @return absl::optional<ExtendedOptions> the extended options from downstream request.
+   * @return absl::optional<StreamOptions> the extended options from downstream request.
    */
-  virtual absl::optional<ExtendedOptions> requestOptions() const PURE;
+  virtual absl::optional<StreamOptions> requestOptions() const PURE;
 
   /**
-   * @return absl::optional<ExtendedOptions> the extended options from upstream response.
+   * @return absl::optional<StreamOptions> the extended options from upstream response.
    */
-  virtual absl::optional<ExtendedOptions> responseOptions() const PURE;
+  virtual absl::optional<StreamOptions> responseOptions() const PURE;
 
   /**
    * @return const Network::Connection* downstream connection.
@@ -151,19 +151,12 @@ public:
   virtual void completeDirectly() PURE;
 
   /**
-   * Called when the upstream response data is recieved and response options are ready.
-   * This should be called only once for each request.
-   * @param options supplies the stream options from upstream response.
-   */
-  virtual void onResponseOptions(ExtendedOptions options) PURE;
-
-  /**
    * Called when the upstream response data is recieved and response is ready.
-   * This should be called only once for each request and only after onResponseOptions.
+   * This should be called only once for each request.
    * @param response supplies the response from upstream.
    * @param end_stream whether the response is ended.
    */
-  virtual void onResponseStart(ResponsePtr response, bool end_stream) PURE;
+  virtual void onResponseStart(StreamResponsePtr response, bool end_stream) PURE;
 
   /**
    * Called when the upstream response data is recieved and response frame is ready.
@@ -202,7 +195,7 @@ public:
 
   virtual void setDecoderFilterCallbacks(DecoderFilterCallback& callbacks) PURE;
 
-  virtual FilterStatus onRequestStart(Request& request, bool end_stream) PURE;
+  virtual FilterStatus onRequestStart(StreamRequest& request, bool end_stream) PURE;
   virtual FilterStatus onRequestFrame(StreamFrame& frame, bool end_stream) PURE;
 };
 
@@ -214,7 +207,7 @@ public:
 
   virtual void setEncoderFilterCallbacks(EncoderFilterCallback& callbacks) PURE;
 
-  virtual FilterStatus onResponseStart(Response& response, bool end_stream) PURE;
+  virtual FilterStatus onResponseStart(StreamResponse& response, bool end_stream) PURE;
   virtual FilterStatus onResponseFrame(StreamFrame& frame, bool end_stream) PURE;
 };
 

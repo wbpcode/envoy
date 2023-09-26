@@ -37,23 +37,33 @@ public:
 
   /**
    * Encode the response stream to downstream connection.
-   * @param request_opts options of request that the response is for.
-   * @param response_opts options of response.
-   * @param response supplies the response to encode.
+   * @param response supplies the stream response to encode.
    * @param end_stream whether the response is ended.
+   * @param request_opts options of request that the response is for.
    */
-  virtual void encode(ExtendedOptions request_opts, ExtendedOptions response_opts,
-                      const Response& response, bool end_stream) PURE;
+  virtual void encode(const StreamResponse& response, bool end_stream,
+                      StreamOptions request_opts) PURE;
 
   /**
    * Encode the response frame to downstream connection.
-   * @param request_opts options of request that the response is for.
-   * @param response_opts options of response.
-   * @param frame supplies the response frame to encode.
+   * @param stream_frame supplies the response stream frame to encode.
    * @param end_stream whether the response is ended.
+   * @param request_opts options of request that the response is for.
    */
-  virtual void encode(ExtendedOptions request_opts, ExtendedOptions response_opts,
-                      const StreamFrame& frame, bool end_stream) PURE;
+  virtual void encode(const StreamFrame& stream_frame, bool end_stream,
+                      StreamOptions request_opts) PURE;
+
+  /**
+   * Create local response for specific downstream request.
+   * @param status supplies the response status.
+   * @param response_flag supplies the response flag. It should be short string
+   * view to tell the response details. For example, "rate_limited", "no_route",
+   * etc.
+   * @param request supplies the request to create response for.
+   * @return StreamResponsePtr the response.
+   */
+  virtual StreamResponsePtr respond(Status status, absl::string_view response_flag,
+                                    const StreamRequest& request) PURE;
 };
 
 /**
@@ -80,40 +90,21 @@ public:
 
   /**
    * Encode the request stream to upstream connection.
-   * @param request_opts options of request.
-   * @param response_opts options of response that the request is for.
    * @param request supplies the request to encode.
    * @param end_stream whether the request is ended.
    */
-  virtual void encode(ExtendedOptions request_opts, ExtendedOptions response_opts,
-                      const Request& request, bool end_stream) PURE;
+  virtual void encode(const StreamRequest& request, bool end_stream) PURE;
 
   /**
    * Encode the request frame to upstream connection.
-   * @param request_opts options of request.
-   * @param response_opts options of response that the request is for.
    * @param frame supplies the request frame to encode.
    * @param end_stream whether the request is ended.
    */
-  virtual void encode(ExtendedOptions request_opts, ExtendedOptions response_opts,
-                      const StreamFrame& frame, bool end_stream) PURE;
-};
-
-class MessageCreator {
-public:
-  virtual ~MessageCreator() = default;
-
-  /**
-   * Create local response message for local reply.
-   */
-  virtual std::pair<ExtendedOptions, ResponsePtr>
-  response(Status status, ExtendedOptions request_opts, const Request& request) PURE;
+  virtual void encode(const StreamFrame& stream_frame, bool end_stream) PURE;
 };
 
 using ServerCodecPtr = std::unique_ptr<ServerCodec>;
 using ClientCodecPtr = std::unique_ptr<ClientCodec>;
-
-using MessageCreatorPtr = std::unique_ptr<MessageCreator>;
 
 /**
  * Protocol specific options to control the behavior of the connection manager (generic proxy).
@@ -172,11 +163,6 @@ public:
    * Create client codec for decoding upstream response and encoding downstream request.
    */
   virtual ClientCodecPtr clientCodec() const PURE;
-
-  /**
-   * Create message creator.
-   */
-  virtual MessageCreatorPtr messageCreator() const PURE;
 
   /**
    * @return the options to control the behavior of generic proxy filter.
