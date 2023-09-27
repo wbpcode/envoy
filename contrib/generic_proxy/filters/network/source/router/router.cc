@@ -61,10 +61,9 @@ UpstreamRequest::UpstreamRequest(RouterFilter& parent,
   stream_info_.setUpstreamClusterInfo(parent_.cluster_);
 
   // Set request options.
-  auto options = decoder_callbacks_.requestOptions();
-  ASSERT(options.has_value());
-  stream_id_ = options->streamId().value_or(0);
-  wait_response_ = options->waitResponse();
+  auto options = parent_.request_stream_->streamOptions();
+  stream_id_ = options.streamId();
+  wait_response_ = !options.oneWayStream();
 
   // Set tracing config.
   tracing_config_ = decoder_callbacks_.tracingConfig();
@@ -118,7 +117,7 @@ void UpstreamRequest::resetStream(StreamResetReason reason) {
   if (span_ != nullptr) {
     span_->setTag(Tracing::Tags::get().Error, Tracing::Tags::get().True);
     span_->setTag(Tracing::Tags::get().ErrorReason, resetReasonToStringView(reason));
-    Tracing::TracerUtility::finalizeSpan(*span_, *parent_.request_, stream_info_,
+    Tracing::TracerUtility::finalizeSpan(*span_, *parent_.request_stream_, stream_info_,
                                          tracing_config_.value().get(), true);
   }
 
@@ -137,7 +136,7 @@ void UpstreamRequest::clearStream(bool close_connection) {
   ENVOY_LOG(debug, "generic proxy upstream request: complete upstream request");
 
   if (span_ != nullptr) {
-    Tracing::TracerUtility::finalizeSpan(*span_, *parent_.request_, stream_info_,
+    Tracing::TracerUtility::finalizeSpan(*span_, *parent_.request_stream_, stream_info_,
                                          tracing_config_.value().get(), true);
   }
 
@@ -159,9 +158,33 @@ void UpstreamRequest::deferredDelete() {
   }
 }
 
+void UpstreamRequest::sendRequestStartToUpstream() {
+  request_stream_header_sent_ = true;
+  parent_.request_encoder_->encode(*parent_.request_stream_, *this);
+}
+
+void UpstreamRequest::sendRequestFrameToUpstream() {
+  if (!request_stream_header_sent_) {
+    // Do not send request frame to upstream until the request header is sent. It may be blocked
+    // by the upstream connecting.
+    return;
+  }
+
+  while (!parent_.request_stream_frames_.empty()) {
+    auto frame = std::move(parent_.request_stream_frames_.front());
+    parent_.request_stream_frames_.pop_front();
+    parent_.request_encoder_->encode(*frame, *this);
+  }
+}
+
 void UpstreamRequest::onEncodingSuccess(Buffer::Instance& buffer) {
   ENVOY_LOG(debug, "upstream request encoding success");
   encodeBufferToUpstream(buffer);
+
+  // Request is complete.
+  if (!parent_.request_stream_end_ || !parent_.request_stream_frames_.empty()) {
+    return;
+  }
 
   // Need not to wait for the upstream response and complete directly.
   if (!wait_response_) {
@@ -206,15 +229,27 @@ void UpstreamRequest::onBindSuccess(Network::ClientConnection& conn,
   upstream_conn_ = &conn;
 
   if (span_ != nullptr) {
-    span_->injectContext(*parent_.request_, upstream_host_);
+    span_->injectContext(*parent_.request_stream_, upstream_host_);
   }
 
-  parent_.request_encoder_->encode(*parent_.request_, *this);
+  sendRequestStartToUpstream();
+  sendRequestFrameToUpstream();
 }
 
-void UpstreamRequest::onDecodingSuccess(ResponsePtr response, ExtendedOptions options) {
-  clearStream(options.drainClose());
-  parent_.onUpstreamResponse(std::move(response), options);
+void UpstreamRequest::onStreamFrame(StreamFramePtr frame) {
+  if (frame->frameOptions().endStream()) {
+    clearStream(false);
+  }
+  parent_.onResponseFrame(std::move(frame));
+}
+
+StreamFrameHandler* UpstreamRequest::onDecodingSuccess(StreamResponsePtr response) {
+  const bool end_stream = response->frameOptions().endStream();
+  if (end_stream) {
+    clearStream(response->streamOptions().drainClose());
+  }
+  parent_.onResponseStart(std::move(response));
+  return end_stream ? nullptr : this;
 }
 
 void UpstreamRequest::onDecodingFailure() { resetStream(StreamResetReason::ProtocolError); }
@@ -273,9 +308,15 @@ void UpstreamRequest::encodeBufferToUpstream(Buffer::Instance& buffer) {
   upstream_conn_->write(buffer, false);
 }
 
-void RouterFilter::onUpstreamResponse(ResponsePtr response, ExtendedOptions options) {
-  filter_complete_ = true;
-  callbacks_->upstreamResponse(std::move(response), std::move(options));
+void RouterFilter::onResponseStart(ResponsePtr response) {
+  filter_complete_ = response->frameOptions().endStream();
+  callbacks_->onResponseStart(std::move(response));
+}
+
+void RouterFilter::onResponseFrame(StreamFramePtr frame) {
+  ASSERT(!filter_complete_, "response frame received after response complete");
+  filter_complete_ = frame->frameOptions().endStream();
+  callbacks_->onResponseFrame(std::move(frame));
 }
 
 void RouterFilter::completeDirectly() {
@@ -389,11 +430,23 @@ void RouterFilter::kickOffNewUpstreamRequest() {
   raw_upstream_request->startStream();
 }
 
-FilterStatus RouterFilter::onStreamDecoded(Request& request) {
+void RouterFilter::onStreamFrame(StreamFramePtr frame) {
+  request_stream_end_ = frame->frameOptions().endStream();
+  request_stream_frames_.emplace_back(std::move(frame));
+
+  if (upstream_requests_.empty()) {
+    return;
+  }
+
+  upstream_requests_.front()->sendRequestFrameToUpstream();
+}
+
+FilterStatus RouterFilter::onStreamDecoded(StreamRequest& request) {
   ENVOY_LOG(debug, "Try route request to the upstream based on the route entry");
 
   setRouteEntry(callbacks_->routeEntry());
-  request_ = &request;
+  request_stream_ = &request;
+  request_stream_end_ = request.frameOptions().endStream();
 
   if (route_entry_ == nullptr) {
     ENVOY_LOG(debug, "No route for current request and send local reply");
@@ -401,6 +454,10 @@ FilterStatus RouterFilter::onStreamDecoded(Request& request) {
     return FilterStatus::StopIteration;
   }
 
+  if (!request_stream_end_) {
+    // Set handler for following request frames.
+    callbacks_->setRequestFramesHandler(this);
+  }
   request_encoder_ = callbacks_->downstreamCodec().requestEncoder();
   kickOffNewUpstreamRequest();
   return FilterStatus::StopIteration;

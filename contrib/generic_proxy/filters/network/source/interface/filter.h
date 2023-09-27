@@ -67,16 +67,6 @@ public:
   virtual OptRef<const Tracing::Config> tracingConfig() const PURE;
 
   /**
-   * @return absl::optional<ExtendedOptions> the extended options from downstream request.
-   */
-  virtual absl::optional<ExtendedOptions> requestOptions() const PURE;
-
-  /**
-   * @return absl::optional<ExtendedOptions> the extended options from upstream response.
-   */
-  virtual absl::optional<ExtendedOptions> responseOptions() const PURE;
-
-  /**
    * @return const Network::Connection* downstream connection.
    */
   virtual const Network::Connection* connection() const PURE;
@@ -134,7 +124,29 @@ public:
 
   virtual void continueDecoding() PURE;
 
-  virtual void upstreamResponse(ResponsePtr response, ExtendedOptions options) PURE;
+  /**
+   * Called when the upstream response frame is received. This should only be called once.
+   * @param response supplies the upstream response frame.
+   */
+  virtual void onResponseStart(StreamResponsePtr response) PURE;
+
+  /**
+   * Called when the upstream response frame is received. This should only be called once.
+   * @param frame supplies the upstream frame.
+   */
+  virtual void onResponseFrame(StreamFramePtr frame) PURE;
+
+  /**
+   * Register a request frames handler to used to handle the request frames (except the special
+   * StreamRequest frame).
+   * This handler will be Called when the filter chain is completed.
+   * @param handler supplies the request frames handler.
+   *
+   * TODO(wbpcode): this is used by the terminal filter the handle the request frames because
+   * the filter chain doesn't support to handle extra frames. We should remove this when the
+   * filter chain supports to handle extra frames.
+   */
+  virtual void setRequestFramesHandler(StreamFrameHandler* handler) PURE;
 
   virtual void completeDirectly() PURE;
 
@@ -165,7 +177,7 @@ public:
   virtual void onDestroy() PURE;
 
   virtual void setDecoderFilterCallbacks(DecoderFilterCallback& callbacks) PURE;
-  virtual FilterStatus onStreamDecoded(Request& request) PURE;
+  virtual FilterStatus onStreamDecoded(StreamRequest& request) PURE;
 };
 
 class EncoderFilter {
@@ -175,7 +187,7 @@ public:
   virtual void onDestroy() PURE;
 
   virtual void setEncoderFilterCallbacks(EncoderFilterCallback& callbacks) PURE;
-  virtual FilterStatus onStreamEncoded(Response& response) PURE;
+  virtual FilterStatus onStreamEncoded(StreamResponse& response) PURE;
 };
 
 class StreamFilter : public DecoderFilter, public EncoderFilter {};

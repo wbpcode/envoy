@@ -13,60 +13,22 @@ namespace NetworkFilters {
 namespace GenericProxy {
 
 /**
- * Extended options from request or response to control the behavior of the
- * generic proxy filter.
- * All these options are optional for the simple ping-pong use case.
+ * StreamFrameHandler to handle the frames from the stream (if exists).
  */
-class ExtendedOptions {
+class StreamFrameHandler {
 public:
-  ExtendedOptions(absl::optional<uint64_t> stream_id, bool wait_response, bool drain_close,
-                  bool is_heartbeat)
-      : stream_id_(stream_id.value_or(0)), has_stream_id_(stream_id.has_value()),
-        wait_response_(wait_response), drain_close_(drain_close), is_heartbeat_(is_heartbeat) {}
-  ExtendedOptions() = default;
+  virtual ~StreamFrameHandler() = default;
 
   /**
-   * @return the stream id of the request or response. This is used to match the
-   * downstream request with the upstream response.
-
-   * NOTE: In most cases, the stream id is not needed and will be ignored completely.
-   * The stream id is only used when we can't match the downstream request
-   * with the upstream response by the active stream instance self directly.
-   * For example, when the multiple downstream requests are multiplexed into one
-   * upstream connection.
+   * @return the stream options of the stream that the handler related to.
    */
-  absl::optional<uint64_t> streamId() const {
-    return has_stream_id_ ? absl::optional<uint64_t>(stream_id_) : absl::nullopt;
-  }
+  virtual StreamOptions streamOptions() const PURE;
 
   /**
-   * @return whether the current request requires an upstream response.
-   * NOTE: This is only used for the request.
+   * Handle the frame from the stream.
+   * @param frame frame from the stream.
    */
-  bool waitResponse() const { return wait_response_; }
-
-  /**
-   * @return whether the downstream/upstream connection should be drained after
-   * current active requests are finished.
-   * NOTE: This is only used for the response.
-   */
-  bool drainClose() const { return drain_close_; }
-
-  /**
-   * @return whether the current request/response is a heartbeat request/response.
-   * NOTE: It would be better to handle heartbeat request/response by another L4
-   * filter. Then the generic proxy filter can be used for the simple ping-pong
-   * use case.
-   */
-  bool isHeartbeat() const { return is_heartbeat_; }
-
-private:
-  uint64_t stream_id_{0};
-  bool has_stream_id_{false};
-
-  bool wait_response_{true};
-  bool drain_close_{false};
-  bool is_heartbeat_{false};
+  virtual void onStreamFrame(StreamFramePtr frame) PURE;
 };
 
 /**
@@ -76,12 +38,7 @@ class RequestDecoderCallback {
 public:
   virtual ~RequestDecoderCallback() = default;
 
-  /**
-   * If request decoding success then this method will be called.
-   * @param request request from decoding.
-   * @param options extended options from request.
-   */
-  virtual void onDecodingSuccess(RequestPtr request, ExtendedOptions options) PURE;
+  virtual void onDecodingSuccess(StreamFramePtr request) PURE;
 
   /**
    * If request decoding failure then this method will be called.
@@ -115,9 +72,9 @@ public:
   /**
    * If response decoding success then this method will be called.
    * @param response response from decoding.
-   * @param options extended options from response.
+   * @return StreamFrameHandler* to handle following frames from the stream (if exists).
    */
-  virtual void onDecodingSuccess(ResponsePtr response, ExtendedOptions options) PURE;
+  virtual StreamFrameHandler* onDecodingSuccess(StreamRequestPtr response) PURE;
 
   /**
    * If response decoding failure then this method will be called.
