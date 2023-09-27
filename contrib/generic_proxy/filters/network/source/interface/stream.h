@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstdint>
 #include <functional>
 #include <memory>
 #include <string>
@@ -16,10 +17,105 @@ namespace Extensions {
 namespace NetworkFilters {
 namespace GenericProxy {
 
-class StreamBase {
+/**
+ * Stream options from request or response to control the behavior of the
+ * generic proxy filter.
+ * All these options could be ignored for the simple ping-pong use case.
+ */
+class StreamOptions {
 public:
-  virtual ~StreamBase() = default;
+  StreamOptions(uint64_t stream_id, bool one_way_stream, bool drain_close, bool is_heartbeat)
+      : stream_id_(stream_id), one_way_stream_(one_way_stream), drain_close_(drain_close),
+        is_heartbeat_(is_heartbeat) {}
+  StreamOptions() = default;
 
+  /**
+   * @return the stream id of the request or response. This is used to match the
+   * downstream request with the upstream response.
+
+   * NOTE: In most cases, the stream id is not needed and will be ignored completely.
+   * The stream id is only used when we can't match the downstream request
+   * with the upstream response by the active stream instance self directly.
+   * For example, when the multiple downstream requests are multiplexed into one
+   * upstream connection.
+   */
+  uint64_t streamId() const { return stream_id_; }
+
+  /**
+   * @return whether the stream is one way stream. If request is one way stream, the
+   * generic proxy filter will not wait for the response from the upstream.
+   */
+  bool oneWayStream() const { return one_way_stream_; }
+
+  /**
+   * @return whether the downstream/upstream connection should be drained after
+   * current active stream are finished.
+   */
+  bool drainClose() const { return drain_close_; }
+
+  /**
+   * @return whether the current request/response is a heartbeat request/response.
+   * NOTE: It would be better to handle heartbeat request/response by another L4
+   * filter. Then the generic proxy filter can be used for the simple ping-pong
+   * use case.
+   */
+  bool isHeartbeat() const { return is_heartbeat_; }
+
+private:
+  uint64_t stream_id_{0};
+
+  bool one_way_stream_{false};
+  bool drain_close_{false};
+  bool is_heartbeat_{false};
+};
+
+/**
+ * Frame options from request or response to control the behavior of the
+ * generic proxy filter.
+ * All these options could be ignored for the simple ping-pong use case.
+ */
+class FrameOptions {
+public:
+  FrameOptions(bool end_stream) : end_stream_(end_stream) {}
+  FrameOptions() = default;
+
+  /**
+   * @return whether the frame is the last frame of the stream.
+   */
+  bool endStream() const { return end_stream_; }
+
+private:
+  // Default be true for backward compatibility. In most cases, only
+  // one frame is used for request or response the simple ping-pong use case.
+  const bool end_stream_{true};
+};
+
+/**
+ * Stream frame interface. This is used to represent the stream frame of request or response.
+ */
+class StreamFrame {
+public:
+  virtual ~StreamFrame() = default;
+
+  /**
+   * Get options of stream that the frame belongs to. The options MUST be same for all frames
+   * of the same stream. Copy semantics is used because the options are lightweight.
+   * @return StreamOptions of the stream.
+   */
+  virtual StreamOptions streamOptions() { return {}; }
+
+  /**
+   * Get options of frame. The options are used to control the behavior of the generic proxy filter.
+   * @return FrameOptions of the frame.
+   */
+  virtual FrameOptions frameOptions() { return {}; }
+};
+
+using StreamFramePtr = std::unique_ptr<StreamFrame>;
+using StreamFrameSharedPtr = std::shared_ptr<StreamFrame>;
+
+class StreamBase : public StreamFrame {
+public:
   using IterateCallback = std::function<bool(absl::string_view key, absl::string_view val)>;
 
   /**
@@ -76,14 +172,23 @@ public:
 };
 
 /**
- * Using interface that provided by the TraceContext as the interface of generic request.
+ * Interface of generic request. This is derived from StreamFrame that contains the request
+ * specific information. First frame of the request MUST be a StreamRequest.
+ *
+ * NOTE: using interface that provided by the TraceContext as the interface of generic request here
+ * to simplify the tracing integration. This is not a good design. This should be changed in the
+ * future.
  */
-class Request : public Tracing::TraceContext {
+class StreamRequest : public Tracing::TraceContext, public StreamFrame {
 public:
   // Used for matcher.
   static constexpr absl::string_view name() { return "generic_proxy"; }
 };
 
+using StreamRequestPtr = std::unique_ptr<StreamRequest>;
+using StreamRequestSharedPtr = std::shared_ptr<StreamRequest>;
+// Alias for backward compatibility.
+using Request = StreamRequest;
 using RequestPtr = std::unique_ptr<Request>;
 using RequestSharedPtr = std::shared_ptr<Request>;
 
@@ -98,7 +203,11 @@ enum class Event {
 using Status = absl::Status;
 using StatusCode = absl::StatusCode;
 
-class Response : public StreamBase {
+/**
+ * Interface of generic response. This is derived from StreamFrame that contains the response
+ * specific information. First frame of the response MUST be a StreamResponse.
+ */
+class StreamResponse : public StreamBase {
 public:
   /**
    * Get response status.
@@ -108,8 +217,34 @@ public:
   virtual Status status() const PURE;
 };
 
+using StreamResponsePtr = std::unique_ptr<StreamResponse>;
+using StreamResponseSharedPtr = std::shared_ptr<StreamResponse>;
+// Alias for backward compatibility.
+using Response = StreamResponse;
 using ResponsePtr = std::unique_ptr<Response>;
 using ResponseSharedPtr = std::shared_ptr<Response>;
+
+template <class T> class StreamFramePtrHelper {
+public:
+  StreamFramePtrHelper(StreamFramePtr frame) {
+    auto frame_ptr = frame.release();
+
+    auto typed_frame_ptr = dynamic_cast<T*>(frame_ptr);
+
+    if (typed_frame_ptr == nullptr) {
+      // If the frame is not the expected type, wrap it
+      // in the original StreamFramePtr.
+      frame_ = StreamFramePtr{frame_ptr};
+    } else {
+      // If the frame is the expected type, wrap it
+      // in the typed frame unique pointer.
+      typed_frame_ = std::unique_ptr<T>{typed_frame_ptr};
+    }
+  }
+
+  StreamFramePtr frame_;
+  std::unique_ptr<T> typed_frame_;
+};
 
 } // namespace GenericProxy
 } // namespace NetworkFilters
