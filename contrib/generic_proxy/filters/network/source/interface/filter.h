@@ -1,5 +1,6 @@
 #pragma once
 
+#include "codec_callbacks.h"
 #include "envoy/event/dispatcher.h"
 #include "envoy/network/connection.h"
 #include "envoy/stream_info/stream_info.h"
@@ -98,7 +99,7 @@ public:
                              Upstream::HostDescriptionConstSharedPtr host) PURE;
 };
 
-class PendingResponseCallback : public ResponseDecoderCallback {
+class PendingResponseCallback : public ClientCodecCallbacks {
 public:
   virtual void onConnectionClose(Network::ConnectionEvent event) PURE;
 };
@@ -130,6 +131,11 @@ public:
    * @param stream_id supplies the stream id of request.
    */
   virtual void unregisterResponseCallback(uint64_t stream_id) PURE;
+
+  /**
+   * @return ClientCodec the upstream client codec used to encoding request and decoding response.
+   */
+  virtual ClientCodec& clientCodec() PURE;
 };
 
 class DecoderFilterCallback : public virtual StreamFilterCallbacks {

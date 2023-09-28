@@ -26,7 +26,7 @@ absl::string_view resetReasonToStringView(StreamResetReason reason) {
 
 UpstreamManagerImpl::UpstreamManagerImpl(UpstreamRequest& parent, Upstream::TcpPoolData&& pool)
     : UpstreamConnection(std::move(pool),
-                         parent.decoder_callbacks_.downstreamCodec().responseDecoder()),
+                         parent.decoder_callbacks_.downstreamCodec().createClientCodec()),
       parent_(parent) {}
 
 void UpstreamManagerImpl::onEventImpl(Network::ConnectionEvent event) {
@@ -46,12 +46,13 @@ void UpstreamManagerImpl::onPoolFailureImpl(ConnectionPool::PoolFailureReason re
   parent_.onBindFailure(reason, transport_failure_reason, upstream_host_);
 }
 
-void UpstreamManagerImpl::setResponseCallback() { response_decoder_->setDecoderCallback(parent_); }
+void UpstreamManagerImpl::setResponseCallback() { client_codec_->setClientCodecCallbacks(parent_); }
 
 UpstreamRequest::UpstreamRequest(RouterFilter& parent,
-                                 absl::optional<Upstream::TcpPoolData> tcp_pool_data)
+                                 absl::optional<Upstream::TcpPoolData> tcp_pool_data,
+                                 UpstreamManager* shared_upstream)
     : parent_(parent), decoder_callbacks_(*parent_.callbacks_),
-      tcp_pool_data_(std::move(tcp_pool_data)),
+      tcp_pool_data_(std::move(tcp_pool_data)), shared_upstream_(shared_upstream),
       stream_info_(parent.context_.mainThreadDispatcher().timeSource(), nullptr) {
 
   // Set the upstream info for the stream info.
@@ -160,7 +161,12 @@ void UpstreamRequest::deferredDelete() {
 
 void UpstreamRequest::sendRequestStartToUpstream() {
   request_stream_header_sent_ = true;
-  parent_.request_encoder_->encode(*parent_.request_stream_, *this);
+
+  ClientCodec& codec = upstream_manager_ != nullptr ? upstream_manager_->clientCodec()
+                                                    : shared_upstream_->clientCodec();
+
+  codec.encode(*parent_.request_stream_,
+               parent_.request_stream_->frameOptions().endStream() ? this : nullptr);
 }
 
 void UpstreamRequest::sendRequestFrameToUpstream() {
@@ -174,18 +180,20 @@ void UpstreamRequest::sendRequestFrameToUpstream() {
     auto frame = std::move(parent_.request_stream_frames_.front());
     parent_.request_stream_frames_.pop_front();
 
-    parent_.request_encoder_->encode(*frame, *this);
+    ClientCodec& codec = upstream_manager_ != nullptr ? upstream_manager_->clientCodec()
+                                                      : shared_upstream_->clientCodec();
+
+    codec.encode(*frame, frame->frameOptions().endStream() ? this : nullptr);
   }
 }
 
-void UpstreamRequest::onEncodingSuccess(Buffer::Instance& buffer) {
-  ENVOY_LOG(debug, "upstream request encoding success");
-  encodeBufferToUpstream(buffer);
-
-  // Request is complete.
-  if (!parent_.request_stream_end_ || !parent_.request_stream_frames_.empty()) {
+void UpstreamRequest::onEncodingSuccess(bool end_stream) {
+  if (!end_stream) {
     return;
   }
+
+  // Request is complete.
+  ENVOY_LOG(debug, "upstream request encoding success");
 
   // Need not to wait for the upstream response and complete directly.
   if (!wait_response_) {
@@ -395,10 +403,10 @@ void RouterFilter::kickOffNewUpstreamRequest() {
     return;
   }
 
-  if (callbacks_->boundUpstreamConn().has_value()) {
+  if (auto bound = callbacks_->boundUpstreamConn(); bound.has_value()) {
     // Upstream connection binding is enabled and the upstream connection is already bound.
     // Create a new upstream request without a connection pool and start the request.
-    auto upstream_request = std::make_unique<UpstreamRequest>(*this, absl::nullopt);
+    auto upstream_request = std::make_unique<UpstreamRequest>(*this, absl::nullopt, bound.ptr());
     auto raw_upstream_request = upstream_request.get();
     LinkedList::moveIntoList(std::move(upstream_request), upstream_requests_);
     raw_upstream_request->startStream();
@@ -416,7 +424,8 @@ void RouterFilter::kickOffNewUpstreamRequest() {
     // Upstream connection binding is enabled and the upstream connection is not bound yet.
     // Bind the upstream connection and start the request.
     callbacks_->bindUpstreamConn(std::move(pool_data.value()));
-    auto upstream_request = std::make_unique<UpstreamRequest>(*this, absl::nullopt);
+    auto upstream_request = std::make_unique<UpstreamRequest>(
+        *this, absl::nullopt, callbacks_->boundUpstreamConn().ptr());
     auto raw_upstream_request = upstream_request.get();
     LinkedList::moveIntoList(std::move(upstream_request), upstream_requests_);
     raw_upstream_request->startStream();
@@ -424,7 +433,8 @@ void RouterFilter::kickOffNewUpstreamRequest() {
   }
 
   // Normal upstream request.
-  auto upstream_request = std::make_unique<UpstreamRequest>(*this, std::move(pool_data.value()));
+  auto upstream_request =
+      std::make_unique<UpstreamRequest>(*this, std::move(pool_data.value()), nullptr);
   auto raw_upstream_request = upstream_request.get();
   LinkedList::moveIntoList(std::move(upstream_request), upstream_requests_);
   raw_upstream_request->startStream();
@@ -448,14 +458,13 @@ FilterStatus RouterFilter::onStreamDecoded(StreamRequest& request) {
   request_stream_end_ = request.frameOptions().endStream();
   request_stream_ = &request;
 
-  if (route_entry_ == nullptr) {
-    ENVOY_LOG(debug, "No route for current request and send local reply");
-    callbacks_->sendLocalReply(Status(StatusCode::kNotFound, "route_not_found"));
+  if (route_entry_ != nullptr) {
+    kickOffNewUpstreamRequest();
     return FilterStatus::StopIteration;
   }
 
-  request_encoder_ = callbacks_->downstreamCodec().requestEncoder();
-  kickOffNewUpstreamRequest();
+  ENVOY_LOG(debug, "No route for current request and send local reply");
+  callbacks_->sendLocalReply(Status(StatusCode::kNotFound, "route_not_found"));
   return FilterStatus::StopIteration;
 }
 

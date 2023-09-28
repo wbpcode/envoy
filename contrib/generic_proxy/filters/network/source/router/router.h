@@ -54,17 +54,20 @@ public:
   void onPoolFailureImpl(ConnectionPool::PoolFailureReason reason,
                          absl::string_view transport_failure_reason) override;
 
+  ClientCodec& clientCodec() { return *client_codec_; }
+
   UpstreamRequest& parent_;
 };
 
 class UpstreamRequest : public UpstreamBindingCallback,
                         public LinkedObject<UpstreamRequest>,
                         public Envoy::Event::DeferredDeletable,
-                        public RequestEncoderCallback,
+                        public ClientEncodingCallbacks,
                         public PendingResponseCallback,
                         Logger::Loggable<Envoy::Logger::Id::filter> {
 public:
-  UpstreamRequest(RouterFilter& parent, absl::optional<Upstream::TcpPoolData> tcp_data);
+  UpstreamRequest(RouterFilter& parent, absl::optional<Upstream::TcpPoolData> tcp_data,
+                  UpstreamManager* shared_upstream);
 
   void startStream();
   void resetStream(StreamResetReason reason);
@@ -87,8 +90,8 @@ public:
   OptRef<Network::Connection> connection() override;
   void onConnectionClose(Network::ConnectionEvent event) override;
 
-  // RequestEncoderCallback
-  void onEncodingSuccess(Buffer::Instance& buffer) override;
+  // ClientEncodingCallbacks
+  void onEncodingSuccess(bool end_stream) override;
 
   void onUpstreamHostSelected(Upstream::HostDescriptionConstSharedPtr host);
   void encodeBufferToUpstream(Buffer::Instance& buffer);
@@ -109,6 +112,7 @@ public:
 
   absl::optional<Upstream::TcpPoolData> tcp_pool_data_;
   std::unique_ptr<UpstreamManagerImpl> upstream_manager_;
+  UpstreamManager* shared_upstream_{};
 
   Network::ClientConnection* upstream_conn_{};
   Upstream::HostDescriptionConstSharedPtr upstream_host_;
@@ -180,8 +184,6 @@ private:
   bool request_stream_end_{};
 
   Envoy::Router::MetadataMatchCriteriaConstPtr metadata_match_;
-
-  RequestEncoderPtr request_encoder_;
 
   std::list<UpstreamRequestPtr> upstream_requests_;
 

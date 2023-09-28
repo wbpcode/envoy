@@ -11,6 +11,8 @@
 #include "envoy/stats/timespan.h"
 #include "envoy/tracing/tracer_manager.h"
 
+#include "interface/codec.h"
+#include "interface/codec_callbacks.h"
 #include "source/common/buffer/buffer_impl.h"
 #include "source/common/common/linked_object.h"
 #include "source/common/common/logger.h"
@@ -115,7 +117,7 @@ private:
 class ActiveStream : public FilterChainManager,
                      public LinkedObject<ActiveStream>,
                      public Envoy::Event::DeferredDeletable,
-                     public ResponseEncoderCallback,
+                     public ServerEncodingCallbacks,
                      public Tracing::Config,
                      Logger::Loggable<Envoy::Logger::Id::filter> {
 public:
@@ -252,8 +254,8 @@ public:
     factory(callbacks);
   }
 
-  // ResponseEncoderCallback
-  void onEncodingSuccess(Buffer::Instance& buffer) override;
+  // ServerEncodingCallbacks
+  void onEncodingSuccess(bool end_stream) override;
 
   void onRequestFrame(StreamFramePtr frame);
 
@@ -333,7 +335,7 @@ using ActiveStreamPtr = std::unique_ptr<ActiveStream>;
 
 class UpstreamManagerImpl : public UpstreamConnection,
                             public UpstreamManager,
-                            public ResponseDecoderCallback {
+                            public ClientCodecCallbacks {
 public:
   UpstreamManagerImpl(Filter& parent, Upstream::TcpPoolData&& tcp_pool_data);
 
@@ -354,6 +356,7 @@ public:
   void registerUpstreamCallback(uint64_t stream_id, UpstreamBindingCallback& cb) override;
   void unregisterResponseCallback(uint64_t stream_id) override;
   void unregisterUpstreamCallback(uint64_t stream_id) override;
+  ClientCodec& clientCodec() override { return *client_codec_; }
 
   Filter& parent_;
 
@@ -364,15 +367,14 @@ public:
 class Filter : public Envoy::Network::ReadFilter,
                public Network::ConnectionCallbacks,
                public Envoy::Logger::Loggable<Envoy::Logger::Id::filter>,
-               public RequestDecoderCallback {
+               public ServerCodecCallbacks {
 public:
   Filter(FilterConfigSharedPtr config, TimeSource& time_source, Runtime::Loader& runtime)
       : config_(std::move(config)), stats_(config_->stats()),
         drain_decision_(config_->drainDecision()), time_source_(time_source), runtime_(runtime) {
-    request_decoder_ = config_->codecFactory().requestDecoder();
-    request_decoder_->setDecoderCallback(*this);
-    response_encoder_ = config_->codecFactory().responseEncoder();
-    message_creator_ = config_->codecFactory().messageCreator();
+    server_codec_ = config_->codecFactory().createServerCodec();
+    server_codec_->setServerCodecCallbacks(*this);
+
     protocol_options_ = config_->codecFactory().protocolOptions();
   }
 
@@ -412,7 +414,7 @@ public:
   void onAboveWriteBufferHighWatermark() override {}
   void onBelowWriteBufferLowWatermark() override {}
 
-  void sendFrameToDownstream(StreamFrame& frame, ResponseEncoderCallback& callback);
+  void sendFrameToDownstream(StreamFrame& frame, ServerEncodingCallbacks* callbacks = nullptr);
 
   Network::Connection& downstreamConnection() {
     ASSERT(callbacks_ != nullptr);
@@ -475,9 +477,8 @@ private:
   TimeSource& time_source_;
   Runtime::Loader& runtime_;
 
-  RequestDecoderPtr request_decoder_;
-  ResponseEncoderPtr response_encoder_;
-  MessageCreatorPtr message_creator_;
+  ServerCodecPtr server_codec_;
+
   ProtocolOptions protocol_options_;
 
   Buffer::OwnedImpl response_buffer_;

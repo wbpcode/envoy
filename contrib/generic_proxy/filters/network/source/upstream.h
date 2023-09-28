@@ -36,8 +36,8 @@ public:
   void onEvent(Network::ConnectionEvent) override;
 
 protected:
-  UpstreamConnection(Upstream::TcpPoolData&& tcp_pool_data, ResponseDecoderPtr&& response_decoder)
-      : tcp_pool_data_(std::move(tcp_pool_data)), response_decoder_(std::move(response_decoder)) {}
+  UpstreamConnection(Upstream::TcpPoolData&& tcp_pool_data, ClientCodecPtr&& client_codec)
+      : tcp_pool_data_(std::move(tcp_pool_data)), client_codec_(std::move(client_codec)) {}
 
   virtual void onEventImpl(Network::ConnectionEvent event) PURE;
   virtual void onPoolSuccessImpl() PURE;
@@ -45,7 +45,7 @@ protected:
                                  absl::string_view transport_failure_reason) PURE;
 
   Upstream::TcpPoolData tcp_pool_data_;
-  ResponseDecoderPtr response_decoder_;
+  ClientCodecPtr client_codec_;
 
   bool is_cleaned_up_{};
 

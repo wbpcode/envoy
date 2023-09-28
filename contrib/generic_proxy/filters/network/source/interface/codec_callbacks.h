@@ -13,11 +13,11 @@ namespace NetworkFilters {
 namespace GenericProxy {
 
 /**
- * Decoder callback of request.
+ * Callbacks for downstream request decoding and upstream response encoding.
  */
-class RequestDecoderCallback {
+class ServerCodecCallbacks {
 public:
-  virtual ~RequestDecoderCallback() = default;
+  virtual ~ServerCodecCallbacks() = default;
   /**
    * If request decoding success then this method will be called.
    * @param frame request frame from decoding. Frist frame should be StreamRequest
@@ -47,14 +47,12 @@ public:
   virtual OptRef<Network::Connection> connection() PURE;
 };
 
-using ResponseFrameType = absl::variant<StreamResponsePtr, StreamFramePtr>;
-
 /**
- * Decoder callback of Response.
+ * Callbacks for downstream request encoding and upstream response decoding.
  */
-class ResponseDecoderCallback {
+class ClientCodecCallbacks {
 public:
-  virtual ~ResponseDecoderCallback() = default;
+  virtual ~ClientCodecCallbacks() = default;
 
   /**
    * If response decoding success then this method will be called.
@@ -86,31 +84,31 @@ public:
 };
 
 /**
- * Encoder callback of request.
+ * Encoding callbacks of request frame.
  */
-class RequestEncoderCallback {
+class ClientEncodingCallbacks {
 public:
-  virtual ~RequestEncoderCallback() = default;
+  virtual ~ClientEncodingCallbacks() = default;
 
   /**
-   * If request encoding success then this method will be called.
-   * @param buffer encoding result buffer.
+   * If request frame encoding success then this method will be called.
+   * @param end_stream true if the frame is the last frame.
    */
-  virtual void onEncodingSuccess(Buffer::Instance& buffer) PURE;
+  virtual void onEncodingSuccess(bool end_stream) PURE;
 };
 
 /**
- * Encoder callback of Response.
+ * Encoding callbacks of response frame.
  */
-class ResponseEncoderCallback {
+class ServerEncodingCallbacks {
 public:
-  virtual ~ResponseEncoderCallback() = default;
+  virtual ~ServerEncodingCallbacks() = default;
 
   /**
-   * If response encoding success then this method will be called.
-   * @param buffer encoding result buffer.
+   * If response frame encoding success then this method will be called.
+   * @param end_stream true if the frame is the last frame.q
    */
-  virtual void onEncodingSuccess(Buffer::Instance& buffer) PURE;
+  virtual void onEncodingSuccess(bool end_stream) PURE;
 };
 
 } // namespace GenericProxy

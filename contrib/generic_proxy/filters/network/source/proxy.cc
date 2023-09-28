@@ -5,6 +5,7 @@
 #include "envoy/common/exception.h"
 #include "envoy/network/connection.h"
 
+#include "interface/codec_callbacks.h"
 #include "source/common/config/utility.h"
 #include "source/common/protobuf/protobuf.h"
 #include "source/common/stream_info/stream_info_impl.h"
@@ -106,7 +107,8 @@ void ActiveStream::sendResponseStartToDownstream() {
 
   response_filter_chain_complete_ = true;
 
-  parent_.sendFrameToDownstream(*response_stream_, *this);
+  parent_.sendFrameToDownstream(*response_stream_,
+                                response_stream_->frameOptions().endStream() ? this : nullptr);
 }
 
 void ActiveStream::sendResponseFrameToDownstream() {
@@ -122,7 +124,7 @@ void ActiveStream::sendResponseFrameToDownstream() {
     response_stream_frames_.pop_front();
 
     // Send the frame to downstream.
-    parent_.sendFrameToDownstream(*frame, *this);
+    parent_.sendFrameToDownstream(*frame, frame->frameOptions().endStream() ? this : nullptr);
   }
 }
 
@@ -149,8 +151,7 @@ void ActiveStream::sendRequestFrameToUpstream() {
 }
 
 void ActiveStream::sendLocalReply(Status status, ResponseUpdateFunction&& func) {
-  ASSERT(parent_.message_creator_ != nullptr);
-  response_stream_ = parent_.message_creator_->response(status, *request_stream_);
+  response_stream_ = parent_.server_codec_->respond(status, "", request_stream_.get());
   response_stream_frames_.clear();
   // Only one frame is allowed in the local reply.
   response_stream_end_ = true;
@@ -256,15 +257,16 @@ void ActiveStream::continueEncoding() {
   }
 }
 
-void ActiveStream::onEncodingSuccess(Buffer::Instance& buffer) {
-  ASSERT(parent_.downstreamConnection().state() == Network::Connection::State::Open);
-  parent_.downstreamConnection().write(buffer, false);
-
-  // If the response is end and all frames are sent, the stream is complete.
-  if (response_stream_end_ && response_stream_frames_.empty()) {
-    parent_.stats_.response_.inc();
-    parent_.deferredStream(*this);
+void ActiveStream::onEncodingSuccess(bool end_stream) {
+  if (!end_stream) {
+    return;
   }
+
+  ASSERT(response_stream_end_);
+  ASSERT(response_stream_frames_.empty());
+
+  parent_.stats_.response_.inc();
+  parent_.deferredStream(*this);
 }
 
 void ActiveStream::initializeFilterChain(FilterChainFactory& factory) {
@@ -307,9 +309,9 @@ void ActiveStream::completeRequest() {
 
 UpstreamManagerImpl::UpstreamManagerImpl(Filter& parent, Upstream::TcpPoolData&& tcp_pool_data)
     : UpstreamConnection(std::move(tcp_pool_data),
-                         parent.config_->codecFactory().responseDecoder()),
+                         parent.config_->codecFactory().createClientCodec()),
       parent_(parent) {
-  response_decoder_->setDecoderCallback(*this);
+  client_codec_->setClientCodecCallbacks(*this);
 }
 
 void UpstreamManagerImpl::registerResponseCallback(uint64_t stream_id,
@@ -469,12 +471,12 @@ OptRef<Network::Connection> UpstreamManagerImpl::connection() {
   return {};
 }
 
-Envoy::Network::FilterStatus Filter::onData(Envoy::Buffer::Instance& data, bool) {
+Envoy::Network::FilterStatus Filter::onData(Envoy::Buffer::Instance& data, bool end_stream) {
   if (downstream_connection_closed_) {
     return Envoy::Network::FilterStatus::StopIteration;
   }
 
-  request_decoder_->decode(data);
+  server_codec_->decode(data, end_stream);
   return Envoy::Network::FilterStatus::StopIteration;
 }
 
@@ -523,8 +525,8 @@ OptRef<Network::Connection> Filter::connection() {
   return {downstreamConnection()};
 }
 
-void Filter::sendFrameToDownstream(StreamFrame& frame, ResponseEncoderCallback& callback) {
-  response_encoder_->encode(frame, callback);
+void Filter::sendFrameToDownstream(StreamFrame& frame, ServerEncodingCallbacks* callbacks) {
+  server_codec_->encode(frame, callbacks);
 }
 
 void Filter::registerFrameHandler(uint64_t stream_id, ActiveStream* raw_stream) {
