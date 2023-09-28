@@ -445,8 +445,8 @@ FilterStatus RouterFilter::onStreamDecoded(StreamRequest& request) {
   ENVOY_LOG(debug, "Try route request to the upstream based on the route entry");
 
   setRouteEntry(callbacks_->routeEntry());
-  request_stream_ = &request;
   request_stream_end_ = request.frameOptions().endStream();
+  request_stream_ = &request;
 
   if (route_entry_ == nullptr) {
     ENVOY_LOG(debug, "No route for current request and send local reply");
@@ -454,10 +454,6 @@ FilterStatus RouterFilter::onStreamDecoded(StreamRequest& request) {
     return FilterStatus::StopIteration;
   }
 
-  if (!request_stream_end_) {
-    // Set handler for following request frames.
-    callbacks_->setRequestFramesHandler(this);
-  }
   request_encoder_ = callbacks_->downstreamCodec().requestEncoder();
   kickOffNewUpstreamRequest();
   return FilterStatus::StopIteration;

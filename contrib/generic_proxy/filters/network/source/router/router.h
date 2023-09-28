@@ -136,6 +136,8 @@ public:
 
   void setDecoderFilterCallbacks(DecoderFilterCallback& callbacks) override {
     callbacks_ = &callbacks;
+    // Set handler for following request frames.
+    callbacks_->setRequestFramesHandler(this);
     protocol_options_ = callbacks_->downstreamCodec().protocolOptions();
   }
   FilterStatus onStreamDecoded(StreamRequest& request) override;
