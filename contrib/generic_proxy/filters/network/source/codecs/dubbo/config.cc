@@ -137,10 +137,19 @@ void DubboResponse::refreshGenericStatus() {
   status_ = Status(statusToGenericStatus(status), responseStatusToStringView(status));
 }
 
-DubboCodecBase::DubboCodecBase(Common::Dubbo::DubboCodecPtr codec) : codec_(std::move(codec)) {}
+void DubboClientCodec::setClientCodecCallbacks(ClientCodecCallbacks& callbacks) {
+  callbacks_ = &callbacks;
+}
 
-ResponsePtr DubboMessageCreator::response(Status status, const Request& origin_request) {
-  const auto* typed_request = dynamic_cast<const DubboRequest*>(&origin_request);
+void DubboServerCodec::setServerCodecCallbacks(ServerCodecCallbacks& callbacks) {
+  callbacks_ = &callbacks;
+}
+
+StreamResponsePtr DubboServerCodec::respond(Status status, absl::string_view,
+                                            const StreamRequest* request) {
+  ASSERT(request != nullptr);
+
+  const auto* typed_request = dynamic_cast<const DubboRequest*>(request);
   ASSERT(typed_request != nullptr);
 
   Common::Dubbo::ResponseStatus response_status;

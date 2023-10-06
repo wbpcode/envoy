@@ -8,17 +8,17 @@ namespace Extensions {
 namespace NetworkFilters {
 namespace GenericProxy {
 
-class MockRequestDecoderCallback : public RequestDecoderCallback {
+class MockServerCodecCallbacks : public ServerCodecCallbacks {
 public:
-  MOCK_METHOD(void, onDecodingSuccess, (RequestPtr request, ExtendedOptions));
+  MOCK_METHOD(void, onDecodingSuccess, (StreamFramePtr request));
   MOCK_METHOD(void, onDecodingFailure, ());
   MOCK_METHOD(void, writeToConnection, (Buffer::Instance & buffer));
   MOCK_METHOD(OptRef<Network::Connection>, connection, ());
 };
 
-class MockResponseDecoderCallback : public ResponseDecoderCallback {
+class MockClientCodecCallbacks : public ClientCodecCallbacks {
 public:
-  MOCK_METHOD(void, onDecodingSuccess, (ResponsePtr response, ExtendedOptions));
+  MOCK_METHOD(void, onDecodingSuccess, (StreamFramePtr response));
   MOCK_METHOD(void, onDecodingFailure, ());
   MOCK_METHOD(void, writeToConnection, (Buffer::Instance & buffer));
   MOCK_METHOD(OptRef<Network::Connection>, connection, ());
@@ -26,7 +26,7 @@ public:
 
 class MockRequestEncoderCallback : public RequestEncoderCallback {
 public:
-  MOCK_METHOD(void, onEncodingSuccess, (Buffer::Instance & buffer));
+  MOCK_METHOD(void, onEncodingSuccess, (bool end_stream));
 };
 
 /**
@@ -34,7 +34,7 @@ public:
  */
 class MockResponseEncoderCallback : public ResponseEncoderCallback {
 public:
-  MOCK_METHOD(void, onEncodingSuccess, (Buffer::Instance & buffer));
+  MOCK_METHOD(void, onEncodingSuccess, (bool end_stream));
 };
 
 class MockRequestDecoder : public RequestDecoder {

@@ -99,6 +99,12 @@ public:
   void sendRequestStartToUpstream();
   void sendRequestFrameToUpstream();
 
+  ClientCodec& clientCodec() {
+    ASSERT(upstream_manager_ != nullptr || shared_upstream_ != nullptr);
+    return upstream_manager_ != nullptr ? upstream_manager_->clientCodec()
+                                        : shared_upstream_->clientCodec();
+  }
+
   bool stream_reset_{};
 
   RouterFilter& parent_;

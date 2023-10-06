@@ -213,8 +213,8 @@ TEST(RequestDecoderTest, RequestDecoderTest) {
   codec->initilize(std::make_unique<MockSerializer>());
 
   MockRequestDecoderCallback callback;
-  DubboRequestDecoder decoder(std::move(codec));
-  decoder.setDecoderCallback(callback);
+  DubboServerCodec decoder(std::move(codec));
+  decoder.setServerCodecCallbacks(callback);
 
   auto raw_serializer = const_cast<MockSerializer*>(
       dynamic_cast<const MockSerializer*>(decoder.codec_->serializer().get()));

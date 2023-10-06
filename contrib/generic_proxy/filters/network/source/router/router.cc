@@ -162,11 +162,8 @@ void UpstreamRequest::deferredDelete() {
 void UpstreamRequest::sendRequestStartToUpstream() {
   request_stream_header_sent_ = true;
 
-  ClientCodec& codec = upstream_manager_ != nullptr ? upstream_manager_->clientCodec()
-                                                    : shared_upstream_->clientCodec();
-
-  codec.encode(*parent_.request_stream_,
-               parent_.request_stream_->frameOptions().endStream() ? this : nullptr);
+  clientCodec().encode(*parent_.request_stream_,
+                       parent_.request_stream_->frameOptions().endStream() ? this : nullptr);
 }
 
 void UpstreamRequest::sendRequestFrameToUpstream() {
@@ -180,10 +177,7 @@ void UpstreamRequest::sendRequestFrameToUpstream() {
     auto frame = std::move(parent_.request_stream_frames_.front());
     parent_.request_stream_frames_.pop_front();
 
-    ClientCodec& codec = upstream_manager_ != nullptr ? upstream_manager_->clientCodec()
-                                                      : shared_upstream_->clientCodec();
-
-    codec.encode(*frame, frame->frameOptions().endStream() ? this : nullptr);
+    clientCodec().encode(*frame, frame->frameOptions().endStream() ? this : nullptr);
   }
 }
 
@@ -207,8 +201,8 @@ void UpstreamRequest::onEncodingSuccess(bool end_stream) {
   // response callback to the generic proxy and wait for the upstream
   // response.
   if (upstream_manager_ == nullptr) {
-    ASSERT(decoder_callbacks_.boundUpstreamConn().has_value());
-    decoder_callbacks_.boundUpstreamConn()->registerResponseCallback(stream_id_, *this);
+    ASSERT(shared_upstream_ != nullptr);
+    shared_upstream_->registerResponseCallback(stream_id_, *this);
   } else {
     upstream_manager_->setResponseCallback();
   }
