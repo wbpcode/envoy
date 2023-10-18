@@ -114,6 +114,74 @@ TEST_F(OpenTelemetryHttpTraceExporterTest, CreateExporterAndExportSpan) {
   callback->onFailure(request, Http::AsyncClient::FailureReason::Reset);
 }
 
+// Test exporting an OTLP message via HTTP containing one span
+TEST_F(OpenTelemetryHttpTraceExporterTest, CreateExporterAndExportSpanButWithNon200Response) {
+  std::string yaml_string = fmt::format(R"EOF(
+  http_uri:
+    uri: "https://some-o11y.com/otlp/v1/traces"
+    cluster: "my_o11y_backend"
+    timeout: 0.250s
+  request_headers_to_add:
+  - header:
+      key: "Authorization"
+      value: "auth-token"
+  - header:
+      key: "x-custom-header"
+      value: "custom-value"
+  )EOF");
+
+  envoy::config::core::v3::HttpService http_service;
+  TestUtility::loadFromYaml(yaml_string, http_service);
+  setup(http_service);
+
+  Http::MockAsyncClientRequest request(&cluster_manager_.thread_local_cluster_.async_client_);
+  Http::AsyncClient::Callbacks* callback;
+
+  EXPECT_CALL(
+      cluster_manager_.thread_local_cluster_.async_client_,
+      send_(_, _, Http::AsyncClient::RequestOptions().setTimeout(std::chrono::milliseconds(250))))
+      .WillOnce(
+          Invoke([&](Http::RequestMessagePtr& message, Http::AsyncClient::Callbacks& callbacks,
+                     const Http::AsyncClient::RequestOptions&) -> Http::AsyncClient::Request* {
+            callback = &callbacks;
+
+            EXPECT_EQ(Http::Headers::get().MethodValues.Post, message->headers().getMethodValue());
+            EXPECT_EQ(Http::Headers::get().ContentTypeValues.Protobuf,
+                      message->headers().getContentTypeValue());
+
+            EXPECT_EQ("/otlp/v1/traces", message->headers().getPathValue());
+            EXPECT_EQ("some-o11y.com", message->headers().getHostValue());
+
+            // Custom headers provided in the configuration
+            EXPECT_EQ("auth-token", message->headers()
+                                        .get(Http::LowerCaseString("authorization"))[0]
+                                        ->value()
+                                        .getStringView());
+            EXPECT_EQ("custom-value", message->headers()
+                                          .get(Http::LowerCaseString("x-custom-header"))[0]
+                                          ->value()
+                                          .getStringView());
+
+            return &request;
+          }));
+
+  opentelemetry::proto::collector::trace::v1::ExportTraceServiceRequest
+      export_trace_service_request;
+  opentelemetry::proto::trace::v1::Span span;
+  span.set_name("test");
+  *export_trace_service_request.add_resource_spans()->add_scope_spans()->add_spans() = span;
+  EXPECT_TRUE(trace_exporter_->log(export_trace_service_request));
+
+  Http::ResponseMessagePtr msg(new Http::ResponseMessageImpl(
+      Http::ResponseHeaderMapPtr{new Http::TestResponseHeaderMapImpl{{":status", "234"}}}));
+  // onBeforeFinalizeUpstreamSpan is a noop — included for coverage
+  Tracing::NullSpan null_span;
+  callback->onBeforeFinalizeUpstreamSpan(null_span, nullptr);
+
+  callback->onSuccess(request, std::move(msg));
+  callback->onFailure(request, Http::AsyncClient::FailureReason::Reset);
+}
+
 // Test export is aborted when cluster is not found
 TEST_F(OpenTelemetryHttpTraceExporterTest, UnsuccessfulLogWithoutThreadLocalCluster) {
   std::string yaml_string = fmt::format(R"EOF(
