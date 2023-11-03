@@ -14,14 +14,11 @@ CELAccessLogExtensionFilter::CELAccessLogExtensionFilter(
   compiled_expr_ = Expr::createExpression(builder_->builder(), parsed_expr_);
 }
 
-bool CELAccessLogExtensionFilter::evaluate(const StreamInfo::StreamInfo& stream_info,
-                                           const Http::RequestHeaderMap& request_headers,
-                                           const Http::ResponseHeaderMap& response_headers,
-                                           const Http::ResponseTrailerMap& response_trailers,
-                                           AccessLog::AccessLogType) const {
+bool CELAccessLogExtensionFilter::evaluate(const AccessLog::HttpLogContext& context,
+                                           const StreamInfo::StreamInfo& info) const {
   Protobuf::Arena arena;
-  auto eval_status = Expr::evaluate(*compiled_expr_, arena, stream_info, &request_headers,
-                                    &response_headers, &response_trailers);
+  auto eval_status = Expr::evaluate(*compiled_expr_, arena, info, &context.requestHeaders(),
+                                    &context.responseHeaders(), &context.responseTrailers());
   if (!eval_status.has_value() || eval_status.value().IsError()) {
     return false;
   }
