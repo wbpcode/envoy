@@ -77,9 +77,12 @@ public:
                        StreamInfo::StreamInfo& stream_info, Http::Code& code, std::string& body,
                        BodyFormatter*& final_formatter) const {
     // If not matched, just bail out.
-    if (filter_ == nullptr ||
-        !filter_->evaluate(stream_info, request_headers, response_headers, response_trailers,
-                           AccessLog::AccessLogType::NotSet)) {
+    if (filter_ == nullptr || !filter_->evaluate({&request_headers,
+                                                  &response_headers,
+                                                  &response_trailers,
+                                                  {},
+                                                  AccessLog::AccessLogType::NotSet},
+                                                 stream_info)) {
       return false;
     }
 

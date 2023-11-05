@@ -8,11 +8,14 @@
 #include "envoy/filesystem/filesystem.h"
 #include "envoy/http/header_map.h"
 #include "envoy/stream_info/stream_info.h"
+#include "envoy/formatter/substitution_formatter.h"
 
 #include "source/common/protobuf/protobuf.h"
 
 namespace Envoy {
 namespace AccessLog {
+
+using HttpLogContext = Envoy::Formatter::HttpFormatterContext;
 
 class AccessLogFile {
 public:
@@ -92,23 +95,9 @@ public:
 template <class Context> using InstanceBaseSharedPtr = std::shared_ptr<InstanceBase<Context>>;
 
 /**
- * Interface for access log filters.
+ * Interface for HTTP access log filters.
  */
-class Filter {
-public:
-  virtual ~Filter() = default;
-
-  /**
-   * Evaluate whether an access log should be written based on request and response data.
-   * @return TRUE if the log should be written.
-   */
-  virtual bool evaluate(const StreamInfo::StreamInfo& info,
-                        const Http::RequestHeaderMap& request_headers,
-                        const Http::ResponseHeaderMap& response_headers,
-                        const Http::ResponseTrailerMap& response_trailers,
-                        AccessLogType access_log_type) const PURE;
-};
-
+using Filter = FilterBase<HttpLogContext>;
 using FilterPtr = std::unique_ptr<Filter>;
 
 /**
