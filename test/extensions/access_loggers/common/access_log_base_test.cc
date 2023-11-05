@@ -23,9 +23,7 @@ public:
   int count() { return count_; };
 
 private:
-  void emitLog(const Http::RequestHeaderMap&, const Http::ResponseHeaderMap&,
-               const Http::ResponseTrailerMap&, const StreamInfo::StreamInfo&,
-               AccessLog::AccessLogType) override {
+  void emitLog(const Envoy::AccessLog::HttpLogContext&, const StreamInfo::StreamInfo&) override {
     count_++;
   }
 
@@ -36,7 +34,7 @@ TEST(AccessLogBaseTest, NoFilter) {
   StreamInfo::MockStreamInfo stream_info;
   TestImpl logger(nullptr);
   EXPECT_EQ(logger.count(), 0);
-  logger.log(nullptr, nullptr, nullptr, stream_info, AccessLog::AccessLogType::NotSet);
+  logger.log({}, stream_info);
   EXPECT_EQ(logger.count(), 1);
 }
 

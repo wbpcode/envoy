@@ -29,7 +29,7 @@ envoy_cc_extension(
     deps = [
         ":wasm_access_log_lib",
         "//envoy/registry",
-        "//envoy/server:access_log_config_interface",
+        "//envoy/access_log:access_log_config_interface",
         "//source/common/config:datasource_lib",
         "//source/common/protobuf",
         "//source/extensions/common/wasm:wasm_lib",
