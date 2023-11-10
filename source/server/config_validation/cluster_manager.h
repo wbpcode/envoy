@@ -20,14 +20,10 @@ class ValidationClusterManagerFactory : public ProdClusterManagerFactory {
 public:
   using ProdClusterManagerFactory::ProdClusterManagerFactory;
 
-  explicit ValidationClusterManagerFactory(
-      Server::Configuration::ServerFactoryContext& server_context, Stats::Store& stats,
-      ThreadLocal::Instance& tls, Http::Context& http_context,
-      LazyCreateDnsResolver dns_resolver_fn, Ssl::ContextManager& ssl_context_manager,
-      Secret::SecretManager& secret_manager, Quic::QuicStatNames& quic_stat_names,
-      Server::Instance& server)
-      : ProdClusterManagerFactory(server_context, stats, tls, http_context, dns_resolver_fn,
-                                  ssl_context_manager, secret_manager, quic_stat_names, server) {}
+  explicit ValidationClusterManagerFactory(Server::Instance& server,
+                                           LazyCreateDnsResolver dns_resolver_fn,
+                                           Quic::QuicStatNames& quic_stat_names)
+      : ProdClusterManagerFactory(server, dns_resolver_fn, quic_stat_names) {}
 
   ClusterManagerPtr
   clusterManagerFromProto(const envoy::config::bootstrap::v3::Bootstrap& bootstrap) override;

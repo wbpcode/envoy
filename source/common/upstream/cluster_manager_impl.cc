@@ -2193,10 +2193,10 @@ void ClusterManagerImpl::ThreadLocalClusterManagerImpl::tcpConnPoolIsIdle(
 ClusterManagerPtr ProdClusterManagerFactory::clusterManagerFromProto(
     const envoy::config::bootstrap::v3::Bootstrap& bootstrap) {
   auto cluster_manager_impl = std::unique_ptr<ClusterManagerImpl>{new ClusterManagerImpl(
-      bootstrap, *this, stats_, tls_, context_.runtime(), context_.localInfo(),
-      context_.accessLogManager(), context_.mainThreadDispatcher(), context_.admin(),
-      context_.messageValidationContext(), context_.api(), http_context_, context_.grpcContext(),
-      context_.routerContext(), server_)};
+      bootstrap, *this, context_.stats(), context_.threadLocal(), context_.runtime(),
+      context_.localInfo(), context_.accessLogManager(), context_.dispatcher(), context_.admin(),
+      context_.messageValidationContext(), context_.api(), context_.httpContext(),
+      context_.grpcContext(), context_.routerContext(), context_)};
   cluster_manager_impl->init(bootstrap);
   return cluster_manager_impl;
 }
@@ -2245,7 +2245,7 @@ Http::ConnectionPool::InstancePtr ProdClusterManagerFactory::allocateConnPool(
     return std::make_unique<Http::ConnectivityGrid>(
         dispatcher, context_.api().randomGenerator(), host, priority, options,
         transport_socket_options, state, source, alternate_protocols_cache, coptions,
-        quic_stat_names_, *stats_.rootScope(), *quic_info);
+        quic_stat_names_, *context_.stats().rootScope(), *quic_info);
 #else
     (void)quic_info;
     // Should be blocked by configuration checking at an earlier point.
@@ -2279,7 +2279,8 @@ Http::ConnectionPool::InstancePtr ProdClusterManagerFactory::allocateConnPool(
     }
     return Http::Http3::allocateConnPool(dispatcher, context_.api().randomGenerator(), host,
                                          priority, options, transport_socket_options, state,
-                                         quic_stat_names_, {}, *stats_.rootScope(), {}, *quic_info);
+                                         quic_stat_names_, {}, *context_.stats().rootScope(), {},
+                                         *quic_info);
 #else
     UNREFERENCED_PARAMETER(source);
     // Should be blocked by configuration checking at an earlier point.
@@ -2307,8 +2308,9 @@ ProdClusterManagerFactory::clusterFromProto(const envoy::config::cluster::v3::Cl
                                             ClusterManager& cm,
                                             Outlier::EventLoggerSharedPtr outlier_event_logger,
                                             bool added_via_api) {
-  return ClusterFactoryImplBase::create(cluster, context_, cm, dns_resolver_fn_,
-                                        ssl_context_manager_, outlier_event_logger, added_via_api);
+  return ClusterFactoryImplBase::create(cluster, context_.serverFactoryContext(), cm,
+                                        dns_resolver_fn_, context_.sslContextManager(),
+                                        outlier_event_logger, added_via_api);
 }
 
 CdsApiPtr
@@ -2316,7 +2318,7 @@ ProdClusterManagerFactory::createCds(const envoy::config::core::v3::ConfigSource
                                      const xds::core::v3::ResourceLocator* cds_resources_locator,
                                      ClusterManager& cm) {
   // TODO(htuch): Differentiate static vs. dynamic validation visitors.
-  return CdsApiImpl::create(cds_config, cds_resources_locator, cm, *stats_.rootScope(),
+  return CdsApiImpl::create(cds_config, cds_resources_locator, cm, *context_.stats().rootScope(),
                             context_.messageValidationContext().dynamicValidationVisitor());
 }
 

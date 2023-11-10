@@ -127,9 +127,8 @@ void ValidationInstance::initialize(const Options& options,
   secret_manager_ = std::make_unique<Secret::SecretManagerImpl>(admin()->getConfigTracker());
   ssl_context_manager_ = createContextManager("ssl_context_manager", api_->timeSource());
   cluster_manager_factory_ = std::make_unique<Upstream::ValidationClusterManagerFactory>(
-      server_contexts_, stats(), threadLocal(), http_context_,
-      [this]() -> Network::DnsResolverSharedPtr { return this->dnsResolver(); },
-      sslContextManager(), *secret_manager_, quic_stat_names_, *this);
+      *this, [this]() -> Network::DnsResolverSharedPtr { return this->dnsResolver(); },
+      quic_stat_names_);
   config_.initialize(bootstrap_, *this, *cluster_manager_factory_);
   runtime().initialize(clusterManager());
   clusterManager().setInitializedCb([this]() -> void { init_manager_.initialize(init_watcher_); });

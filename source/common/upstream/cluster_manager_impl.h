@@ -53,18 +53,12 @@ class ProdClusterManagerFactory : public ClusterManagerFactory {
 public:
   using LazyCreateDnsResolver = std::function<Network::DnsResolverSharedPtr()>;
 
-  ProdClusterManagerFactory(Server::Configuration::ServerFactoryContext& context,
-                            Stats::Store& stats, ThreadLocal::Instance& tls,
-                            Http::Context& http_context, LazyCreateDnsResolver dns_resolver_fn,
-                            Ssl::ContextManager& ssl_context_manager,
-                            Secret::SecretManager& secret_manager,
-                            Quic::QuicStatNames& quic_stat_names, const Server::Instance& server)
-      : context_(context), stats_(stats), tls_(tls), http_context_(http_context),
-        dns_resolver_fn_(dns_resolver_fn), ssl_context_manager_(ssl_context_manager),
-        secret_manager_(secret_manager), quic_stat_names_(quic_stat_names),
-        alternate_protocols_cache_manager_factory_(context.singletonManager(), tls, {context}),
-        alternate_protocols_cache_manager_(alternate_protocols_cache_manager_factory_.get()),
-        server_(server) {}
+  ProdClusterManagerFactory(Server::Instance& server, LazyCreateDnsResolver dns_resolver_fn,
+                            Quic::QuicStatNames& quic_stat_names)
+      : context_(server), dns_resolver_fn_(dns_resolver_fn), quic_stat_names_(quic_stat_names),
+        alternate_protocols_cache_manager_factory_(
+            context_.singletonManager(), context_.threadLocal(), {context_.serverFactoryContext()}),
+        alternate_protocols_cache_manager_(alternate_protocols_cache_manager_factory_.get()) {}
 
   // Upstream::ClusterManagerFactory
   ClusterManagerPtr
@@ -91,22 +85,17 @@ public:
   CdsApiPtr createCds(const envoy::config::core::v3::ConfigSource& cds_config,
                       const xds::core::v3::ResourceLocator* cds_resources_locator,
                       ClusterManager& cm) override;
-  Secret::SecretManager& secretManager() override { return secret_manager_; }
+  Secret::SecretManager& secretManager() override { return context_.secretManager(); }
   Singleton::Manager& singletonManager() override { return context_.singletonManager(); }
 
 protected:
-  Server::Configuration::ServerFactoryContext& context_;
-  Stats::Store& stats_;
-  ThreadLocal::Instance& tls_;
-  Http::Context& http_context_;
+  Server::Instance& context_;
 
   LazyCreateDnsResolver dns_resolver_fn_;
-  Ssl::ContextManager& ssl_context_manager_;
-  Secret::SecretManager& secret_manager_;
   Quic::QuicStatNames& quic_stat_names_;
+
   Http::HttpServerPropertiesCacheManagerFactoryImpl alternate_protocols_cache_manager_factory_;
   Http::HttpServerPropertiesCacheManagerSharedPtr alternate_protocols_cache_manager_;
-  const Server::Instance& server_;
 };
 
 // For friend declaration in ClusterManagerInitHelper.

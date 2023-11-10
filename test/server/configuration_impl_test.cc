@@ -62,13 +62,12 @@ protected:
   ConfigurationImplTest()
       : api_(Api::createApiForTest()),
         cluster_manager_factory_(
-            server_context_, server_.stats(), server_.threadLocal(), server_.httpContext(),
+            server_,
             [this]() -> Network::DnsResolverSharedPtr { return this->server_.dnsResolver(); },
-            server_.sslContextManager(), server_.secretManager(), server_.quic_stat_names_,
-            server_) {
-    ON_CALL(server_context_.api_, threadFactory())
-        .WillByDefault(
-            Invoke([this]() -> Thread::ThreadFactory& { return api_->threadFactory(); }));
+            server_.quic_stat_names_) {
+    ON_CALL(server_.api_, threadFactory()).WillByDefault(Invoke([this]() -> Thread::ThreadFactory& {
+      return api_->threadFactory();
+    }));
   }
 
   void addStatsdFakeClusterConfig(envoy::config::metrics::v3::StatsSink& sink) {

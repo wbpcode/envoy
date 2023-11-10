@@ -34,9 +34,7 @@ TEST(ValidationClusterManagerTest, MockedMethods) {
   Stats::TestUtil::TestStore& stats_store = server.server_factory_context_->store_;
   Event::GlobalTimeSystem& time_system = server.server_factory_context_->time_system_;
   Api::ApiPtr api(Api::createApiForTest(stats_store, time_system));
-  ON_CALL(*server.server_factory_context_, api()).WillByDefault(testing::ReturnRef(*api));
-
-  NiceMock<ThreadLocal::MockInstance>& tls = server.server_factory_context_->thread_local_;
+  ON_CALL(server, api()).WillByDefault(testing::ReturnRef(*api));
 
   testing::NiceMock<Secret::MockSecretManager> secret_manager;
   auto dns_resolver = std::make_shared<NiceMock<Network::MockDnsResolver>>();
@@ -46,9 +44,8 @@ TEST(ValidationClusterManagerTest, MockedMethods) {
   Quic::QuicStatNames quic_stat_names(stats_store.symbolTable());
 
   ValidationClusterManagerFactory factory(
-      *server.server_factory_context_, stats_store, tls, http_context,
-      [dns_resolver]() -> Network::DnsResolverSharedPtr { return dns_resolver; },
-      ssl_context_manager, secret_manager, quic_stat_names, server);
+      server, [dns_resolver]() -> Network::DnsResolverSharedPtr { return dns_resolver; },
+      quic_stat_names);
 
   const envoy::config::bootstrap::v3::Bootstrap bootstrap;
   ClusterManagerPtr cluster_manager = factory.clusterManagerFromProto(bootstrap);
