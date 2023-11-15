@@ -265,16 +265,15 @@ public:
    * Read a filter definition from proto and instantiate an Instance. This method is used
    * to create access log instances that need access to listener properties.
    */
-  static InstanceSharedPtr
-  fromProto(const envoy::config::accesslog::v3::AccessLog& config,
-            Server::Configuration::ListenerAccessLogFactoryContext& context);
+  static InstanceSharedPtr fromProto(const envoy::config::accesslog::v3::AccessLog& config,
+                                     Server::Configuration::FactoryContext& context);
 
   /**
    * Read a filter definition from proto and instantiate an Instance. This method does not
    * have access to listener properties, for example for access loggers of admin interface.
    */
   static InstanceSharedPtr fromProto(const envoy::config::accesslog::v3::AccessLog& config,
-                                     Server::Configuration::CommonFactoryContext& context);
+                                     Server::Configuration::ServerFactoryContext& context);
 
   /**
    * Template method to create an access log filter from proto configuration for non-HTTP access

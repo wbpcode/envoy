@@ -74,7 +74,7 @@ public:
   virtual AccessLog::InstanceBaseSharedPtr<Context>
   createAccessLogInstance(const Protobuf::Message& config,
                           AccessLog::FilterBasePtr<Context>&& filter,
-                          Server::Configuration::ListenerAccessLogFactoryContext& context) PURE;
+                          Server::Configuration::FactoryContext& context) PURE;
 
   /**
    * Create a particular AccessLog::Instance implementation from a config proto. If the
@@ -88,7 +88,7 @@ public:
   virtual AccessLog::InstanceBaseSharedPtr<Context>
   createAccessLogInstance(const Protobuf::Message& config,
                           AccessLog::FilterBasePtr<Context>&& filter,
-                          Server::Configuration::CommonFactoryContext& context) PURE;
+                          Server::Configuration::FactoryContext& context) PURE;
 
   std::string category() const override { return category_; }
 

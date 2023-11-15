@@ -332,13 +332,13 @@ InstanceSharedPtr makeAccessLogInstance(const envoy::config::accesslog::v3::Acce
 
 InstanceSharedPtr
 AccessLogFactory::fromProto(const envoy::config::accesslog::v3::AccessLog& config,
-                            Server::Configuration::ListenerAccessLogFactoryContext& context) {
+                            Server::Configuration::FactoryContext& context) {
   return makeAccessLogInstance(config, context);
 }
 
 InstanceSharedPtr
 AccessLogFactory::fromProto(const envoy::config::accesslog::v3::AccessLog& config,
-                            Server::Configuration::CommonFactoryContext& context) {
+                            Server::Configuration::ServerFactoryContext& context) {
   return makeAccessLogInstance(config, context);
 }
 
