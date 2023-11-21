@@ -402,14 +402,16 @@ HostDescriptionImpl::HostDescriptionImpl(
     uint32_t priority, TimeSource& time_source)
     : cluster_(cluster), hostname_(hostname),
       health_checks_hostname_(health_check_config.hostname()), address_(dest_address),
-      canary_(Config::Metadata::metadataValue(metadata.get(),
+      canary_(Config::Metadata::metadataValue(metadata != nullptr ? &metadata->protoMetadata()
+                                                                  : nullptr,
                                               Config::MetadataFilters::get().ENVOY_LB,
                                               Config::MetadataEnvoyLbKeys::get().CANARY)
                   .bool_value()),
       metadata_(metadata), locality_(locality),
       locality_zone_stat_name_(locality.zone(), cluster->statsScope().symbolTable()),
       priority_(priority),
-      socket_factory_(resolveTransportSocketFactory(dest_address, metadata_.get())),
+      socket_factory_(resolveTransportSocketFactory(
+          dest_address, metadata != nullptr ? &metadata->protoMetadata() : nullptr)),
       creation_time_(time_source.monotonicTime()) {
   if (health_check_config.port_value() != 0 && dest_address->type() != Network::Address::Type::Ip) {
     // Setting the health check port to non-0 only works for IP-type addresses. Setting the port
@@ -2147,7 +2149,7 @@ bool BaseDynamicClusterImpl::updateDynamicHostList(
       bool metadata_changed = true;
       if (host->metadata() && existing_host->second->metadata()) {
         metadata_changed = !Protobuf::util::MessageDifferencer::Equivalent(
-            *host->metadata(), *existing_host->second->metadata());
+            host->metadata()->protoMetadata(), existing_host->second->metadata()->protoMetadata());
       } else if (!host->metadata() && !existing_host->second->metadata()) {
         metadata_changed = false;
       }

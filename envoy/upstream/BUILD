@@ -75,6 +75,7 @@ envoy_cc_library(
         "//envoy/network:transport_socket_interface",
         "//envoy/stats:primitive_stats_macros",
         "//envoy/stats:stats_macros",
+        "//envoy/config:typed_metadata_interface",
         "@envoy_api//envoy/config/core/v3:pkg_cc_proto",
     ],
 )

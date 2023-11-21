@@ -14,13 +14,29 @@
 #include "envoy/upstream/health_check_host_monitor.h"
 #include "envoy/upstream/outlier_detection.h"
 #include "envoy/upstream/resource_manager.h"
+#include "envoy/config/typed_metadata.h"
 
 #include "absl/strings/string_view.h"
 
 namespace Envoy {
 namespace Upstream {
 
-using MetadataConstSharedPtr = std::shared_ptr<const envoy::config::core::v3::Metadata>;
+/**
+ * Base class for all host metadata factory.
+ */
+class HostTypedMetadataFactory : public Envoy::Config::TypedMetadataFactory {};
+
+using ProtoMetadata = envoy::config::core::v3::Metadata;
+
+class Metadata {
+public:
+  virtual ~Metadata() = default;
+
+  virtual const ProtoMetadata& protoMetadata() const PURE;
+  virtual const Config::TypedMetadata& typedMetadata() const PURE;
+};
+
+using MetadataConstSharedPtr = std::shared_ptr<Metadata>;
 
 /**
  * All per host stats. @see stats_macros.h

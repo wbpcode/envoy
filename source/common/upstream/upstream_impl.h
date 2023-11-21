@@ -214,7 +214,8 @@ public:
     return metadata_;
   }
   void metadata(MetadataConstSharedPtr new_metadata) override {
-    auto& new_socket_factory = resolveTransportSocketFactory(address_, new_metadata.get());
+    auto& new_socket_factory = resolveTransportSocketFactory(
+        address_, new_metadata != nullptr ? &new_metadata->protoMetadata() : nullptr);
     {
       absl::WriterMutexLock lock(&metadata_mutex_);
       metadata_ = new_metadata;
