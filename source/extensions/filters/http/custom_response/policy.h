@@ -9,6 +9,7 @@
 #include "envoy/server/factory_context.h"
 #include "envoy/stream_info/stream_info.h"
 
+#include "source/common/config/config_factory_context.h"
 #include "source/common/matcher/matcher.h"
 
 namespace Envoy {
@@ -57,9 +58,11 @@ template <typename PolicyConfig>
 class PolicyMatchActionFactory : public Matcher::ActionFactory<CustomResponseActionFactoryContext>,
                                  Logger::Loggable<Logger::Id::config> {
 public:
-  Matcher::ActionFactoryCb createActionFactoryCb(const Protobuf::Message& config,
-                                                 CustomResponseActionFactoryContext& context,
-                                                 ProtobufMessage::ValidationVisitor&) override {
+  Matcher::ActionFactoryCb
+  createActionFactoryCb(const Protobuf::Message& config,
+                        CustomResponseActionFactoryContext& context,
+                        ProtobufMessage::ValidationVisitor& visitor) override {
+    Envoy::Config::ConfigFactoryContextImpl config_context(context.server_, visitor);
     return [policy = createPolicy(config, context.server_, context.stats_prefix_)] {
       return std::make_unique<CustomResponseMatchAction>(policy);
     };
@@ -73,7 +76,7 @@ public:
 
 protected:
   virtual PolicySharedPtr createPolicy(const Protobuf::Message& config,
-                                       Envoy::Server::Configuration::ServerFactoryContext& context,
+                                       Envoy::Server::Configuration::ConfigFactoryContext& context,
                                        Stats::StatName stats_prefix) PURE;
 };
 

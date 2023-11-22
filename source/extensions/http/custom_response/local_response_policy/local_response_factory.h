@@ -16,7 +16,7 @@ class LocalResponseFactory
 public:
   Extensions::HttpFilters::CustomResponse::PolicySharedPtr
   createPolicy(const Protobuf::Message& config,
-               Envoy::Server::Configuration::ServerFactoryContext& server,
+               Envoy::Server::Configuration::ConfigFactoryContext& server,
                Stats::StatName stats_prefix) override;
 
   std::string name() const override;

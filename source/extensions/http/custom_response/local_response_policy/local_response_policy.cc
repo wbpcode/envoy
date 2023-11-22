@@ -19,10 +19,11 @@ namespace CustomResponse {
 LocalResponsePolicy::LocalResponsePolicy(
     const envoy::extensions::http::custom_response::local_response_policy::v3::LocalResponsePolicy&
         config,
-    Server::Configuration::CommonFactoryContext& context)
-    : local_body_{config.has_body() ? absl::optional<std::string>(Config::DataSource::read(
-                                          config.body(), true, context.api()))
-                                    : absl::optional<std::string>{}},
+    Server::Configuration::ConfigFactoryContext& context)
+    : local_body_{config.has_body()
+                      ? absl::optional<std::string>(Config::DataSource::read(
+                            config.body(), true, context.getServerFactoryContext().api()))
+                      : absl::optional<std::string>{}},
       formatter_(config.has_body_format()
                      ? Formatter::SubstitutionFormatStringUtils::fromProtoConfig(
                            config.body_format(), context)

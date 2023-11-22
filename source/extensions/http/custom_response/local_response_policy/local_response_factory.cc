@@ -12,7 +12,7 @@ using LocalResponsePolicyProto =
 
 Extensions::HttpFilters::CustomResponse::PolicySharedPtr
 LocalResponseFactory::createPolicy(const Protobuf::Message& config,
-                                   Envoy::Server::Configuration::ServerFactoryContext& context,
+                                   Envoy::Server::Configuration::ConfigFactoryContext& context,
                                    Stats::StatName) {
   const auto& local_response_config =
       MessageUtil::downcastAndValidate<const LocalResponsePolicyProto&>(

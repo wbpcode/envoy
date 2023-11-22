@@ -23,7 +23,7 @@ class LocalResponsePolicy : public Extensions::HttpFilters::CustomResponse::Poli
 public:
   LocalResponsePolicy(const envoy::extensions::http::custom_response::local_response_policy::v3::
                           LocalResponsePolicy& config,
-                      Server::Configuration::CommonFactoryContext& context);
+                      Envoy::Server::Configuration::ConfigFactoryContext& context);
 
   Envoy::Http::FilterHeadersStatus
   encodeHeaders(Envoy::Http::ResponseHeaderMap&, bool,
