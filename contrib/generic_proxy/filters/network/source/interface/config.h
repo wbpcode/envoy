@@ -41,6 +41,16 @@ public:
    * @return bool true if this filter must be the last filter in a filter chain, false otherwise.
    */
   virtual bool isTerminalFilter() PURE;
+
+  std::set<std::string> configTypes() override {
+    auto config_types = TypedFactory::configTypes();
+
+    if (auto message = createEmptyRouteConfigProto(); message != nullptr) {
+      config_types.insert(createReflectableMessage(*message)->GetDescriptor()->full_name());
+    }
+
+    return config_types;
+  }
 };
 
 } // namespace GenericProxy

@@ -23,10 +23,19 @@ RouteEntryImpl::RouteEntryImpl(const ProtoRouteAction& route_action,
       metadata_(route_action.metadata()), typed_metadata_(metadata_) {
 
   for (const auto& proto_filter_config : route_action.per_filter_config()) {
-    auto& factory = Config::Utility::getAndCheckFactoryByName<NamedFilterConfigFactory>(
-        proto_filter_config.first);
+    auto* factory =
+        Config::Utility::getFactoryByType<NamedFilterConfigFactory>(proto_filter_config.second);
+    if (factory == nullptr) {
+      factory =
+          Config::Utility::getFactoryByName<NamedFilterConfigFactory>(proto_filter_config.first);
+    }
+    if (factory == nullptr) {
+      throw EnvoyException(
+          fmt::format("Generic proxy route: unable to find named filter config factory for {}",
+                      proto_filter_config.first));
+    }
 
-    ProtobufTypes::MessagePtr message = factory.createEmptyRouteConfigProto();
+    ProtobufTypes::MessagePtr message = factory->createEmptyRouteConfigProto();
     if (message == nullptr) {
       continue;
     }
@@ -34,8 +43,8 @@ RouteEntryImpl::RouteEntryImpl(const ProtoRouteAction& route_action,
     Envoy::Config::Utility::translateOpaqueConfig(proto_filter_config.second,
                                                   context.messageValidationVisitor(), *message);
 
-    auto route_config = factory.createRouteSpecificFilterConfig(*message, context,
-                                                                context.messageValidationVisitor());
+    auto route_config = factory->createRouteSpecificFilterConfig(
+        *message, context, context.messageValidationVisitor());
     per_filter_configs_.emplace(proto_filter_config.first, std::move(route_config));
   }
 }
