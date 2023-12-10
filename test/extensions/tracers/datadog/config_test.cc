@@ -173,8 +173,9 @@ TEST_F(DatadogConfigTest, CollectorHostname) {
             return &request;
           }));
 
-  Tracing::SpanPtr span = tracer_->startSpan(config_, request_headers_, stream_info_,
-                                             operation_name_, {Tracing::Reason::Sampling, true});
+  Tracing::HttpTraceContext trace_context(request_headers_);
+  Tracing::SpanPtr span = tracer_->startSpan(config_, trace_context, stream_info_, operation_name_,
+                                             {Tracing::Reason::Sampling, true});
   span->finishSpan();
 
   // Timer should be re-enabled.

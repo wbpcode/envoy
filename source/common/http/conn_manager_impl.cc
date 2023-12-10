@@ -49,6 +49,7 @@
 #include "source/common/runtime/runtime_features.h"
 #include "source/common/stats/timespan_impl.h"
 #include "source/common/stream_info/utility.h"
+#include "source/common/tracing/http_tracer_impl.h"
 
 #include "absl/strings/escaping.h"
 #include "absl/strings/match.h"
@@ -1442,8 +1443,9 @@ void ConnectionManagerImpl::ActiveStream::traceRequest() {
   ConnectionManagerImpl::chargeTracingStats(tracing_decision.reason,
                                             connection_manager_.config_.tracingStats());
 
+  Tracing::HttpTraceContext trace_contxt(*request_headers_);
   active_span_ = connection_manager_.tracer().startSpan(
-      *this, *request_headers_, filter_manager_.streamInfo(), tracing_decision);
+      *this, trace_contxt, filter_manager_.streamInfo(), tracing_decision);
 
   if (!active_span_) {
     return;

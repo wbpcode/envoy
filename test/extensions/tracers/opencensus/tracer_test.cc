@@ -9,6 +9,7 @@
 
 #include "source/common/common/base64.h"
 #include "source/extensions/tracers/opencensus/opencensus_tracer_impl.h"
+#include "source/common/tracing/http_tracer_impl.h"
 
 #include "test/mocks/http/mocks.h"
 #include "test/mocks/local_info/mocks.h"
@@ -109,12 +110,13 @@ TEST(OpenCensusTracerTest, Span) {
   NiceMock<Tracing::MockConfig> config;
   Http::TestRequestHeaderMapImpl request_headers{
       {":path", "/"}, {":method", "GET"}, {"x-request-id", "foo"}};
+  Tracing::HttpTraceContext trace_context(request_headers);
   const std::string operation_name{"my_operation_1"};
   SystemTime fake_system_time;
   NiceMock<StreamInfo::MockStreamInfo> stream_info;
 
   {
-    Tracing::SpanPtr span = driver->startSpan(config, request_headers, stream_info, operation_name,
+    Tracing::SpanPtr span = driver->startSpan(config, trace_context, stream_info, operation_name,
                                               {Tracing::Reason::Sampling, true});
     span->setOperation("different_name");
     span->setTag("my_key", "my_value");
@@ -211,14 +213,15 @@ void testIncomingHeaders(
   for (const auto& kv : headers) {
     request_headers.addCopy(Http::LowerCaseString(kv.first), kv.second);
   }
-
+  Tracing::HttpTraceContext trace_context(request_headers);
   const std::string operation_name{"my_operation_2"};
   NiceMock<StreamInfo::MockStreamInfo> stream_info;
   Http::TestRequestHeaderMapImpl injected_headers;
+  Tracing::HttpTraceContext injected_trace_context(injected_headers);
   {
-    Tracing::SpanPtr span = driver->startSpan(config, request_headers, stream_info, operation_name,
+    Tracing::SpanPtr span = driver->startSpan(config, trace_context, stream_info, operation_name,
                                               {Tracing::Reason::Sampling, false});
-    span->injectContext(injected_headers, nullptr);
+    span->injectContext(injected_trace_context, nullptr);
     span->finishSpan();
 
     // Check contents via public API.

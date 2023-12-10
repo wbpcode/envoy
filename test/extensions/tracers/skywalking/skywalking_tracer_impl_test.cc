@@ -81,11 +81,13 @@ TEST_F(SkyWalkingDriverTest, SkyWalkingDriverStartSpanTestWithClientConfig) {
                                                    {":path", "/path"},
                                                    {":method", "GET"},
                                                    {":authority", "test.com"}};
+    Tracing::HttpTraceContext trace_context{request_headers};
+
     ON_CALL(mock_tracing_config_, operationName())
         .WillByDefault(Return(Tracing::OperationName::Ingress));
 
-    Tracing::SpanPtr org_span = driver_->startSpan(mock_tracing_config_, request_headers,
-                                                   stream_info_, "TEST_OP", decision);
+    Tracing::SpanPtr org_span =
+        driver_->startSpan(mock_tracing_config_, trace_context, stream_info_, "TEST_OP", decision);
     EXPECT_NE(nullptr, org_span.get());
 
     Span* span = dynamic_cast<Span*>(org_span.get());
@@ -112,9 +114,10 @@ TEST_F(SkyWalkingDriverTest, SkyWalkingDriverStartSpanTestWithClientConfig) {
     // Create new span segment with no previous span context.
     Http::TestRequestHeaderMapImpl new_request_headers{
         {":path", "/path"}, {":method", "GET"}, {":authority", "test.com"}};
+    Tracing::HttpTraceContext trace_context{new_request_headers};
 
     Tracing::SpanPtr org_span =
-        driver_->startSpan(mock_tracing_config_, new_request_headers, stream_info_, "", decision);
+        driver_->startSpan(mock_tracing_config_, trace_context, stream_info_, "", decision);
 
     Span* span = dynamic_cast<Span*>(org_span.get());
     ASSERT(span);
@@ -137,8 +140,10 @@ TEST_F(SkyWalkingDriverTest, SkyWalkingDriverStartSpanTestWithClientConfig) {
         {":method", "GET"},
         {":authority", "test.com"},
         {"sw8", "xxxxxx-error-propagation-header"}};
-    Tracing::SpanPtr org_span = driver_->startSpan(mock_tracing_config_, error_request_headers,
-                                                   stream_info_, "TEST_OP", decision);
+    Tracing::HttpTraceContext trace_context{error_request_headers};
+
+    Tracing::SpanPtr org_span =
+        driver_->startSpan(mock_tracing_config_, trace_context, stream_info_, "TEST_OP", decision);
     Span* span = dynamic_cast<Span*>(org_span.get());
     ASSERT(span);
 
@@ -160,8 +165,10 @@ TEST_F(SkyWalkingDriverTest, SkyWalkingDriverStartSpanTestWithClientConfig) {
         {":method", "GET"},
         {":authority", "test.com"},
         {"sw8", "1-x-x-x-x-x-x-x"}}; // The first field is legal and fourth field is illegal.
-    Tracing::SpanPtr org_span = driver_->startSpan(mock_tracing_config_, error_request_headers,
-                                                   stream_info_, "TEST_OP", decision);
+    Tracing::HttpTraceContext trace_context{error_request_headers};
+
+    Tracing::SpanPtr org_span =
+        driver_->startSpan(mock_tracing_config_, trace_context, stream_info_, "TEST_OP", decision);
 
     Span* span = dynamic_cast<Span*>(org_span.get());
     ASSERT(span);
@@ -182,8 +189,10 @@ TEST_F(SkyWalkingDriverTest, SkyWalkingDriverStartSpanTestWithClientConfig) {
     decision.traced = false;
     Http::TestRequestHeaderMapImpl request_headers{
         {":path", "/path"}, {":method", "GET"}, {":authority", "test.com"}};
-    Tracing::SpanPtr org_null_span = driver_->startSpan(mock_tracing_config_, request_headers,
-                                                        stream_info_, "TEST_OP", decision);
+    Tracing::HttpTraceContext trace_context{request_headers};
+
+    Tracing::SpanPtr org_null_span =
+        driver_->startSpan(mock_tracing_config_, trace_context, stream_info_, "TEST_OP", decision);
 
     EXPECT_EQ(nullptr, dynamic_cast<Span*>(org_null_span.get()));
 
@@ -199,8 +208,10 @@ TEST_F(SkyWalkingDriverTest, SkyWalkingDriverStartSpanTestWithClientConfig) {
         {":method", "GET"},
         {":authority", "test.com"},
         {"sw8", "xxxxxx-error-propagation-header"}};
-    Tracing::SpanPtr org_null_span = driver_->startSpan(mock_tracing_config_, error_request_headers,
-                                                        stream_info_, "TEST_OP", decision);
+    Tracing::HttpTraceContext trace_context{error_request_headers};
+
+    Tracing::SpanPtr org_null_span =
+        driver_->startSpan(mock_tracing_config_, trace_context, stream_info_, "TEST_OP", decision);
 
     EXPECT_EQ(nullptr, dynamic_cast<Span*>(org_null_span.get()));
 
@@ -216,8 +227,10 @@ TEST_F(SkyWalkingDriverTest, SkyWalkingDriverStartSpanTestWithClientConfig) {
         {":method", "GET"},
         {":authority", "test.com"},
         {"sw8", "1-x-x-x-x-x-x-x"}}; // The first field is legal and fourth field is illegal.
-    Tracing::SpanPtr org_null_span = driver_->startSpan(mock_tracing_config_, error_request_headers,
-                                                        stream_info_, "TEST_OP", decision);
+    Tracing::HttpTraceContext trace_context{error_request_headers};
+
+    Tracing::SpanPtr org_null_span =
+        driver_->startSpan(mock_tracing_config_, trace_context, stream_info_, "TEST_OP", decision);
 
     EXPECT_EQ(nullptr, dynamic_cast<Span*>(org_null_span.get()));
 
@@ -241,9 +254,10 @@ TEST_F(SkyWalkingDriverTest, SkyWalkingDriverStartSpanTestNoClientConfig) {
 
   Http::TestRequestHeaderMapImpl request_headers{
       {":path", "/path"}, {":method", "GET"}, {":authority", "test.com"}};
+  Tracing::HttpTraceContext trace_context{request_headers};
 
   Tracing::SpanPtr org_span =
-      driver_->startSpan(mock_tracing_config_, request_headers, stream_info_, "TEST_OP", decision);
+      driver_->startSpan(mock_tracing_config_, trace_context, stream_info_, "TEST_OP", decision);
   EXPECT_NE(nullptr, org_span.get());
 
   Span* span = dynamic_cast<Span*>(org_span.get());

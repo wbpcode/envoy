@@ -891,17 +891,17 @@ public:
       }
     }
   }
-  absl::optional<absl::string_view> getByKey(absl::string_view key) const override {
+  absl::optional<absl::string_view> get(absl::string_view key) const override {
     auto iter = context_map_.find(key);
     if (iter == context_map_.end()) {
       return absl::nullopt;
     }
     return iter->second;
   }
-  void setByKey(absl::string_view key, absl::string_view val) override {
+  void set(absl::string_view key, absl::string_view val) override {
     context_map_.insert({std::string(key), std::string(val)});
   }
-  void removeByKey(absl::string_view key) override { context_map_.erase(std::string(key)); }
+  void remove(absl::string_view key) override { context_map_.erase(std::string(key)); }
 
   std::string context_protocol_;
   std::string context_host_;
@@ -1143,36 +1143,6 @@ public:
   INLINE_REQ_NUMERIC_HEADERS(DEFINE_TEST_INLINE_NUMERIC_HEADER_FUNCS)
   INLINE_REQ_RESP_STRING_HEADERS(DEFINE_TEST_INLINE_STRING_HEADER_FUNCS)
   INLINE_REQ_RESP_NUMERIC_HEADERS(DEFINE_TEST_INLINE_NUMERIC_HEADER_FUNCS)
-
-  // Tracing::TraceContext
-  absl::string_view protocol() const override { return header_map_->getProtocolValue(); }
-  absl::string_view host() const override { return header_map_->getHostValue(); }
-  absl::string_view path() const override { return header_map_->getPathValue(); }
-  absl::string_view method() const override { return header_map_->getMethodValue(); }
-  void forEach(IterateCallback callback) const override {
-    ASSERT(header_map_);
-    header_map_->iterate([cb = std::move(callback)](const HeaderEntry& entry) {
-      if (cb(entry.key().getStringView(), entry.value().getStringView())) {
-        return HeaderMap::Iterate::Continue;
-      }
-      return HeaderMap::Iterate::Break;
-    });
-  }
-  absl::optional<absl::string_view> getByKey(absl::string_view key) const override {
-    ASSERT(header_map_);
-    return header_map_->getByKey(key);
-  }
-  void setByKey(absl::string_view key, absl::string_view value) override {
-    ASSERT(header_map_);
-    header_map_->setByKey(key, value);
-  }
-  void removeByKey(absl::string_view key) override { header_map_->removeByKey(key); }
-  OptRef<RequestHeaderMap> requestHeaders() override {
-    return makeOptRefFromPtr<RequestHeaderMap>(this);
-  }
-  OptRef<const RequestHeaderMap> requestHeaders() const override {
-    return makeOptRefFromPtr<const RequestHeaderMap>(this);
-  }
 };
 
 using TestRequestTrailerMapImpl = TestHeaderMapImplBase<RequestTrailerMap, RequestTrailerMapImpl>;

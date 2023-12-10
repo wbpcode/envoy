@@ -2,6 +2,7 @@
 
 #include "source/common/http/header_map_impl.h"
 #include "source/extensions/tracers/dynamic_ot/dynamic_opentracing_driver_impl.h"
+#include "source/common/tracing/http_tracer_impl.h"
 
 #include "test/mocks/http/mocks.h"
 #include "test/mocks/stats/mocks.h"
@@ -79,9 +80,9 @@ TEST_F(DynamicOpenTracingDriverTest, FlushSpans) {
   setupValidDriver();
 
   {
-    Tracing::SpanPtr first_span =
-        driver_->startSpan(config_, request_headers_, stream_info_, operation_name_,
-                           {Tracing::Reason::Sampling, true});
+    Tracing::HttpTraceContext trace_context{request_headers_};
+    Tracing::SpanPtr first_span = driver_->startSpan(
+        config_, trace_context, stream_info_, operation_name_, {Tracing::Reason::Sampling, true});
     first_span->finishSpan();
     driver_->tracer().Close();
   }

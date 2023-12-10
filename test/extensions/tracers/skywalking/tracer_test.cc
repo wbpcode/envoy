@@ -154,10 +154,12 @@ TEST_F(TracerTest, TracerTestCreateNewSpanWithNoPropagationHeaders) {
 
     Http::TestRequestHeaderMapImpl first_child_headers{{":authority", "test.com"},
                                                        {":path", "/upstream/path"}};
+    Tracing::HttpTraceContext trace_context(first_child_headers);
+
     Upstream::HostDescriptionConstSharedPtr host{
         new testing::NiceMock<Upstream::MockHostDescription>()};
 
-    first_child_span->injectContext(first_child_headers, host);
+    first_child_span->injectContext(trace_context, host);
     // Operation name of child span (EXIT span) will be override by the latest path of upstream
     // request.
     EXPECT_EQ("/upstream/path", first_child_span->spanEntity()->operationName());
@@ -190,8 +192,9 @@ TEST_F(TracerTest, TracerTestCreateNewSpanWithNoPropagationHeaders) {
               second_child_span->spanEntity()->operationName());
 
     Http::TestRequestHeaderMapImpl second_child_headers{{":authority", "test.com"}};
+    Tracing::HttpTraceContext trace_context(second_child_headers);
 
-    second_child_span->injectContext(second_child_headers, nullptr);
+    second_child_span->injectContext(trace_context, nullptr);
     auto sp = createSpanContext(second_child_headers.get_("sw8"));
     EXPECT_EQ("CURR#SERVICE", sp->service());
     EXPECT_EQ("CURR#INSTANCE", sp->serviceInstance());

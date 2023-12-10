@@ -26,6 +26,45 @@
 namespace Envoy {
 namespace Tracing {
 
+HttpTraceContext::HttpTraceContext(Http::RequestHeaderMap& request_headers)
+    : request_headers_(request_headers) {}
+
+absl::string_view HttpTraceContext::protocol() const { return request_headers_.getProtocolValue(); }
+absl::string_view HttpTraceContext::host() const { return request_headers_.getHostValue(); }
+
+absl::string_view HttpTraceContext::path() const { return request_headers_.getPathValue(); }
+
+absl::string_view HttpTraceContext::method() const { return request_headers_.getMethodValue(); }
+void HttpTraceContext::forEach(IterateCallback callback) const {
+  request_headers_.iterate([cb = std::move(callback)](const Http::HeaderEntry& entry) {
+    if (cb(entry.key().getStringView(), entry.value().getStringView())) {
+      return Http::HeaderMap::Iterate::Continue;
+    }
+    return Http::HeaderMap::Iterate::Break;
+  });
+}
+absl::optional<absl::string_view> HttpTraceContext::get(absl::string_view key) const {
+  const Http::LowerCaseString lower_key{key};
+  const auto entries = request_headers_.get(lower_key);
+  if (entries.empty()) {
+    return absl::nullopt;
+  }
+  return entries[0]->value().getStringView();
+}
+
+void HttpTraceContext::set(absl::string_view key, absl::string_view val) {
+  const Http::LowerCaseString lower_key{key};
+  request_headers_.setCopy(lower_key, val);
+}
+void HttpTraceContext::remove(absl::string_view key) {
+  const Http::LowerCaseString lower_key{key};
+  request_headers_.remove(lower_key);
+}
+OptRef<Http::RequestHeaderMap> HttpTraceContext::requestHeaders() { return request_headers_; }
+OptRef<const Http::RequestHeaderMap> HttpTraceContext::requestHeaders() const {
+  return request_headers_;
+}
+
 // TODO(perf): Avoid string creations/copies in this entire file.
 static std::string buildResponseCode(const StreamInfo::StreamInfo& info) {
   return info.responseCode() ? std::to_string(info.responseCode().value()) : "0";
@@ -239,7 +278,12 @@ void HttpTracerUtility::setCommonTags(Span& span, const StreamInfo::StreamInfo& 
     span.setTag(Tracing::Tags::get().Error, Tracing::Tags::get().True);
   }
 
-  CustomTagContext ctx{stream_info.getRequestHeaders(), stream_info};
+  const HttpTraceContext trace_context{
+      stream_info.getRequestHeaders() != nullptr
+          ? *const_cast<Http::RequestHeaderMap*>(stream_info.getRequestHeaders())
+          : *Http::StaticEmptyHeaders::get().request_headers};
+
+  CustomTagContext ctx{&trace_context, stream_info};
   if (const CustomTagMap* custom_tag_map = tracing_config.customTags(); custom_tag_map) {
     for (const auto& it : *custom_tag_map) {
       it.second->applySpan(span, ctx);
