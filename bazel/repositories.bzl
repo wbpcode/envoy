@@ -339,6 +339,7 @@ def envoy_dependencies(skip_targets = []):
     external_http_archive("bazel_compdb")
     external_http_archive("envoy_build_tools")
     _com_github_maxmind_libmaxminddb()
+    _com_github_dapr_cpp_sdk()
 
     # TODO(keith): Remove patch when we update rules_pkg
     external_http_archive(
@@ -393,6 +394,12 @@ def _boringssl_fips():
     external_http_archive(
         name = "boringssl_fips",
         build_file = "@envoy//bazel/external:boringssl_fips.BUILD",
+    )
+
+def _com_github_dapr_cpp_sdk():
+    external_http_archive(
+        name = "com_github_dapr_cpp_sdk",
+        build_file = "@envoy//bazel/external:dapr_cpp_sdk.BUILD",
     )
 
 def _com_github_openhistogram_libcircllhist():

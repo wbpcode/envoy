@@ -1,0 +1,39 @@
+syntax = "proto3";
+
+package envoy.extensions.filters.http.multiple_runtime.v3;
+
+import "envoy/config/core/v3/extension.proto";
+
+import "udpa/annotations/status.proto";
+import "validate/validate.proto";
+
+option java_package = "io.envoyproxy.envoy.extensions.filters.http.multiple_runtime.v3";
+option java_outer_classname = "MultipleRuntimeProto";
+option java_multiple_files = true;
+option go_package = "github.com/envoyproxy/go-control-plane/envoy/extensions/filters/http/multiple_runtime/v3;multiple_runtimev3";
+option (udpa.annotations.file_status).package_version_status = ACTIVE;
+
+// [#protodoc-title: Multiple runtime filter configuration]
+// [#extension: envoy.filters.http.multiple_runtime]
+
+enum ComponentType {
+  // The component is a state store.
+  STATE_STORE = 0;
+}
+
+message ComponentConfig {
+  // The type of the component.
+  ComponentType type = 1 [(validate.rules).enum = {defined_only: true}];
+
+  // The configuration that could be used to instantiate a component instance.
+  config.core.v3.TypedExtensionConfig config = 2 [(validate.rules).message = {required: true}];
+}
+
+message MultipleRuntime {
+  // Default namespace to use when no namespace is specified in the app ID of service invocation.
+  // If not specified, the default namespace is "default".
+  string default_namespace = 1;
+
+  // The list of runtime components.
+  repeated ComponentConfig components = 2;
+}

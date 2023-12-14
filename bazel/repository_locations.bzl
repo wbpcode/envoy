@@ -1547,6 +1547,20 @@ REPOSITORY_LOCATIONS_SPEC = dict(
         extensions = ["envoy.compression.qatzip.compressor"],
         cpe = "N/A",
     ),
+    com_github_dapr_cpp_sdk = dict(
+        project_name = "Dapr C++ SDK",
+        project_desc = "C++ SDK for Dapr",
+        project_url = "https://github.com/dapr/cpp-sdk",
+        version = "b6f3ac885f5d3946a1eaf07ebdff2b674ab9e046",
+        sha256 = "82c3f919b0e0ca9053a8edca6a6e1e60fb56d72a8b649479d07990a25036f6fa",
+        strip_prefix = "cpp-sdk-{version}",
+        urls = ["https://github.com/dapr/cpp-sdk/archive/{version}.tar.gz"],
+        use_category = ["dataplane_ext"],
+        release_date = "2023-09-12",
+        extensions = ["envoy.filters.http.multiple_runtime"],
+        cpe = "N/A",
+    ),
+
 )
 
 def _compiled_protoc_deps(locations, versions):
