@@ -1,6 +1,7 @@
 #include "source/extensions/filters/http/multiple_runtime/multiple_runtime.h"
 
 #include "source/common/config/utility.h"
+#include "source/common/http/headers.h"
 
 namespace Envoy {
 namespace Extensions {
@@ -36,6 +37,66 @@ OptRef<StateStoreInstance> MultipleRuntimeConfig::getStateStoreInstance(absl::st
     return absl::nullopt;
   }
   return makeOptRefFromPtr<StateStoreInstance>(it->second.get());
+}
+
+void MultipleRuntimeFilter::handleMultipleRuntimeRequest() {
+  auto request_headers = decoder_callbacks_->requestHeaders();
+  ASSERT(request_headers.has_value());
+
+  if (absl::StrContains(request_headers->getContentTypeValue(),
+                        Envoy::Http::Headers::get().ContentTypeValues.Grpc)) {
+  }
+}
+
+void StateStoreHandler::handleStateStoreGetRequest(absl::string_view store_name,
+                                                   StateStoreGetRequest&& request) {
+  auto state_store_instance = parent_.config_->getStateStoreInstance(store_name);
+  if (!state_store_instance.has_value()) {
+    parent_.decoder_callbacks_->sendLocalReply(Http::Code::BadRequest, {}, {}, {},
+                                               "state_store_not_found");
+    return;
+  }
+
+  auto cancellable = state_store_instance->get(std::move(request), *this);
+  if (cancellable == nullptr) {
+    parent_.decoder_callbacks_->sendLocalReply(Http::Code::BadRequest, {}, {}, {},
+                                               "state_store_get_failed");
+    return;
+  }
+  pending_requests_.push_back(std::move(cancellable));
+}
+void StateStoreHandler::handleStateStoreSetREquest(absl::string_view store_name,
+                                                   StateStoreSetRequest&& request) {
+  auto state_store_instance = parent_.config_->getStateStoreInstance(store_name);
+  if (!state_store_instance.has_value()) {
+    parent_.decoder_callbacks_->sendLocalReply(Http::Code::BadRequest, {}, {}, {},
+
+                                               "state_store_not_found");
+    return;
+  }
+
+  auto cancellable = state_store_instance->set(std::move(request), *this);
+  if (cancellable == nullptr) {
+    parent_.decoder_callbacks_->sendLocalReply(Http::Code::BadRequest, {}, {}, {},
+                                               "state_store_set_failed");
+  }
+  pending_requests_.push_back(std::move(cancellable));
+}
+
+void StateStoreHandler::handleStateStoreDelRequest(absl::string_view store_name,
+                                                   StateStoreDelRequest&& request) {
+  auto state_store_instance = parent_.config_->getStateStoreInstance(store_name);
+  if (!state_store_instance.has_value()) {
+    parent_.decoder_callbacks_->sendLocalReply(Http::Code::BadRequest, {}, {}, {},
+                                               "state_store_not_found");
+    return;
+  }
+  auto cancellable = state_store_instance->del(std::move(request), *this);
+  if (cancellable == nullptr) {
+    parent_.decoder_callbacks_->sendLocalReply(Http::Code::BadRequest, {}, {}, {},
+                                               "state_store_del_failed");
+  }
+  pending_requests_.push_back(std::move(cancellable));
 }
 
 Http::FilterHeadersStatus MultipleRuntimeFilter::decodeHeaders(Http::RequestHeaderMap&,

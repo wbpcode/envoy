@@ -51,22 +51,22 @@ using CancancellablePtr = std::unique_ptr<Cancellable>;
 class StateStoreGetCallbacks {
 public:
   virtual ~StateStoreGetCallbacks() = default;
-  virtual void onFailure() PURE;
-  virtual void onSuccess(StateStoreGetResponse&& response) PURE;
+  virtual void onStateStoreGetFailure() PURE;
+  virtual void onStateStoreGetSuccess(StateStoreGetResponse&& response) PURE;
 };
 
 class StateStoreSetCallbacks {
 public:
   virtual ~StateStoreSetCallbacks() = default;
-  virtual void onFailure() PURE;
-  virtual void onSuccess(StateStoreSetResponse&& response) PURE;
+  virtual void onStateStoreSetFailure() PURE;
+  virtual void onStateStoreSetSuccess(StateStoreSetResponse&& response) PURE;
 };
 
 class StateStoreDelCallbacks {
 public:
   virtual ~StateStoreDelCallbacks() = default;
-  virtual void onFailure() PURE;
-  virtual void onSuccess(StateStoreDelResponse&& response) PURE;
+  virtual void onStateStoreDelFailure() PURE;
+  virtual void onStateStoreDelSuccess(StateStoreDelResponse&& response) PURE;
 };
 
 class StateStoreInstance {

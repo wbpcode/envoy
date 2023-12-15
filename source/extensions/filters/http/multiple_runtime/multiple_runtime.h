@@ -8,7 +8,6 @@
 #include "source/extensions/filters/http/multiple_runtime/state_store.h"
 
 #include "absl/container/flat_hash_map.h"
-#include "dapr/proto/common/v1/common.pb.h"
 
 namespace Envoy {
 namespace Extensions {
@@ -39,6 +38,35 @@ private:
 
 using MultipleRuntimeConfigSharedPtr = std::shared_ptr<MultipleRuntimeConfig>;
 
+class MultipleRuntimeFilter;
+
+class StateStoreHandler : public StateStoreGetCallbacks,
+                          public StateStoreSetCallbacks,
+                          public StateStoreDelCallbacks {
+public:
+  StateStoreHandler(MultipleRuntimeFilter& parent) : parent_(parent) {}
+
+  // StateStoreGetCallbacks
+  void onStateStoreGetFailure() override;
+  void onStateStoreGetSuccess(StateStoreGetResponse&& response) override;
+
+  // StateStoreSetCallbacks
+  void onStateStoreSetFailure() override;
+  void onStateStoreSetSuccess(StateStoreSetResponse&& response) override;
+
+  // StateStoreDelCallbacks
+  void onStateStoreDelFailure() override;
+  void onStateStoreDelSuccess(StateStoreDelResponse&& response) override;
+
+  void handleStateStoreGetRequest(absl::string_view store_name, StateStoreGetRequest&& request);
+  void handleStateStoreSetREquest(absl::string_view store_name, StateStoreSetRequest&& request);
+  void handleStateStoreDelRequest(absl::string_view store_name, StateStoreDelRequest&& request);
+
+  MultipleRuntimeFilter& parent_;
+
+  absl::InlinedVector<CancancellablePtr, 8> pending_requests_;
+};
+
 class MultipleRuntimeFilter : public Http::PassThroughDecoderFilter {
 
 public:
@@ -51,9 +79,15 @@ public:
   Http::FilterTrailersStatus decodeTrailers(Http::RequestTrailerMap& trailers) override;
 
 private:
-  OperationType operation_type_{OperationType::None};
+  friend class StateStoreHandler;
 
   void handleMultipleRuntimeRequest();
+
+  void handleGrpcMultipleRuntimeRequest();
+  void handleHttpMultipleRuntimeRequest();
+
+  OperationType operation_type_{OperationType::None};
+  std::unique_ptr<StateStoreHandler> state_store_handler_;
 
   MultipleRuntimeConfigSharedPtr config_;
 };
