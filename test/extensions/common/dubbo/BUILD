@@ -40,8 +40,8 @@ envoy_cc_test(
 )
 
 envoy_cc_test(
-    name = "hessian2_serializer_impl_test",
-    srcs = ["hessian2_serializer_impl_test.cc"],
+    name = "hessian2_serializer_test",
+    srcs = ["hessian2_serializer_test.cc"],
     deps = [
         "//source/extensions/common/dubbo:hessian2_serializer_lib",
         "//test/test_common:printers_lib",

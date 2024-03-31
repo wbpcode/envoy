@@ -77,10 +77,10 @@ envoy_cc_library(
 envoy_cc_library(
     name = "hessian2_serializer_lib",
     srcs = [
-        "hessian2_serializer_impl.cc",
+        "hessian2_serializer.cc",
     ],
     hdrs = [
-        "hessian2_serializer_impl.h",
+        "hessian2_serializer.h",
     ],
     deps = [
         ":hessian2_utils_lib",
@@ -90,5 +90,6 @@ envoy_cc_library(
         "//envoy/buffer:buffer_interface",
         "//source/common/common:assert_lib",
         "//source/common/config:utility_lib",
+        "//envoy/common:optref_lib",
     ],
 )

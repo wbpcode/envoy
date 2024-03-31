@@ -23,44 +23,40 @@ public:
   virtual SerializeType type() const PURE;
 
   /**
-   * Deserialize an rpc call. If successful, the RpcRequest removed from the buffer
-   *
-   * @param buffer the currently buffered dubbo data
-   * @param context context information for RPC messages
-   * @return a pair containing the deserialized result of the message and the deserialized
-   *         invocation information.
-   * @throws EnvoyException if the data is not valid for this serialization
+   * Deserialize rpc request.
+   * @param buffer the currently buffered dubbo binary.
+   * @param metadata metadata of the rpc request.
+   * @return RpcRequestPtr the deserialized rpc request if deserialization is successful.
    */
-  virtual RpcRequestPtr deserializeRpcRequest(Buffer::Instance& buffer, Context& context) PURE;
+  virtual absl::StatusOr<RpcRequestPtr> deserializeRpcRequest(Buffer::Instance& buffer,
+                                                              Metadata& metadata) const PURE;
 
   /**
-   * deserialize result of an rpc call
-   *
-   * @param buffer the currently buffered dubbo data
-   * @param context context information for RPC messages
-   * @return a pair containing the deserialized result of the message and the deserialized
-   *         result information.
-   * @throws EnvoyException if the data is not valid for this serialization
+   * Deserialize rpc response.
+   * @param buffer the currently buffered dubbo binary.
+   * @param metadata metadata of the rpc response.
+   * @return RpcResponsePtr the deserialized rpc response if deserialization is successful.
    */
-  virtual RpcResponsePtr deserializeRpcResponse(Buffer::Instance& buffer, Context& context) PURE;
+  virtual absl::StatusOr<RpcResponsePtr> deserializeRpcResponse(Buffer::Instance& buffer,
+                                                                Metadata& metadata) const PURE;
 
   /**
-   * Serialize response of an rpc call
-   * If successful, the buffer is written to the serialized data
-   *
-   * @param buffer store the serialized data
-   * @param metadata metadata that contains context information and rpc response.
+   * Serialize rpc request.
+   * @param buffer the buffer to store the serialized binary.
+   * @param metadata metadata of the rpc request.
+   * @param request the rpc request to be serialized. May be empty for heartbeat.
    */
-  virtual void serializeRpcResponse(Buffer::Instance& buffer, MessageMetadata& metadata) PURE;
+  virtual void serializeRpcRequest(Buffer::Instance& buffer, const Metadata& metadata,
+                                   OptRef<const RpcRequest> request) const PURE;
 
   /**
-   * Serialize request of an rpc call
-   * If successful, the buffer is written to the serialized data
-   *
-   * @param buffer store the serialized data
-   * @param metadata metadata that contains context information and rpc request.
+   * Serialize rpc response.
+   * @param buffer the buffer to store the serialized binary.
+   * @param metadata metadata of the rpc response.
+   * @param response the rpc response to be serialized. May be empty for heartbeat.
    */
-  virtual void serializeRpcRequest(Buffer::Instance& buffer, MessageMetadata& metadata) PURE;
+  virtual void serializeRpcResponse(Buffer::Instance& buffer, const Metadata& metadata,
+                                    OptRef<const RpcResponse> response) const PURE;
 };
 
 using SerializerPtr = std::unique_ptr<Serializer>;

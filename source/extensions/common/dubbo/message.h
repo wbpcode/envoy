@@ -17,26 +17,6 @@ namespace Extensions {
 namespace Common {
 namespace Dubbo {
 
-/**
- * Stream reset reasons.
- */
-enum class StreamResetReason : uint8_t {
-  // If a local codec level reset was sent on the stream.
-  LocalReset,
-  // If a local codec level refused stream reset was sent on the stream (allowing for retry).
-  LocalRefusedStreamReset,
-  // If a remote codec level reset was received on the stream.
-  RemoteReset,
-  // If a remote codec level refused stream reset was received on the stream (allowing for retry).
-  RemoteRefusedStreamReset,
-  // If the stream was locally reset by a connection pool due to an initial connection failure.
-  ConnectionFailure,
-  // If the stream was locally reset due to connection termination.
-  ConnectionTermination,
-  // The stream was reset because of a resource overflow.
-  Overflow
-};
-
 // Supported serialize type
 enum class SerializeType : uint8_t {
   Hessian2 = 2,

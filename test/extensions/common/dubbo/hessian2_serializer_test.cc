@@ -1,6 +1,6 @@
 #include <memory>
 
-#include "source/extensions/common/dubbo/hessian2_serializer_impl.h"
+#include "source/extensions/common/dubbo/hessian2_serializer.h"
 
 #include "test/test_common/printers.h"
 #include "test/test_common/utility.h"
@@ -30,10 +30,11 @@ TEST(Hessian2ProtocolTest, deserializeRpcRequest) {
         0x05, '0', '.', '0', '.', '0', // Service version
         0x04, 't', 'e', 's', 't',      // method name
     }));
-    auto context = std::make_unique<Context>();
-    context->setBodySize(buffer.length());
-    auto result = serializer.deserializeRpcRequest(buffer, *context);
-    ASSERT(result != nullptr);
+    Metadata metadata;
+    metadata.setBodySize(buffer.length());
+    auto result_or = serializer.deserializeRpcRequest(buffer, metadata);
+    EXPECT_TRUE(result_or.ok());
+    auto result = std::move(result_or).value();
 
     EXPECT_EQ("test", result->method());
     EXPECT_EQ("test", result->service());
@@ -49,12 +50,13 @@ TEST(Hessian2ProtocolTest, deserializeRpcRequest) {
         0x05, '0', '.', '0', '.', '0', // Service version
         0x04, 't', 'e', 's', 't',      // method name
     }));
-    std::string exception_string = fmt::format("RpcRequest size({}) larger than body size({})",
-                                               buffer.length(), buffer.length() - 1);
-    auto context = std::make_unique<Context>();
-    context->setBodySize(buffer.length() - 1);
-    EXPECT_THROW_WITH_MESSAGE(serializer.deserializeRpcRequest(buffer, *context), EnvoyException,
-                              exception_string);
+    std::string error_string = fmt::format("RpcRequest size({}) larger than body size({})",
+                                           buffer.length(), buffer.length() - 1);
+    Metadata metadata;
+    metadata.setBodySize(buffer.length() - 1);
+    auto result_or = serializer.deserializeRpcRequest(buffer, metadata);
+    EXPECT_FALSE(result_or.ok());
+    EXPECT_EQ(error_string, result_or.status().message());
   }
 
   // Missing key metadata.
@@ -65,10 +67,12 @@ TEST(Hessian2ProtocolTest, deserializeRpcRequest) {
         0x04, 't', 'e', 's', 't',      // Service name
         0x05, '0', '.', '0', '.', '0', // Service version
     }));
-    auto context = std::make_unique<Context>();
-    context->setBodySize(buffer.length());
-    EXPECT_THROW_WITH_MESSAGE(serializer.deserializeRpcRequest(buffer, *context), EnvoyException,
-                              "RpcRequest has no request metadata");
+    Metadata metadata;
+    metadata.setBodySize(buffer.length());
+
+    auto result_or = serializer.deserializeRpcRequest(buffer, metadata);
+    EXPECT_FALSE(result_or.ok());
+    EXPECT_EQ("RpcRequest has no request metadata", result_or.status().message());
   }
 }
 
@@ -102,11 +106,14 @@ TEST(Hessian2ProtocolTest, deserializeRpcRequestWithParametersOrAttachment) {
     Buffer::OwnedImpl buffer;
     buffer.add("anything_here_for_heartbeat");
 
-    auto context = std::make_unique<Context>();
-    context->setBodySize(buffer.length());
-    context->setMessageType(MessageType::HeartbeatRequest);
+    Metadata metadata;
+    metadata.setBodySize(buffer.length());
+    metadata.setMessageType(MessageType::HeartbeatRequest);
 
-    auto result = serializer.deserializeRpcRequest(buffer, *context);
+    auto result_or = serializer.deserializeRpcRequest(buffer, metadata);
+    EXPECT_TRUE(result_or.ok());
+    auto result = std::move(result_or).value();
+
     EXPECT_EQ(nullptr, result);
 
     EXPECT_EQ(0, buffer.length());
@@ -134,10 +141,13 @@ TEST(Hessian2ProtocolTest, deserializeRpcRequestWithParametersOrAttachment) {
     // Encode attachment
     encoder.encode<Hessian2::Object>(*map_object);
 
-    auto context = std::make_unique<Context>();
-    context->setBodySize(buffer.length());
+    Metadata metadata;
+    metadata.setBodySize(buffer.length());
 
-    auto result = serializer.deserializeRpcRequest(buffer, *context);
+    auto result_or = serializer.deserializeRpcRequest(buffer, metadata);
+    EXPECT_TRUE(result_or.ok());
+    auto result = std::move(result_or).value();
+
     EXPECT_NE(nullptr, result);
 
     // All data be moved to buffer in the request.
@@ -183,10 +193,13 @@ TEST(Hessian2ProtocolTest, deserializeRpcRequestWithParametersOrAttachment) {
     // Encode an untyped map object as fourth parameter.
     encoder.encode<Hessian2::Object>(*map_object);
 
-    auto context = std::make_unique<Context>();
-    context->setBodySize(buffer.length());
+    Metadata metadata;
+    metadata.setBodySize(buffer.length());
 
-    auto result = serializer.deserializeRpcRequest(buffer, *context);
+    auto result_or = serializer.deserializeRpcRequest(buffer, metadata);
+    EXPECT_TRUE(result_or.ok());
+    auto result = std::move(result_or).value();
+
     EXPECT_NE(nullptr, result);
 
     EXPECT_EQ(4, result->content().arguments().size());
@@ -211,10 +224,12 @@ TEST(Hessian2ProtocolTest, deserializeRpcRequestWithParametersOrAttachment) {
       encoder.encode<Hessian2::Object>(*param);
     }
 
-    auto context = std::make_unique<Context>();
-    context->setBodySize(buffer.length());
+    Metadata metadata;
+    metadata.setBodySize(buffer.length());
 
-    auto result = serializer.deserializeRpcRequest(buffer, *context);
+    auto result_or = serializer.deserializeRpcRequest(buffer, metadata);
+    EXPECT_TRUE(result_or.ok());
+    auto result = std::move(result_or).value();
     EXPECT_NE(nullptr, result);
 
     // The request will be reset to an empty state.
@@ -231,12 +246,14 @@ TEST(Hessian2ProtocolTest, deserializeRpcResponse) {
     Buffer::OwnedImpl buffer;
     buffer.add("anything_here_for_heartbeat");
 
-    auto context = std::make_unique<Context>();
-    context->setBodySize(buffer.length());
-    context->setMessageType(MessageType::HeartbeatResponse);
-    context->setResponseStatus(ResponseStatus::Ok);
+    Metadata metadata;
+    metadata.setBodySize(buffer.length());
+    metadata.setMessageType(MessageType::HeartbeatResponse);
+    metadata.setResponseStatus(ResponseStatus::Ok);
 
-    auto result = serializer.deserializeRpcResponse(buffer, *context);
+    auto result_or = serializer.deserializeRpcRequest(buffer, metadata);
+    EXPECT_TRUE(result_or.ok());
+    auto result = std::move(result_or).value();
     EXPECT_EQ(nullptr, result);
 
     EXPECT_EQ(0, buffer.length());
@@ -253,13 +270,15 @@ TEST(Hessian2ProtocolTest, deserializeRpcResponse) {
         't',
     }));
 
-    auto context = std::make_unique<Context>();
-    context->setMessageType(MessageType::Response);
-    context->setResponseStatus(ResponseStatus::Ok);
-    context->setBodySize(buffer.length());
+    Metadata metadata;
+    metadata.setMessageType(MessageType::Response);
+    metadata.setResponseStatus(ResponseStatus::Ok);
+    metadata.setBodySize(buffer.length());
 
-    EXPECT_THROW_WITH_MESSAGE(serializer.deserializeRpcResponse(buffer, *context), EnvoyException,
-                              "Cannot parse RpcResponse type from buffer");
+    auto result_or = serializer.deserializeRpcRequest(buffer, metadata);
+    EXPECT_FALSE(result_or.ok());
+
+    EXPECT_EQ("Cannot parse RpcResponse type from buffer", result_or.status().message());
   }
 
   // If a response is set to type `Exception` before calling `deserializeRpcRequest`, then
@@ -275,12 +294,15 @@ TEST(Hessian2ProtocolTest, deserializeRpcResponse) {
         't',
     }));
 
-    auto context = std::make_unique<Context>();
-    context->setMessageType(MessageType::Exception);
-    context->setResponseStatus(ResponseStatus::BadResponse);
-    context->setBodySize(buffer.length());
+    Metadata metadata;
+    metadata.setMessageType(MessageType::Exception);
+    metadata.setResponseStatus(ResponseStatus::BadResponse);
+    metadata.setBodySize(buffer.length());
 
-    auto result = serializer.deserializeRpcResponse(buffer, *context);
+    auto result_or = serializer.deserializeRpcResponse(buffer, metadata);
+    EXPECT_TRUE(result_or.ok());
+    auto result = std::move(result_or).value();
+
     EXPECT_NE(nullptr, result);
     EXPECT_EQ(0, buffer.length());
   }
@@ -293,16 +315,19 @@ TEST(Hessian2ProtocolTest, deserializeRpcResponse) {
         0x04, 't', 'e', 's', 't', // return body
     }));
 
-    auto context = std::make_unique<Context>();
-    context->setMessageType(MessageType::Response);
-    context->setResponseStatus(ResponseStatus::Ok);
-    context->setBodySize(buffer.length());
+    Metadata metadata;
+    metadata.setMessageType(MessageType::Response);
+    metadata.setResponseStatus(ResponseStatus::Ok);
+    metadata.setBodySize(buffer.length());
 
-    auto result = serializer.deserializeRpcResponse(buffer, *context);
+    auto result_or = serializer.deserializeRpcResponse(buffer, metadata);
+    EXPECT_TRUE(result_or.ok());
+    auto result = std::move(result_or).value();
+
     EXPECT_NE(nullptr, result);
 
     EXPECT_EQ(RpcResponseType::ResponseValueWithAttachments, result->responseType().value());
-    EXPECT_EQ(MessageType::Response, context->messageType());
+    EXPECT_EQ(MessageType::Response, metadata.messageType());
   }
 
   // Exception response.
@@ -313,18 +338,21 @@ TEST(Hessian2ProtocolTest, deserializeRpcResponse) {
         0x04, 't', 'e', 's', 't', // return body
     }));
 
-    auto context = std::make_unique<Context>();
-    context->setMessageType(MessageType::Response);
-    context->setResponseStatus(ResponseStatus::Ok);
-    context->setBodySize(buffer.length());
+    Metadata metadata;
+    metadata.setMessageType(MessageType::Response);
+    metadata.setResponseStatus(ResponseStatus::Ok);
+    metadata.setBodySize(buffer.length());
 
-    auto result = serializer.deserializeRpcResponse(buffer, *context);
+    auto result_or = serializer.deserializeRpcResponse(buffer, metadata);
+    EXPECT_TRUE(result_or.ok());
+    auto result = std::move(result_or).value();
+
     EXPECT_NE(nullptr, result);
 
     EXPECT_EQ(RpcResponseType::ResponseWithExceptionWithAttachments,
               result->responseType().value());
     // The message type will be set to exception if there is response with exception.
-    EXPECT_EQ(MessageType::Exception, context->messageType());
+    EXPECT_EQ(MessageType::Exception, metadata.messageType());
   }
 
   // Exception response.
@@ -335,16 +363,19 @@ TEST(Hessian2ProtocolTest, deserializeRpcResponse) {
         0x04, 't', 'e', 's', 't', // return body
     }));
 
-    auto context = std::make_unique<Context>();
-    context->setMessageType(MessageType::Response);
-    context->setResponseStatus(ResponseStatus::Ok);
-    context->setBodySize(buffer.length());
+    Metadata metadata;
+    metadata.setMessageType(MessageType::Response);
+    metadata.setResponseStatus(ResponseStatus::Ok);
+    metadata.setBodySize(buffer.length());
 
-    auto result = serializer.deserializeRpcResponse(buffer, *context);
+    auto result_or = serializer.deserializeRpcResponse(buffer, metadata);
+    EXPECT_TRUE(result_or.ok());
+    auto result = std::move(result_or).value();
+
     EXPECT_NE(nullptr, result);
 
     EXPECT_EQ(RpcResponseType::ResponseWithException, result->responseType().value());
-    EXPECT_EQ(MessageType::Exception, context->messageType());
+    EXPECT_EQ(MessageType::Exception, metadata.messageType());
   }
 
   // Normal response.
@@ -355,16 +386,19 @@ TEST(Hessian2ProtocolTest, deserializeRpcResponse) {
         0x04, 't', 'e', 's', 't', // return body
     }));
 
-    auto context = std::make_unique<Context>();
-    context->setMessageType(MessageType::Response);
-    context->setResponseStatus(ResponseStatus::Ok);
-    context->setBodySize(buffer.length());
+    Metadata metadata;
+    metadata.setMessageType(MessageType::Response);
+    metadata.setResponseStatus(ResponseStatus::Ok);
+    metadata.setBodySize(buffer.length());
 
-    auto result = serializer.deserializeRpcResponse(buffer, *context);
+    auto result_or = serializer.deserializeRpcResponse(buffer, metadata);
+    EXPECT_TRUE(result_or.ok());
+    auto result = std::move(result_or).value();
+
     EXPECT_NE(nullptr, result);
 
     EXPECT_EQ(RpcResponseType::ResponseWithValue, result->responseType().value());
-    EXPECT_EQ(MessageType::Response, context->messageType());
+    EXPECT_EQ(MessageType::Response, metadata.messageType());
   }
 
   {
@@ -385,16 +419,19 @@ TEST(Hessian2ProtocolTest, deserializeRpcResponse) {
         'Z',
     }));
 
-    auto context = std::make_unique<Context>();
-    context->setMessageType(MessageType::Response);
-    context->setResponseStatus(ResponseStatus::Ok);
-    context->setBodySize(buffer.length());
+    Metadata metadata;
+    metadata.setMessageType(MessageType::Response);
+    metadata.setResponseStatus(ResponseStatus::Ok);
+    metadata.setBodySize(buffer.length());
 
-    auto result = serializer.deserializeRpcResponse(buffer, *context);
+    auto result_or = serializer.deserializeRpcResponse(buffer, metadata);
+    EXPECT_TRUE(result_or.ok());
+    auto result = std::move(result_or).value();
+
     EXPECT_NE(nullptr, result);
 
     EXPECT_EQ(RpcResponseType::ResponseNullValueWithAttachments, result->responseType().value());
-    EXPECT_EQ(MessageType::Response, context->messageType());
+    EXPECT_EQ(MessageType::Response, metadata.messageType());
   }
 
   // Incorrect body size
@@ -405,13 +442,14 @@ TEST(Hessian2ProtocolTest, deserializeRpcResponse) {
         0x04, 't', 'e', 's', 't', // return body
     }));
 
-    auto context = std::make_unique<Context>();
-    context->setMessageType(MessageType::Response);
-    context->setResponseStatus(ResponseStatus::Ok);
-    context->setBodySize(0);
+    Metadata metadata;
+    metadata.setMessageType(MessageType::Response);
+    metadata.setResponseStatus(ResponseStatus::Ok);
+    metadata.setBodySize(0);
 
-    EXPECT_THROW_WITH_MESSAGE(serializer.deserializeRpcResponse(buffer, *context), EnvoyException,
-                              "RpcResponse size(1) large than body size(0)");
+    auto result_or = serializer.deserializeRpcResponse(buffer, metadata);
+    EXPECT_FALSE(result_or.ok());
+    EXPECT_EQ("RpcResponse size(1) large than body size(0)", result_or.status().message());
   }
 
   // Incorrect return type
@@ -422,28 +460,27 @@ TEST(Hessian2ProtocolTest, deserializeRpcResponse) {
         0x04, 't', 'e', 's', 't', // return body
     }));
 
-    auto context = std::make_unique<Context>();
-    context->setMessageType(MessageType::Response);
-    context->setResponseStatus(ResponseStatus::Ok);
-    context->setBodySize(buffer.length());
+    Metadata metadata;
+    metadata.setMessageType(MessageType::Response);
+    metadata.setResponseStatus(ResponseStatus::Ok);
+    metadata.setBodySize(buffer.length());
 
-    EXPECT_THROW_WITH_MESSAGE(serializer.deserializeRpcResponse(buffer, *context), EnvoyException,
-                              "not supported return type 6");
+    auto result_or = serializer.deserializeRpcResponse(buffer, metadata);
+    EXPECT_FALSE(result_or.ok());
+    EXPECT_EQ("not supported return type 6", result_or.status().message());
   }
 }
 
-TEST(Hessian2ProtocolTest, serializeRpcRequest) {
+TEST(Hessian2ProtocolTest, SerializeRpcRequest) {
   Hessian2SerializerImpl serializer;
 
   // Heartbeat request.
   {
-    auto context = std::make_unique<Context>();
-    context->setMessageType(MessageType::HeartbeatRequest);
-    auto metadata = std::make_shared<MessageMetadata>();
-    metadata->setContext(std::move(context));
+    Metadata metadata;
+    metadata.setMessageType(MessageType::HeartbeatRequest);
 
     Buffer::OwnedImpl buffer;
-    serializer.serializeRpcRequest(buffer, *metadata);
+    serializer.serializeRpcRequest(buffer, metadata, {});
 
     EXPECT_EQ(1, buffer.length());
     EXPECT_EQ("N", buffer.toString());
@@ -451,8 +488,8 @@ TEST(Hessian2ProtocolTest, serializeRpcRequest) {
 
   // Normal request.
   {
-    auto context = std::make_unique<Context>();
-    context->setMessageType(MessageType::Request);
+    Metadata metadata;
+    metadata.setMessageType(MessageType::Request);
 
     auto request = std::make_unique<RpcRequest>("v", "v", "v", "v");
 
@@ -461,12 +498,8 @@ TEST(Hessian2ProtocolTest, serializeRpcRequest) {
 
     request->content().initialize("Z", std::move(args), {});
 
-    auto metadata = std::make_shared<MessageMetadata>();
-    metadata->setContext(std::move(context));
-    metadata->setRequest(std::move(request));
-
     Buffer::OwnedImpl buffer;
-    serializer.serializeRpcRequest(buffer, *metadata);
+    serializer.serializeRpcRequest(buffer, metadata, *request);
 
     EXPECT_EQ(
         std::string({'\x1', 'v', '\x1', 'v', '\x1', 'v', '\x1', 'v', '\x1', 'Z', 'T', 'H', 'Z'}),
@@ -476,8 +509,8 @@ TEST(Hessian2ProtocolTest, serializeRpcRequest) {
   // Normal request with attachment update.
   {
 
-    auto context = std::make_unique<Context>();
-    context->setMessageType(MessageType::Request);
+    Metadata metadata;
+    metadata.setMessageType(MessageType::Request);
 
     auto request = std::make_unique<RpcRequest>("v", "v", "v", "v");
 
@@ -487,12 +520,8 @@ TEST(Hessian2ProtocolTest, serializeRpcRequest) {
     request->content().initialize("Z", std::move(args), {});
     request->content().setAttachment("key", "value");
 
-    auto metadata = std::make_shared<MessageMetadata>();
-    metadata->setContext(std::move(context));
-    metadata->setRequest(std::move(request));
-
     Buffer::OwnedImpl buffer;
-    serializer.serializeRpcRequest(buffer, *metadata);
+    serializer.serializeRpcRequest(buffer, metadata, *request);
 
     EXPECT_EQ(true, absl::StrContains(buffer.toString(), "value"));
   }
@@ -503,14 +532,12 @@ TEST(Hessian2ProtocolTest, serializeRpcResponse) {
 
   // Heartbeat response.
   {
-    auto context = std::make_unique<Context>();
-    context->setMessageType(MessageType::HeartbeatResponse);
-    context->setResponseStatus(ResponseStatus::Ok);
-    auto metadata = std::make_shared<MessageMetadata>();
-    metadata->setContext(std::move(context));
+    Metadata metadata;
+    metadata.setMessageType(MessageType::HeartbeatResponse);
+    metadata.setResponseStatus(ResponseStatus::Ok);
 
     Buffer::OwnedImpl buffer;
-    serializer.serializeRpcResponse(buffer, *metadata);
+    serializer.serializeRpcResponse(buffer, metadata, {});
 
     EXPECT_EQ(1, buffer.length());
     EXPECT_EQ("N", buffer.toString());
@@ -518,9 +545,9 @@ TEST(Hessian2ProtocolTest, serializeRpcResponse) {
 
   // Normal response.
   {
-    auto context = std::make_unique<Context>();
-    context->setMessageType(MessageType::Response);
-    context->setResponseStatus(ResponseStatus::Ok);
+    Metadata metadata;
+    metadata.setMessageType(MessageType::Response);
+    metadata.setResponseStatus(ResponseStatus::Ok);
 
     auto response = std::make_unique<RpcResponse>();
     response->setResponseType(RpcResponseType::ResponseWithValue);
@@ -530,12 +557,8 @@ TEST(Hessian2ProtocolTest, serializeRpcResponse) {
     response_content.add("anything");
     response->content().initialize(response_content, 9);
 
-    auto metadata = std::make_shared<MessageMetadata>();
-    metadata->setContext(std::move(context));
-    metadata->setResponse(std::move(response));
-
     Buffer::OwnedImpl buffer;
-    serializer.serializeRpcResponse(buffer, *metadata);
+    serializer.serializeRpcResponse(buffer, metadata, *response);
 
     // The data in message buffer will be used directly for normal response.
     EXPECT_EQ("anything", buffer.toString().substr(2));

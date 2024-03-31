@@ -16,10 +16,14 @@ public:
 
   // DubboProxy::Serializer
   MOCK_METHOD(SerializeType, type, (), (const));
-  MOCK_METHOD(RpcRequestPtr, deserializeRpcRequest, (Buffer::Instance&, Context&));
-  MOCK_METHOD(RpcResponsePtr, deserializeRpcResponse, (Buffer::Instance&, Context&));
-  MOCK_METHOD(void, serializeRpcRequest, (Buffer::Instance&, MessageMetadata&));
-  MOCK_METHOD(void, serializeRpcResponse, (Buffer::Instance&, MessageMetadata&));
+  MOCK_METHOD(absl::StatusOr<RpcRequestPtr>, deserializeRpcRequest, (Buffer::Instance&, Metadata&),
+              (const));
+  MOCK_METHOD(absl::StatusOr<RpcResponsePtr>, deserializeRpcResponse,
+              (Buffer::Instance&, Metadata&), (const));
+  MOCK_METHOD(void, serializeRpcRequest,
+              (Buffer::Instance&, const Metadata&, OptRef<const RpcRequest>), (const));
+  MOCK_METHOD(void, serializeRpcResponse,
+              (Buffer::Instance&, const Metadata&, OptRef<const RpcResponse>), (const));
 
   SerializeType type_{SerializeType::Hessian2};
 };

@@ -40,24 +40,23 @@ TEST(DubboCodecTest, GetSerializer) {
   auto raw_serializer = serializer.get();
   codec.initilize(std::move(serializer));
 
-  EXPECT_EQ(raw_serializer, codec.serializer().get());
+  EXPECT_EQ(raw_serializer, &codec.serializer());
 }
 
 TEST(DubboCodecTest, CodecWithSerializer) {
   auto codec = DubboCodec::codecFromSerializeType(SerializeType::Hessian2);
-  EXPECT_EQ(SerializeType::Hessian2, codec->serializer()->type());
+  EXPECT_EQ(SerializeType::Hessian2, codec.serializer().type());
 }
 
 TEST(DubboCodecTest, NotEnoughData) {
   Buffer::OwnedImpl buffer;
   DubboCodec codec;
-  MessageMetadataSharedPtr metadata = std::make_shared<MessageMetadata>();
-  auto result = codec.decodeHeader(buffer, *metadata);
-  EXPECT_EQ(DecodeStatus::Waiting, result);
+  auto result = codec.decodeHeader(buffer);
+  EXPECT_EQ(DecodeStatus::Waiting, result.first);
 
   buffer.add(std::string(15, 0x00));
-  result = codec.decodeHeader(buffer, *metadata);
-  EXPECT_EQ(DecodeStatus::Waiting, result);
+  result = codec.decodeHeader(buffer);
+  EXPECT_EQ(DecodeStatus::Waiting, result.first);
 }
 
 TEST(DubboCodecTest, DecodeHeaderTest) {
@@ -68,143 +67,150 @@ TEST(DubboCodecTest, DecodeHeaderTest) {
   // Invalid dubbo magic number
   {
     Buffer::OwnedImpl buffer;
-    MessageMetadataSharedPtr metadata = std::make_shared<MessageMetadata>();
     addInt64(buffer, 0);
     addInt64(buffer, 0);
-    EXPECT_THROW_WITH_MESSAGE(codec.decodeHeader(buffer, *metadata), EnvoyException,
-                              "invalid dubbo message magic number 0");
+
+    EXPECT_LOG_CONTAINS("info", "invalid dubbo message magic number 0", codec.decodeHeader(buffer));
   }
 
   // Invalid message body size
   {
     Buffer::OwnedImpl buffer;
-    MessageMetadataSharedPtr metadata = std::make_shared<MessageMetadata>();
     buffer.add(std::string({'\xda', '\xbb', '\xc2', 0x00}));
     addInt64(buffer, 1);
     addInt32(buffer, DubboCodec::MaxBodySize + 1);
     std::string exception_string =
         fmt::format("invalid dubbo message size {}", DubboCodec::MaxBodySize + 1);
-    EXPECT_THROW_WITH_MESSAGE(codec.decodeHeader(buffer, *metadata), EnvoyException,
-                              exception_string);
+
+    EXPECT_LOG_CONTAINS("info", exception_string, codec.decodeHeader(buffer));
   }
 
   // Invalid serialization type
   {
     Buffer::OwnedImpl buffer;
-    MessageMetadataSharedPtr metadata = std::make_shared<MessageMetadata>();
     buffer.add(std::string({'\xda', '\xbb', '\xc3', 0x00}));
     addInt64(buffer, 1);
     addInt32(buffer, 0xff);
-    EXPECT_THROW_WITH_MESSAGE(codec.decodeHeader(buffer, *metadata), EnvoyException,
-                              "invalid dubbo message serialization type 3");
+
+    EXPECT_LOG_CONTAINS("info", "invalid dubbo message serialization type 3",
+                        codec.decodeHeader(buffer));
   }
 
   // Invalid response status
   {
     Buffer::OwnedImpl buffer;
-    MessageMetadataSharedPtr metadata = std::make_shared<MessageMetadata>();
     buffer.add(std::string({'\xda', '\xbb', 0x02, 0x00}));
     addInt64(buffer, 1);
     addInt32(buffer, 0xff);
-    EXPECT_THROW_WITH_MESSAGE(codec.decodeHeader(buffer, *metadata), EnvoyException,
-                              "invalid dubbo message response status 0");
+
+    EXPECT_LOG_CONTAINS("info", "invalid dubbo message response status 0",
+                        codec.decodeHeader(buffer));
   }
 
   // Normal dubbo request message
   {
     Buffer::OwnedImpl buffer;
-    MessageMetadataSharedPtr metadata = std::make_shared<MessageMetadata>();
     buffer.add(std::string({'\xda', '\xbb', '\xc2', 0x00}));
     addInt64(buffer, 1);
     addInt32(buffer, 1);
 
-    auto result = codec.decodeHeader(buffer, *metadata);
-    EXPECT_EQ(DecodeStatus::Success, result);
+    auto result = codec.decodeHeader(buffer);
+    EXPECT_EQ(DecodeStatus::Success, result.first);
 
-    EXPECT_EQ(1, metadata->requestId());
-    EXPECT_EQ(1, metadata->context().bodySize());
-    EXPECT_EQ(MessageType::Request, metadata->messageType());
+    auto metadata = result.second.value();
+
+    EXPECT_EQ(1, metadata.requestId());
+    EXPECT_EQ(1, metadata.bodySize());
+    EXPECT_EQ(MessageType::Request, metadata.messageType());
   }
 
   // Oneway dubbo request message
   {
     Buffer::OwnedImpl buffer;
-    MessageMetadataSharedPtr metadata = std::make_shared<MessageMetadata>();
     buffer.add(std::string({'\xda', '\xbb', '\x82', 0x00}));
     addInt64(buffer, 1);
     addInt32(buffer, 1);
-    auto result = codec.decodeHeader(buffer, *metadata);
-    EXPECT_EQ(DecodeStatus::Success, result);
+    auto result = codec.decodeHeader(buffer);
+    EXPECT_EQ(DecodeStatus::Success, result.first);
 
-    EXPECT_EQ(1, metadata->requestId());
-    EXPECT_EQ(1, metadata->context().bodySize());
-    EXPECT_EQ(MessageType::Oneway, metadata->messageType());
+    auto metadata = result.second.value();
+
+    EXPECT_EQ(1, metadata.requestId());
+    EXPECT_EQ(1, metadata.bodySize());
+    EXPECT_EQ(MessageType::Oneway, metadata.messageType());
   }
 
   // Heartbeat request message
   {
     Buffer::OwnedImpl buffer;
-    MessageMetadataSharedPtr metadata = std::make_shared<MessageMetadata>();
+
     buffer.add(std::string({'\xda', '\xbb', '\xe2', 0x00}));
     addInt64(buffer, 1);
     addInt32(buffer, 1);
-    auto result = codec.decodeHeader(buffer, *metadata);
-    EXPECT_EQ(DecodeStatus::Success, result);
+    auto result = codec.decodeHeader(buffer);
+    EXPECT_EQ(DecodeStatus::Success, result.first);
+    auto metadata = result.second.value();
 
-    EXPECT_EQ(1, metadata->requestId());
-    EXPECT_EQ(1, metadata->context().bodySize());
-    EXPECT_EQ(MessageType::HeartbeatRequest, metadata->messageType());
+    EXPECT_EQ(1, metadata.requestId());
+    EXPECT_EQ(1, metadata.bodySize());
+    EXPECT_EQ(MessageType::HeartbeatRequest, metadata.messageType());
   }
 
   // Normal dubbo response message
   {
     Buffer::OwnedImpl buffer;
-    MessageMetadataSharedPtr metadata = std::make_shared<MessageMetadata>();
+
     buffer.add(std::string({'\xda', '\xbb', 0x02, 20}));
     addInt64(buffer, 1);
     addInt32(buffer, 1);
 
-    auto result = codec.decodeHeader(buffer, *metadata);
-    EXPECT_EQ(DecodeStatus::Success, result);
+    auto result = codec.decodeHeader(buffer);
+    EXPECT_EQ(DecodeStatus::Success, result.first);
+    auto metadata = result.second.value();
+    ;
 
-    EXPECT_EQ(1, metadata->requestId());
-    EXPECT_EQ(1, metadata->context().bodySize());
-    EXPECT_EQ(MessageType::Response, metadata->messageType());
-    EXPECT_EQ(true, metadata->hasResponseStatus());
-    EXPECT_EQ(ResponseStatus::Ok, metadata->responseStatus());
+    EXPECT_EQ(1, metadata.requestId());
+    EXPECT_EQ(1, metadata.bodySize());
+    EXPECT_EQ(MessageType::Response, metadata.messageType());
+    EXPECT_EQ(true, metadata.response());
+    EXPECT_EQ(ResponseStatus::Ok, metadata.responseStatus());
   }
 
   // Normal dubbo response with error.
   {
     Buffer::OwnedImpl buffer;
-    MessageMetadataSharedPtr metadata = std::make_shared<MessageMetadata>();
+
     buffer.add(std::string({'\xda', '\xbb', 0x02, 40}));
     addInt64(buffer, 1);
     addInt32(buffer, 1);
 
-    auto result = codec.decodeHeader(buffer, *metadata);
-    EXPECT_EQ(DecodeStatus::Success, result);
+    auto result = codec.decodeHeader(buffer);
+    EXPECT_EQ(DecodeStatus::Success, result.first);
+    auto metadata = result.second.value();
+    ;
 
-    EXPECT_EQ(1, metadata->requestId());
-    EXPECT_EQ(1, metadata->context().bodySize());
-    EXPECT_EQ(MessageType::Exception, metadata->messageType());
-    EXPECT_EQ(true, metadata->hasResponseStatus());
-    EXPECT_EQ(ResponseStatus::BadRequest, metadata->responseStatus());
+    EXPECT_EQ(1, metadata.requestId());
+    EXPECT_EQ(1, metadata.bodySize());
+    EXPECT_EQ(MessageType::Exception, metadata.messageType());
+    EXPECT_EQ(true, metadata.response());
+    EXPECT_EQ(ResponseStatus::BadRequest, metadata.responseStatus());
   }
 
   // Heartbeat response message
   {
     Buffer::OwnedImpl buffer;
-    MessageMetadataSharedPtr metadata = std::make_shared<MessageMetadata>();
+
     buffer.add(std::string({'\xda', '\xbb', '\x22', 20}));
     addInt64(buffer, 1);
     addInt32(buffer, 1);
-    auto result = codec.decodeHeader(buffer, *metadata);
-    EXPECT_EQ(DecodeStatus::Success, result);
+    auto result = codec.decodeHeader(buffer);
+    EXPECT_EQ(DecodeStatus::Success, result.first);
+    auto metadata = result.second.value();
+    ;
 
-    EXPECT_EQ(1, metadata->requestId());
-    EXPECT_EQ(1, metadata->context().bodySize());
-    EXPECT_EQ(MessageType::HeartbeatResponse, metadata->messageType());
+    EXPECT_EQ(1, metadata.requestId());
+    EXPECT_EQ(1, metadata.bodySize());
+    EXPECT_EQ(MessageType::HeartbeatResponse, metadata.messageType());
   }
 }
 
@@ -221,16 +227,13 @@ TEST(DubboCodecTest, DecodeDataTest) {
     Buffer::OwnedImpl buffer;
     buffer.add("anything");
 
-    MessageMetadata metadata;
-    auto context = std::make_unique<Context>();
+    Metadata metadata;
 
-    context->setMessageType(MessageType::Request);
-    context->setRequestId(1);
-    context->setBodySize(buffer.length() + 1);
+    metadata.setMessageType(MessageType::Request);
+    metadata.setRequestId(1);
+    metadata.setBodySize(buffer.length() + 1);
 
-    metadata.setContext(std::move(context));
-
-    EXPECT_EQ(DecodeStatus::Waiting, codec.decodeData(buffer, metadata));
+    EXPECT_EQ(DecodeStatus::Waiting, codec.decodeRequest(buffer, metadata).first);
   }
 
   // Decode request body.
@@ -238,21 +241,19 @@ TEST(DubboCodecTest, DecodeDataTest) {
     Buffer::OwnedImpl buffer;
     buffer.add("anything");
 
-    MessageMetadata metadata;
-    auto context = std::make_unique<Context>();
+    Metadata metadata;
 
-    context->setMessageType(MessageType::Request);
-    context->setRequestId(1);
-    context->setBodySize(buffer.length());
-
-    metadata.setContext(std::move(context));
+    metadata.setMessageType(MessageType::Request);
+    metadata.setRequestId(1);
+    metadata.setBodySize(buffer.length());
 
     EXPECT_CALL(*raw_serializer, deserializeRpcRequest(_, _))
         .WillOnce(
             testing::Return(testing::ByMove(std::make_unique<RpcRequest>("a", "b", "c", "d"))));
 
-    EXPECT_EQ(DecodeStatus::Success, codec.decodeData(buffer, metadata));
-    EXPECT_EQ(true, metadata.hasRequest());
+    auto result = codec.decodeRequest(buffer, metadata);
+    EXPECT_EQ(DecodeStatus::Success, result.first);
+    EXPECT_NE(nullptr, result.second);
   }
 
   // Decode request body with null request.
@@ -260,20 +261,18 @@ TEST(DubboCodecTest, DecodeDataTest) {
     Buffer::OwnedImpl buffer;
     buffer.add("anything");
 
-    MessageMetadata metadata;
-    auto context = std::make_unique<Context>();
+    Metadata metadata;
 
-    context->setMessageType(MessageType::HeartbeatRequest);
-    context->setRequestId(1);
-    context->setBodySize(buffer.length());
-
-    metadata.setContext(std::move(context));
+    metadata.setMessageType(MessageType::HeartbeatRequest);
+    metadata.setRequestId(1);
+    metadata.setBodySize(buffer.length());
 
     EXPECT_CALL(*raw_serializer, deserializeRpcRequest(_, _))
         .WillOnce(testing::Return(testing::ByMove(nullptr)));
 
-    EXPECT_EQ(DecodeStatus::Success, codec.decodeData(buffer, metadata));
-    EXPECT_EQ(false, metadata.hasRequest());
+    auto result = codec.decodeRequest(buffer, metadata);
+    EXPECT_EQ(DecodeStatus::Success, result.first);
+    EXPECT_EQ(nullptr, result.second);
   }
 
   // Decode response body.
@@ -281,21 +280,19 @@ TEST(DubboCodecTest, DecodeDataTest) {
     Buffer::OwnedImpl buffer;
     buffer.add("anything");
 
-    MessageMetadata metadata;
-    auto context = std::make_unique<Context>();
+    Metadata metadata;
 
-    context->setMessageType(MessageType::Response);
-    context->setRequestId(1);
-    context->setBodySize(buffer.length());
-    context->setResponseStatus(ResponseStatus::Ok);
-
-    metadata.setContext(std::move(context));
+    metadata.setMessageType(MessageType::Response);
+    metadata.setRequestId(1);
+    metadata.setBodySize(buffer.length());
+    metadata.setResponseStatus(ResponseStatus::Ok);
 
     EXPECT_CALL(*raw_serializer, deserializeRpcResponse(_, _))
         .WillOnce(testing::Return(testing::ByMove(std::make_unique<RpcResponse>())));
 
-    EXPECT_EQ(DecodeStatus::Success, codec.decodeData(buffer, metadata));
-    EXPECT_EQ(true, metadata.hasResponse());
+    auto result = codec.decodeResponse(buffer, metadata);
+    EXPECT_EQ(DecodeStatus::Success, result.first);
+    EXPECT_NE(nullptr, result.second);
   }
 
   // Decode response body.
@@ -303,21 +300,19 @@ TEST(DubboCodecTest, DecodeDataTest) {
     Buffer::OwnedImpl buffer;
     buffer.add("anything");
 
-    MessageMetadata metadata;
-    auto context = std::make_unique<Context>();
+    Metadata metadata;
 
-    context->setMessageType(MessageType::HeartbeatResponse);
-    context->setRequestId(1);
-    context->setBodySize(buffer.length());
-    context->setResponseStatus(ResponseStatus::Ok);
-
-    metadata.setContext(std::move(context));
+    metadata.setMessageType(MessageType::HeartbeatResponse);
+    metadata.setRequestId(1);
+    metadata.setBodySize(buffer.length());
+    metadata.setResponseStatus(ResponseStatus::Ok);
 
     EXPECT_CALL(*raw_serializer, deserializeRpcResponse(_, _))
         .WillOnce(testing::Return(testing::ByMove(nullptr)));
 
-    EXPECT_EQ(DecodeStatus::Success, codec.decodeData(buffer, metadata));
-    EXPECT_EQ(false, metadata.hasResponse());
+    auto result = codec.decodeResponse(buffer, metadata);
+    EXPECT_EQ(DecodeStatus::Success, result.first);
+    EXPECT_NE(nullptr, result.second);
   }
 
   // Encode unexpected message type will cause exit.
@@ -325,17 +320,14 @@ TEST(DubboCodecTest, DecodeDataTest) {
     Buffer::OwnedImpl buffer;
     buffer.add("anything");
 
-    MessageMetadata metadata;
-    auto context = std::make_unique<Context>();
+    Metadata metadata;
 
-    context->setMessageType(static_cast<MessageType>(6));
-    context->setRequestId(1);
-    context->setBodySize(buffer.length());
-    context->setResponseStatus(ResponseStatus::Ok);
+    metadata.setMessageType(static_cast<MessageType>(6));
+    metadata.setRequestId(1);
+    metadata.setBodySize(buffer.length());
+    metadata.setResponseStatus(ResponseStatus::Ok);
 
-    metadata.setContext(std::move(context));
-
-    EXPECT_DEATH(codec.decodeData(buffer, metadata), ".*panic: corrupted enum.*");
+    EXPECT_DEATH(codec.decodeResponse(buffer, metadata), ".*panic: corrupted enum.*");
   }
 }
 
@@ -350,19 +342,16 @@ TEST(DubboCodecTest, EncodeTest) {
   // Encode normal request.
   {
     Buffer::OwnedImpl buffer;
-    MessageMetadata metadata;
+    Metadata metadata;
 
-    auto context = std::make_unique<Context>();
-    context->setMessageType(MessageType::Request);
-    context->setRequestId(12345);
+    metadata.setMessageType(MessageType::Request);
+    metadata.setRequestId(12345);
 
-    metadata.setContext(std::move(context));
+    EXPECT_CALL(*raw_serializer, serializeRpcRequest(_, _, _))
+        .WillOnce(testing::Invoke([](Buffer::Instance& buffer, const Metadata&,
+                                     OptRef<const RpcRequest>) { buffer.add("anything"); }));
 
-    EXPECT_CALL(*raw_serializer, serializeRpcRequest(_, _))
-        .WillOnce(testing::Invoke(
-            [](Buffer::Instance& buffer, MessageMetadata&) { buffer.add("anything"); }));
-
-    codec.encode(buffer, metadata);
+    codec.encodeEntireMessage(buffer, metadata, OptRef<const RpcRequest>{});
 
     EXPECT_EQ(DubboCodec::HeadersSize + 8, buffer.length());
 
@@ -386,19 +375,16 @@ TEST(DubboCodecTest, EncodeTest) {
   // Encode oneway request.
   {
     Buffer::OwnedImpl buffer;
-    MessageMetadata metadata;
+    Metadata metadata;
 
-    auto context = std::make_unique<Context>();
-    context->setMessageType(MessageType::Oneway);
-    context->setRequestId(12345);
+    metadata.setMessageType(MessageType::Oneway);
+    metadata.setRequestId(12345);
 
-    metadata.setContext(std::move(context));
+    EXPECT_CALL(*raw_serializer, serializeRpcRequest(_, _, _))
+        .WillOnce(testing::Invoke([](Buffer::Instance& buffer, const Metadata&,
+                                     OptRef<const RpcRequest>) { buffer.add("anything"); }));
 
-    EXPECT_CALL(*raw_serializer, serializeRpcRequest(_, _))
-        .WillOnce(testing::Invoke(
-            [](Buffer::Instance& buffer, MessageMetadata&) { buffer.add("anything"); }));
-
-    codec.encode(buffer, metadata);
+    codec.encodeEntireMessage(buffer, metadata, OptRef<const RpcRequest>{});
 
     EXPECT_EQ(DubboCodec::HeadersSize + 8, buffer.length());
 
@@ -421,19 +407,16 @@ TEST(DubboCodecTest, EncodeTest) {
   // Encode heartbeat request.
   {
     Buffer::OwnedImpl buffer;
-    MessageMetadata metadata;
+    Metadata metadata;
 
-    auto context = std::make_unique<Context>();
-    context->setMessageType(MessageType::HeartbeatRequest);
-    context->setRequestId(12345);
+    metadata.setMessageType(MessageType::HeartbeatRequest);
+    metadata.setRequestId(12345);
 
-    metadata.setContext(std::move(context));
+    EXPECT_CALL(*raw_serializer, serializeRpcRequest(_, _, _))
+        .WillOnce(testing::Invoke([](Buffer::Instance& buffer, const Metadata&,
+                                     OptRef<const RpcRequest>) { buffer.add("N"); }));
 
-    EXPECT_CALL(*raw_serializer, serializeRpcRequest(_, _))
-        .WillOnce(
-            testing::Invoke([](Buffer::Instance& buffer, MessageMetadata&) { buffer.add("N"); }));
-
-    codec.encode(buffer, metadata);
+    codec.encodeEntireMessage(buffer, metadata, OptRef<const RpcRequest>{});
 
     EXPECT_EQ(DubboCodec::HeadersSize + 1, buffer.length());
 
@@ -456,20 +439,17 @@ TEST(DubboCodecTest, EncodeTest) {
   // Encode normal response.
   {
     Buffer::OwnedImpl buffer;
-    MessageMetadata metadata;
+    Metadata metadata;
 
-    auto context = std::make_unique<Context>();
-    context->setMessageType(MessageType::Response);
-    context->setResponseStatus(ResponseStatus::Ok);
-    context->setRequestId(12345);
+    metadata.setMessageType(MessageType::Response);
+    metadata.setResponseStatus(ResponseStatus::Ok);
+    metadata.setRequestId(12345);
 
-    metadata.setContext(std::move(context));
+    EXPECT_CALL(*raw_serializer, serializeRpcResponse(_, _, _))
+        .WillOnce(testing::Invoke([](Buffer::Instance& buffer, const Metadata&,
+                                     OptRef<const RpcResponse>) { buffer.add("anything"); }));
 
-    EXPECT_CALL(*raw_serializer, serializeRpcResponse(_, _))
-        .WillOnce(testing::Invoke(
-            [](Buffer::Instance& buffer, MessageMetadata&) { buffer.add("anything"); }));
-
-    codec.encode(buffer, metadata);
+    codec.encodeEntireMessage(buffer, metadata, OptRef<const RpcResponse>{});
 
     EXPECT_EQ(DubboCodec::HeadersSize + 8, buffer.length());
 
@@ -492,20 +472,17 @@ TEST(DubboCodecTest, EncodeTest) {
   // Encode exception response
   {
     Buffer::OwnedImpl buffer;
-    MessageMetadata metadata;
+    Metadata metadata;
 
-    auto context = std::make_unique<Context>();
-    context->setMessageType(MessageType::Exception);
-    context->setResponseStatus(ResponseStatus::BadRequest);
-    context->setRequestId(12345);
+    metadata.setMessageType(MessageType::Exception);
+    metadata.setResponseStatus(ResponseStatus::BadRequest);
+    metadata.setRequestId(12345);
 
-    metadata.setContext(std::move(context));
+    EXPECT_CALL(*raw_serializer, serializeRpcResponse(_, _, _))
+        .WillOnce(testing::Invoke([](Buffer::Instance& buffer, const Metadata&,
+                                     OptRef<const RpcResponse>) { buffer.add("anything"); }));
 
-    EXPECT_CALL(*raw_serializer, serializeRpcResponse(_, _))
-        .WillOnce(testing::Invoke(
-            [](Buffer::Instance& buffer, MessageMetadata&) { buffer.add("anything"); }));
-
-    codec.encode(buffer, metadata);
+    codec.encodeEntireMessage(buffer, metadata, OptRef<const RpcResponse>{});
 
     EXPECT_EQ(DubboCodec::HeadersSize + 8, buffer.length());
 
@@ -528,20 +505,17 @@ TEST(DubboCodecTest, EncodeTest) {
   // Encode exception response with ServerError
   {
     Buffer::OwnedImpl buffer;
-    MessageMetadata metadata;
+    Metadata metadata;
 
-    auto context = std::make_unique<Context>();
-    context->setMessageType(MessageType::Exception);
-    context->setResponseStatus(ResponseStatus::ServerError);
-    context->setRequestId(12345);
+    metadata.setMessageType(MessageType::Exception);
+    metadata.setResponseStatus(ResponseStatus::ServerError);
+    metadata.setRequestId(12345);
 
-    metadata.setContext(std::move(context));
+    EXPECT_CALL(*raw_serializer, serializeRpcResponse(_, _, _))
+        .WillOnce(testing::Invoke([](Buffer::Instance& buffer, const Metadata&,
+                                     OptRef<const RpcResponse>) { buffer.add("anything"); }));
 
-    EXPECT_CALL(*raw_serializer, serializeRpcResponse(_, _))
-        .WillOnce(testing::Invoke(
-            [](Buffer::Instance& buffer, MessageMetadata&) { buffer.add("anything"); }));
-
-    codec.encode(buffer, metadata);
+    codec.encodeEntireMessage(buffer, metadata, OptRef<const RpcResponse>{});
 
     EXPECT_EQ(DubboCodec::HeadersSize + 8, buffer.length());
 
@@ -564,20 +538,17 @@ TEST(DubboCodecTest, EncodeTest) {
   // Encode heartbeat response
   {
     Buffer::OwnedImpl buffer;
-    MessageMetadata metadata;
+    Metadata metadata;
 
-    auto context = std::make_unique<Context>();
-    context->setMessageType(MessageType::HeartbeatResponse);
-    context->setResponseStatus(ResponseStatus::Ok);
-    context->setRequestId(12345);
+    metadata.setMessageType(MessageType::HeartbeatResponse);
+    metadata.setResponseStatus(ResponseStatus::Ok);
+    metadata.setRequestId(12345);
 
-    metadata.setContext(std::move(context));
+    EXPECT_CALL(*raw_serializer, serializeRpcResponse(_, _, _))
+        .WillOnce(testing::Invoke([](Buffer::Instance& buffer, const Metadata&,
+                                     OptRef<const RpcResponse>) { buffer.add("N"); }));
 
-    EXPECT_CALL(*raw_serializer, serializeRpcResponse(_, _))
-        .WillOnce(
-            testing::Invoke([](Buffer::Instance& buffer, MessageMetadata&) { buffer.add("N"); }));
-
-    codec.encode(buffer, metadata);
+    codec.encodeEntireMessage(buffer, metadata, OptRef<const RpcResponse>{});
 
     EXPECT_EQ(DubboCodec::HeadersSize + 1, buffer.length());
 
@@ -600,16 +571,14 @@ TEST(DubboCodecTest, EncodeTest) {
   // Encode unexpected message type will cause exit.
   {
     Buffer::OwnedImpl buffer;
-    MessageMetadata metadata;
+    Metadata metadata;
 
-    auto context = std::make_unique<Context>();
-    context->setMessageType(static_cast<MessageType>(6));
-    context->setResponseStatus(ResponseStatus::Ok);
-    context->setRequestId(12345);
+    metadata.setMessageType(static_cast<MessageType>(6));
+    metadata.setResponseStatus(ResponseStatus::Ok);
+    metadata.setRequestId(12345);
 
-    metadata.setContext(std::move(context));
-
-    EXPECT_DEATH(codec.encode(buffer, metadata), ".*panic: corrupted enum.*");
+    EXPECT_DEATH(codec.encodeEntireMessage(buffer, metadata, OptRef<const RpcResponse>{}),
+                 ".*panic: corrupted enum.*");
   }
 }
 
@@ -620,163 +589,35 @@ TEST(DubboCodecTest, EncodeHeaderForTestTest) {
   {
     Buffer::OwnedImpl buffer;
 
-    auto context = std::make_unique<Context>();
-    context->setMessageType(static_cast<MessageType>(6));
-    context->setResponseStatus(ResponseStatus::Ok);
-    context->setRequestId(12345);
+    Metadata metadata;
+    metadata.setMessageType(static_cast<MessageType>(6));
+    metadata.setResponseStatus(ResponseStatus::Ok);
+    metadata.setRequestId(12345);
 
-    EXPECT_DEATH(codec.encodeHeaderForTest(buffer, *context), ".*panic: corrupted enum.*");
+    EXPECT_DEATH(codec.encodeHeaderForTest(buffer, metadata), ".*panic: corrupted enum.*");
   }
 }
 
 TEST(DirectResponseUtilTest, DirectResponseUtilTest) {
-  // Heartbeat response test.
-  {
-    MessageMetadata metadata;
-    auto context = std::make_unique<Context>();
-    context->setMessageType(MessageType::HeartbeatRequest);
-    context->setRequestId(12345);
-
-    metadata.setContext(std::move(context));
-
-    auto response = DirectResponseUtil::heartbeatResponse(metadata);
-
-    EXPECT_EQ(MessageType::HeartbeatResponse, response->messageType());
-    EXPECT_EQ(12345, response->requestId());
-    EXPECT_EQ(ResponseStatus::Ok, response->responseStatus());
-    EXPECT_EQ(true, response->context().heartbeat());
-  }
-
   // Local normal response.
   {
-    MessageMetadata metadata;
-    auto context = std::make_unique<Context>();
-    context->setMessageType(MessageType::Request);
-    context->setRequestId(12345);
 
-    metadata.setContext(std::move(context));
+    auto response = DirectResponseUtil::localResponse(absl::OkStatus(), "anything");
 
-    auto response = DirectResponseUtil::localResponse(
-        metadata, ResponseStatus::Ok, RpcResponseType::ResponseWithValue, "anything");
-
-    EXPECT_EQ(MessageType::Response, response->messageType());
-    EXPECT_EQ(12345, response->requestId());
-    EXPECT_EQ(ResponseStatus::Ok, response->responseStatus());
-    EXPECT_EQ(false, response->context().heartbeat());
-    EXPECT_EQ(RpcResponseType::ResponseWithValue, response->response().responseType().value());
-
-    auto& typed_response = response->mutableResponse();
-    EXPECT_EQ("anything", typed_response.content().result()->toString().value().get());
+    EXPECT_EQ(RpcResponseType::ResponseValueWithAttachments, response->responseType().value());
+    EXPECT_EQ("anything", response->content().result()->toString().value().get());
+    EXPECT_EQ("ok", response->content().attachments().at("envoy-local-response-status"));
   }
 
   // Local normal response without response type.
   {
-    MessageMetadata metadata;
-    auto context = std::make_unique<Context>();
-    context->setMessageType(MessageType::Request);
-    context->setRequestId(12345);
+    auto response = DirectResponseUtil::localResponse(absl::InvalidArgumentError("error-status"),
+                                                      "error-message");
 
-    metadata.setContext(std::move(context));
-
-    auto response =
-        DirectResponseUtil::localResponse(metadata, ResponseStatus::Ok, absl::nullopt, "anything");
-
-    EXPECT_EQ(MessageType::Response, response->messageType());
-    EXPECT_EQ(12345, response->requestId());
-    EXPECT_EQ(ResponseStatus::Ok, response->responseStatus());
-    EXPECT_EQ(false, response->context().heartbeat());
-    EXPECT_EQ(true, response->response().responseType().has_value());
-    EXPECT_EQ(RpcResponseType::ResponseWithValue, response->response().responseType().value());
-
-    auto& typed_response = response->mutableResponse();
-    EXPECT_EQ("anything", typed_response.content().result()->toString().value().get());
-  }
-
-  // Local normal response with exception type.
-  {
-    MessageMetadata metadata;
-    auto context = std::make_unique<Context>();
-    context->setMessageType(MessageType::Request);
-    context->setRequestId(12345);
-
-    metadata.setContext(std::move(context));
-
-    auto response = DirectResponseUtil::localResponse(
-        metadata, ResponseStatus::Ok, RpcResponseType::ResponseWithException, "anything");
-
-    EXPECT_EQ(MessageType::Exception, response->messageType());
-    EXPECT_EQ(12345, response->requestId());
-    EXPECT_EQ(ResponseStatus::Ok, response->responseStatus());
-    EXPECT_EQ(false, response->context().heartbeat());
-    EXPECT_EQ(RpcResponseType::ResponseWithException, response->response().responseType().value());
-
-    auto& typed_response = response->mutableResponse();
-    EXPECT_EQ("anything", typed_response.content().result()->toString().value().get());
-  }
-
-  // Local normal response with exception type.
-  {
-    MessageMetadata metadata;
-    auto context = std::make_unique<Context>();
-    context->setMessageType(MessageType::Request);
-    context->setRequestId(12345);
-
-    metadata.setContext(std::move(context));
-
-    auto response = DirectResponseUtil::localResponse(
-        metadata, ResponseStatus::Ok, RpcResponseType::ResponseWithExceptionWithAttachments,
-        "anything");
-
-    EXPECT_EQ(MessageType::Exception, response->messageType());
-    EXPECT_EQ(12345, response->requestId());
-    EXPECT_EQ(ResponseStatus::Ok, response->responseStatus());
-    EXPECT_EQ(false, response->context().heartbeat());
     EXPECT_EQ(RpcResponseType::ResponseWithExceptionWithAttachments,
-              response->response().responseType().value());
-
-    auto& typed_response = response->mutableResponse();
-    EXPECT_EQ("anything", typed_response.content().result()->toString().value().get());
-  }
-
-  // Local exception response.
-  {
-    MessageMetadata metadata;
-    auto context = std::make_unique<Context>();
-    context->setMessageType(MessageType::Request);
-    context->setRequestId(12345);
-
-    metadata.setContext(std::move(context));
-
-    auto response = DirectResponseUtil::localResponse(
-        metadata, ResponseStatus::BadRequest, RpcResponseType::ResponseWithValue, "anything");
-
-    EXPECT_EQ(MessageType::Exception, response->messageType());
-    EXPECT_EQ(12345, response->requestId());
-    EXPECT_EQ(ResponseStatus::BadRequest, response->responseStatus());
-    EXPECT_EQ(false, response->context().heartbeat());
-    // Response type will be ignored for non-Ok response.
-    EXPECT_EQ(false, response->response().responseType().has_value());
-
-    auto& typed_response = response->mutableResponse();
-    EXPECT_EQ("anything", typed_response.content().result()->toString().value().get());
-  }
-
-  // Local response without request context.
-  {
-    MessageMetadata metadata;
-
-    auto response = DirectResponseUtil::localResponse(
-        metadata, ResponseStatus::BadRequest, RpcResponseType::ResponseWithValue, "anything");
-
-    EXPECT_EQ(MessageType::Exception, response->messageType());
-    EXPECT_EQ(0, response->requestId());
-    EXPECT_EQ(ResponseStatus::BadRequest, response->responseStatus());
-    EXPECT_EQ(false, response->context().heartbeat());
-    // Response type will be ignored for non-Ok response.
-    EXPECT_EQ(false, response->response().responseType().has_value());
-
-    auto& typed_response = response->mutableResponse();
-    EXPECT_EQ("anything", typed_response.content().result()->toString().value().get());
+              response->responseType().value());
+    EXPECT_EQ("error-message", response->content().result()->toString().value().get());
+    EXPECT_EQ("error-status", response->content().attachments().at("envoy-local-response-status"));
   }
 }
 
