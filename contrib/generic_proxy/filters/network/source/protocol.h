@@ -7,8 +7,6 @@ namespace Extensions {
 namespace NetworkFilters {
 namespace GenericProxy {
 
-class ProtocolRegister;
-
 /**
  * Class that used to represent a protocol that has a unique ID and a unique name.
  */
@@ -20,7 +18,13 @@ public:
 private:
   static StringRegistry& stringRegistry();
 
-  template <const char* NAME> static Protocol protocol() {}
+  template <const char* NAME> static Protocol protocol() {
+    static const Protocol* protocol = []() -> const Protocol* {
+      const uint32_t id = stringRegistry().add<true>(NAME);
+      return new Protocol(NAME, id);
+    }();
+    return *protocol;
+  }
 
   Protocol(absl::string_view name, uint32_t id) : name(name), id(id) {}
 };
