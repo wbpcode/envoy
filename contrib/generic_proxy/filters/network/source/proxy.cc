@@ -46,12 +46,19 @@ responseFlagFromDownstreamReasonReason(DownstreamStreamResetReason reason) {
 
 } // namespace
 
-ActiveStream::ActiveStream(Filter& parent, StreamRequestPtr request)
+ActiveStream::ActiveStream(Filter& parent, StreamRequestPtr request,
+                           absl::optional<StartTime> start_time)
     : parent_(parent), request_stream_(std::move(request)),
       request_stream_end_(request_stream_->frameFlags().endStream()),
       stream_info_(parent_.time_source_,
                    parent_.callbacks_->connection().connectionInfoProviderSharedPtr(),
                    StreamInfo::FilterState::LifeSpan::FilterChain) {
+  // Override the start time if the codec provides one.
+  if (start_time.has_value()) {
+    stream_info_.start_time_ = start_time.value().start_time;
+    stream_info_.start_time_monotonic_ = start_time.value().start_time_monotonic;
+  };
+
   if (!request_stream_end_) {
     // If the request is not fully received, register the stream to the frame handler map.
     parent_.registerFrameHandler(requestStreamId(), this);
@@ -366,27 +373,31 @@ Envoy::Network::FilterStatus Filter::onData(Envoy::Buffer::Instance& data, bool 
   return Envoy::Network::FilterStatus::StopIteration;
 }
 
-void Filter::onDecodingSuccess(StreamFramePtr request) {
-  const uint64_t stream_id = request->frameFlags().streamFlags().streamId();
+void Filter::onDecodingSuccess(StreamRequestPtr frame, absl::optional<StartTime> start_time) {
+  const uint64_t stream_id = frame->frameFlags().streamFlags().streamId();
+
+  if (!frame_handlers_.empty()) { // Quick empty check to avoid the map lookup.
+    if (auto iter = frame_handlers_.find(stream_id); iter != frame_handlers_.end()) {
+      ENVOY_LOG(error, "generic proxy: repetitive stream id: {} at same time", stream_id);
+      onDecodingFailure();
+      return;
+    }
+  }
+
+  newDownstreamRequest(std::move(frame), std::move(start_time));
+}
+
+void Filter::onDecodingSuccess(StreamFramePtr frame) {
+  const uint64_t stream_id = frame->frameFlags().streamFlags().streamId();
   // One existing stream expects this frame.
   if (auto iter = frame_handlers_.find(stream_id); iter != frame_handlers_.end()) {
-    iter->second->onRequestFrame(std::move(request));
+    iter->second->onRequestFrame(std::move(frame));
     return;
   }
 
-  StreamFramePtrHelper<StreamRequest> helper(std::move(request));
-
-  // Create a new active stream for the leading StreamRequest frame.
-  if (helper.typed_frame_ != nullptr) {
-    newDownstreamRequest(std::move(helper.typed_frame_));
-    return;
-  }
-
-  ASSERT(helper.frame_ != nullptr);
   // No existing stream expects this non-leading frame. It should not happen.
   // We treat it as request decoding failure.
-  ENVOY_LOG(error, "generic proxy: id {} not found for stream frame",
-            helper.frame_->frameFlags().streamFlags().streamId());
+  ENVOY_LOG(error, "generic proxy: id {} not found for stream frame", stream_id);
   onDecodingFailure();
 }
 
@@ -430,8 +441,8 @@ void Filter::registerFrameHandler(uint64_t stream_id, ActiveStream* raw_stream) 
 
 void Filter::unregisterFrameHandler(uint64_t stream_id) { frame_handlers_.erase(stream_id); }
 
-void Filter::newDownstreamRequest(StreamRequestPtr request) {
-  auto stream = std::make_unique<ActiveStream>(*this, std::move(request));
+void Filter::newDownstreamRequest(StreamRequestPtr request, absl::optional<StartTime> start_time) {
+  auto stream = std::make_unique<ActiveStream>(*this, std::move(request), start_time);
   auto raw_stream = stream.get();
   LinkedList::moveIntoList(std::move(stream), active_streams_);
 

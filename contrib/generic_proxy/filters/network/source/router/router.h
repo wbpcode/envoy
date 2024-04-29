@@ -119,7 +119,9 @@ public:
   void cleanUp(bool close_connection) override;
 
   // ResponseDecoderCallback
-  void onDecodingSuccess(StreamFramePtr response) override;
+  void onDecodingSuccess(StreamResponsePtr frame,
+                         absl::optional<StartTime> start_time = {}) override;
+  void onDecodingSuccess(StreamFramePtr frame) override;
   void onDecodingFailure() override;
 
   // GenericUpstream
@@ -168,7 +170,9 @@ public:
                          absl::string_view transport_failure_reason) override;
 
   // ResponseDecoderCallback
-  void onDecodingSuccess(StreamFramePtr response) override;
+  void onDecodingSuccess(StreamResponsePtr frame,
+                         absl::optional<StartTime> start_time = {}) override;
+  void onDecodingSuccess(StreamFramePtr frame) override;
   void onDecodingFailure() override;
 
   // GenericUpstream
@@ -200,7 +204,8 @@ public:
 
   void onConnectionClose(Network::ConnectionEvent event);
 
-  void onDecodingSuccess(StreamFramePtr response);
+  void onDecodingSuccess(StreamResponsePtr frame, absl::optional<StartTime> start_time = {});
+  void onDecodingSuccess(StreamFramePtr frame);
   void onDecodingFailure();
 
   // RequestEncoderCallback
@@ -212,6 +217,8 @@ public:
 
   void sendRequestStartToUpstream();
   void sendRequestFrameToUpstream();
+
+  void onUpstreamResponseComplete(bool drain_close);
 
   RouterFilter& parent_;
   uint64_t stream_id_{};

@@ -273,9 +273,10 @@ void BoundGenericUpstream::onPoolFailureImpl(ConnectionPool::PoolFailureReason r
   downstream_connection_.close(Network::ConnectionCloseType::FlushWrite);
 }
 
-void BoundGenericUpstream::onDecodingSuccess(StreamFramePtr response) {
-  const uint64_t stream_id = response->frameFlags().streamFlags().streamId();
-  const bool end_stream = response->frameFlags().endStream();
+void BoundGenericUpstream::onDecodingSuccess(StreamResponsePtr frame,
+                                             absl::optional<StartTime> start_time) {
+  const uint64_t stream_id = frame->frameFlags().streamFlags().streamId();
+  const bool end_stream = frame->frameFlags().endStream();
 
   auto it = waiting_response_requests_.find(stream_id);
   if (it == waiting_response_requests_.end()) {
@@ -290,7 +291,27 @@ void BoundGenericUpstream::onDecodingSuccess(StreamFramePtr response) {
     waiting_response_requests_.erase(it);
   }
 
-  return cb->onDecodingSuccess(std::move(response));
+  return cb->onDecodingSuccess(std::move(frame), std::move(start_time));
+}
+
+void BoundGenericUpstream::onDecodingSuccess(StreamFramePtr frame) {
+  const uint64_t stream_id = frame->frameFlags().streamFlags().streamId();
+  const bool end_stream = frame->frameFlags().endStream();
+
+  auto it = waiting_response_requests_.find(stream_id);
+  if (it == waiting_response_requests_.end()) {
+    ENVOY_LOG(error, "generic proxy: id {} not found for frame", stream_id);
+    return;
+  }
+
+  auto cb = it->second;
+
+  // If the response is end, remove the callback from the map.
+  if (end_stream) {
+    waiting_response_requests_.erase(it);
+  }
+
+  return cb->onDecodingSuccess(std::move(frame));
 }
 
 void BoundGenericUpstream::onDecodingFailure() {
@@ -334,9 +355,14 @@ void OwnedGenericUpstream::onPoolFailureImpl(ConnectionPool::PoolFailureReason r
 }
 
 // ResponseDecoderCallback
-void OwnedGenericUpstream::onDecodingSuccess(StreamFramePtr response) {
+void OwnedGenericUpstream::onDecodingSuccess(StreamResponsePtr frame,
+                                             absl::optional<StartTime> start_time) {
   ASSERT(upstream_request_ != nullptr);
-  upstream_request_->onDecodingSuccess(std::move(response));
+  upstream_request_->onDecodingSuccess(std::move(frame), std::move(start_time));
+}
+void OwnedGenericUpstream::onDecodingSuccess(StreamFramePtr frame) {
+  ASSERT(upstream_request_ != nullptr);
+  upstream_request_->onDecodingSuccess(std::move(frame));
 }
 void OwnedGenericUpstream::onDecodingFailure() {
   ASSERT(upstream_request_ != nullptr);
@@ -515,37 +541,48 @@ void UpstreamRequest::onUpstreamSuccess(Upstream::HostDescriptionConstSharedPtr 
   sendRequestFrameToUpstream();
 }
 
-void UpstreamRequest::onDecodingSuccess(StreamFramePtr response) {
-  const bool end_stream = response->frameFlags().endStream();
-  if (end_stream) {
-    clearStream(response->frameFlags().streamFlags().drainClose());
-  }
+void UpstreamRequest::onUpstreamResponseComplete(bool drain_close) {
+  clearStream(drain_close);
+  upstream_info_->upstreamTiming().onLastUpstreamRxByteReceived(parent_.time_source_);
+}
 
+void UpstreamRequest::onDecodingSuccess(StreamResponsePtr frame,
+                                        absl::optional<StartTime> start_time) {
   if (response_stream_header_received_) {
-    if (end_stream) {
-      // The response is fully received.
-      upstream_info_->upstreamTiming().onLastUpstreamRxByteReceived(parent_.time_source_);
-    }
-
-    parent_.onResponseFrame(std::move(response));
-  } else {
-    // The first frame of response is received.
-    upstream_info_->upstreamTiming().onFirstUpstreamRxByteReceived(parent_.time_source_);
-
-    StreamFramePtrHelper<StreamResponse> helper(std::move(response));
-    if (helper.typed_frame_ == nullptr) {
-      ENVOY_LOG(error, "upstream request: first frame is not StreamResponse");
-      resetStream(StreamResetReason::ProtocolError);
-      return;
-    }
-    response_stream_header_received_ = true;
-
-    if (end_stream) {
-      // The response is fully received.
-      upstream_info_->upstreamTiming().onLastUpstreamRxByteReceived(parent_.time_source_);
-    }
-    parent_.onResponseStart(std::move(helper.typed_frame_));
+    ENVOY_LOG(error, "upstream request: multiple StreamResponse received");
   }
+  response_stream_header_received_ = true;
+
+  if (start_time.has_value()) {
+    // Set the start time from the upstream codec.
+    upstream_info_->upstreamTiming().first_upstream_rx_byte_received_ =
+        start_time.value().start_time_monotonic;
+  } else {
+    // Codec does not provide the start time and use the current time as the start time.
+    upstream_info_->upstreamTiming().onFirstUpstreamRxByteReceived(parent_.time_source_);
+  }
+
+  const bool end_stream = frame->frameFlags().endStream();
+  if (end_stream) {
+    onUpstreamResponseComplete(frame->frameFlags().streamFlags().drainClose());
+  }
+
+  parent_.onResponseStart(std::move(frame));
+}
+
+void UpstreamRequest::onDecodingSuccess(ResponseFramePtr frame) {
+  if (!response_stream_header_received_) {
+    ENVOY_LOG(error, "upstream request: first frame is not StreamResponse");
+    resetStream(StreamResetReason::ProtocolError);
+    return;
+  }
+
+  const bool end_stream = frame->frameFlags().endStream();
+  if (end_stream) {
+    onUpstreamResponseComplete(frame->frameFlags().streamFlags().drainClose());
+  }
+
+  parent_.onResponseFrame(std::move(frame));
 }
 
 void UpstreamRequest::onDecodingFailure() {

@@ -14,20 +14,48 @@ namespace NetworkFilters {
 namespace GenericProxy {
 
 /**
+ * The start time of the request or response that provided by the codec to the generic
+ * proxy filter. The generic proxy filter could use this to calculate the latency of
+ * the request or response.
+ */
+struct StartTime {
+  SystemTime start_time{};
+  MonotonicTime start_time_monotonic{};
+};
+
+/**
  * Callbacks of ServerCodec.
  */
 class ServerCodecCallbacks {
 public:
   virtual ~ServerCodecCallbacks() = default;
+
   /**
-   * If request decoding success then this method will be called.
-   * @param frame request frame from decoding. Frist frame should be StreamRequest
-   * frame.
+   * If request decoding success then this method will be called. This method should
+   * be called first for the whole request.
+   *
+   * @param frame request frame from decoding.
+   * @param start_time optional start time of the request. If not provided, the generic
+   * proxy filter will use the current time as the start time of the request. This makes
+   * sense when the codec takes a long time to decode the request and the start time is
+   * not the time that calling the onDecodingSuccess() method.
+   *
+   * NOTE: This method will be called only once for the whole request.
+   */
+  virtual void onDecodingSuccess(StreamRequestPtr frame,
+                                 absl::optional<StartTime> start_time = {}) PURE;
+
+  /**
+   * If request decoding success then this method will be called. This method should
+   * be called after onDecodingSuccess(StreamRequestPtr) for the whole request.
+   *
+   * @param frame request frame from decoding.
+   *
    * NOTE: This method will be called multiple times for the multiple frames request.
    * FrameFlags and embedded StreamFlags could be used to correlate frames of same
    * request.
    */
-  virtual void onDecodingSuccess(StreamFramePtr frame) PURE;
+  virtual void onDecodingSuccess(RequestFramePtr frame) PURE;
 
   /**
    * If request decoding failure then this method will be called.
@@ -40,6 +68,7 @@ public:
    * called. By this way, when some special data is received from peer, the custom
    * codec could handle it directly and write some reply to peer without notifying
    * the generic proxy filter.
+   *
    * @param buffer data to write.
    */
   virtual void writeToConnection(Buffer::Instance& buffer) PURE;
@@ -59,15 +88,31 @@ public:
   virtual ~ClientCodecCallbacks() = default;
 
   /**
-   * If response decoding success then this method will be called.
-   * @param frame response frame from decoding. Frist frame should be StreamResponse
-   * frame.
+   * If response decoding success then this method will be called. This method should
+   * be called first for the whole response.
+   *
+   * @param frame response frame from decoding.
+   * @param start_time optional start time of the request. If not provided, the generic
+   * proxy filter will use the current time as the start time of the request. This makes
+   * sense when the codec takes a long time to decode the request and the start time is
+   * not the time that calling the onDecodingSuccess() method.
+   *
+   * NOTE: This method will be called only once for the whole response.
+   */
+  virtual void onDecodingSuccess(StreamResponsePtr frame,
+                                 absl::optional<StartTime> start_time = {}) PURE;
+
+  /**
+   * If response decoding success then this method will be called. This method should
+   * be called after onDecodingSuccess(StreamResponsePtr) for the whole response.
+   *
+   * @param frame response frame from decoding.
    * NOTE: This method will be called multiple times for the multiple frames response.
    * FrameFlags and embedded StreamFlags could be used to correlate frames of same
    * request. And the StreamFlags could also be used to correlate the response with
    * the request.
    */
-  virtual void onDecodingSuccess(StreamFramePtr frame) PURE;
+  virtual void onDecodingSuccess(ResponseFramePtr frame) PURE;
 
   /**
    * If response decoding failure then this method will be called.

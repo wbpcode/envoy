@@ -231,7 +231,7 @@ public:
     FilterContext context_;
   };
 
-  ActiveStream(Filter& parent, StreamRequestPtr request);
+  ActiveStream(Filter& parent, StreamRequestPtr request, absl::optional<StartTime> start_time);
 
   void addDecoderFilter(ActiveDecoderFilterPtr filter) {
     decoder_filters_.emplace_back(std::move(filter));
@@ -371,7 +371,10 @@ public:
   }
 
   // RequestDecoderCallback
-  void onDecodingSuccess(StreamFramePtr request) override;
+
+  void onDecodingSuccess(StreamRequestPtr frame,
+                         absl::optional<StartTime> start_time = {}) override;
+  void onDecodingSuccess(RequestFramePtr frame) override;
   void onDecodingFailure() override;
   void writeToConnection(Buffer::Instance& buffer) override;
   OptRef<Network::Connection> connection() override;
@@ -401,8 +404,9 @@ public:
   /**
    * Create a new active stream and add it to the active stream list.
    * @param request the request to be processed.
+   * @param start_time the start time of the request.
    */
-  void newDownstreamRequest(StreamRequestPtr request);
+  void newDownstreamRequest(StreamRequestPtr request, absl::optional<StartTime> start_time = {});
 
   /**
    * Move the stream to the deferred delete stream list. This is called when the stream is reset

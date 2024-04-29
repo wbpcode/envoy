@@ -135,7 +135,7 @@ public:
 using StreamFramePtr = std::unique_ptr<StreamFrame>;
 using StreamFrameSharedPtr = std::shared_ptr<StreamFrame>;
 
-class StreamBase : public StreamFrame {
+class StreamHeader : public StreamFrame {
 public:
   using IterateCallback = std::function<bool(absl::string_view key, absl::string_view val)>;
 
@@ -182,13 +182,13 @@ public:
 
 /**
  * Interface of generic request. This is derived from StreamFrame that contains the request
- * specific information. First frame of the request MUST be a StreamRequest.
+ * specific information. First frame of the request MUST be a RequestHeader.
  *
  * NOTE: using interface that provided by the TraceContext as the interface of generic request here
  * to simplify the tracing integration. This is not a good design. This should be changed in the
  * future.
  */
-class StreamRequest : public StreamBase {
+class StreamRequest : public StreamHeader {
 public:
   /**
    * Get request host.
@@ -219,6 +219,9 @@ public:
 
 using StreamRequestPtr = std::unique_ptr<StreamRequest>;
 using StreamRequestSharedPtr = std::shared_ptr<StreamRequest>;
+using RequestFrame = StreamFrame;
+using RequestFramePtr = StreamFramePtr;
+
 // Alias for backward compatibility.
 using Request = StreamRequest;
 using RequestPtr = std::unique_ptr<Request>;
@@ -266,7 +269,7 @@ private:
  * Interface of generic response. This is derived from StreamFrame that contains the response
  * specific information. First frame of the response MUST be a StreamResponse.
  */
-class StreamResponse : public StreamBase {
+class StreamResponse : public StreamHeader {
 public:
   /**
    * Get response status.
@@ -278,6 +281,9 @@ public:
 
 using StreamResponsePtr = std::unique_ptr<StreamResponse>;
 using StreamResponseSharedPtr = std::shared_ptr<StreamResponse>;
+using ResponseFrame = StreamFrame;
+using ResponseFramePtr = StreamFramePtr;
+
 // Alias for backward compatibility.
 using Response = StreamResponse;
 using ResponsePtr = std::unique_ptr<Response>;
