@@ -184,3 +184,31 @@ envoy_cc_library(
         "//envoy/tracing:trace_context_interface",
     ],
 )
+
+envoy_cc_library(
+    name = "string_registry_lib",
+    hdrs = [
+        "string_registry.h",
+    ],
+    external_deps = [
+        "abseil_node_hash_map",
+    ],
+    deps = [
+        "//source/common/common:assert_lib",
+        "//source/common/common:macros",
+        "//source/common/common:utility_lib",
+    ],
+)
+
+envoy_cc_library(
+    name = "protocol_lib",
+    hdrs = [
+        "protocol.h",
+    ],
+    srcs = [
+        "protocol.cc",
+    ],
+    deps = [
+        ":string_registry_lib",
+    ],
+)
