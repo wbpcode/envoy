@@ -1,4 +1,4 @@
-#include "source/common/formatter/stream_info_formatter.h"
+#include "source/extensions/formatter/built_in_stream_info/stream_info_formatter.h"
 
 #include <regex>
 
@@ -1734,6 +1734,14 @@ const StreamInfoFormatterProviderLookupTable& getKnownStreamInfoFormatterProvide
             }}},
       });
 }
+
+class BuiltInStreamInfoCommandParserFactory : public BuiltInCommandParserFactory {
+public:
+  std::string name() const override { return "envoy.formatter.built_in_stream_info"; }
+};
+
+REGISTER_FACTORY(BuiltInStreamInfoCommandParserFactory, BuiltInCommandParserFactory);
+REGISTER_BUILT_IN_COMMAND_PARSER(HttpFormatterContext, BuiltInStreamInfoCommandParser);
 
 } // namespace Formatter
 } // namespace Envoy

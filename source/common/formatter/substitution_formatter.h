@@ -12,15 +12,64 @@
 #include "envoy/stream_info/stream_info.h"
 
 #include "source/common/common/utility.h"
-#include "source/common/formatter/http_specific_formatter.h"
-#include "source/common/formatter/stream_info_formatter.h"
 #include "source/common/json/json_loader.h"
 
 #include "absl/container/flat_hash_map.h"
 #include "absl/types/optional.h"
 
+#include <regex>
+
 namespace Envoy {
 namespace Formatter {
+
+/**
+ * FormatterProvider for string literals. It ignores headers and stream info and returns string by
+ * which it was initialized.
+ */
+template <class FormatterContext>
+class PlainStringFormatterBase : public FormatterProviderBase<FormatterContext> {
+public:
+  PlainStringFormatterBase(const std::string& str) { str_.set_string_value(str); }
+
+  // FormatterProviderBase
+  absl::optional<std::string> formatWithContext(const FormatterContext&,
+                                                const StreamInfo::StreamInfo&) const override {
+    return str_.string_value();
+  }
+  ProtobufWkt::Value formatValueWithContext(const FormatterContext&,
+                                            const StreamInfo::StreamInfo&) const override {
+    return str_;
+  }
+
+private:
+  ProtobufWkt::Value str_;
+};
+
+/**
+ * FormatterProvider for numbers.
+ */
+template <class FormatterContext>
+class PlainNumberFormatterBase : public FormatterProviderBase<FormatterContext> {
+public:
+  PlainNumberFormatterBase(double num) { num_.set_number_value(num); }
+
+  // FormatterProviderBase
+  absl::optional<std::string> formatWithContext(const FormatterContext&,
+                                                const StreamInfo::StreamInfo&) const override {
+    std::string str = absl::StrFormat("%g", num_.number_value());
+    return str;
+  }
+  ProtobufWkt::Value formatValueWithContext(const FormatterContext&,
+                                            const StreamInfo::StreamInfo&) const override {
+    return num_;
+  }
+
+private:
+  ProtobufWkt::Value num_;
+};
+
+using PlainNumberFormatter = PlainNumberFormatterBase<HttpFormatterContext>;
+using PlainStringFormatter = PlainStringFormatterBase<HttpFormatterContext>;
 
 /**
  * Access log format parser.
@@ -29,7 +78,7 @@ class SubstitutionFormatParser {
 public:
   template <class FormatterContext = HttpFormatterContext>
   static std::vector<FormatterProviderBasePtr<FormatterContext>>
-  parse(const std::string& format,
+  parse(absl::string_view format,
         const std::vector<CommandParserBasePtr<FormatterContext>>& command_parsers = {}) {
     std::string current_token;
     std::vector<FormatterProviderBasePtr<FormatterContext>> formatters;
@@ -106,9 +155,7 @@ public:
       }
 
       if (!added) {
-        // Finally, try the context independent formatters.
-        formatters.emplace_back(FormatterProviderBasePtr<FormatterContext>{
-            new StreamInfoFormatterBase<FormatterContext>(command, subcommand, max_length)});
+        throwEnvoyExceptionOrPanic(fmt::format("Not supported field in StreamInfo: {}", command));
       }
 
       pos = command_end_position;
@@ -137,12 +184,12 @@ template <class FormatterContext> class FormatterBaseImpl : public FormatterBase
 public:
   using CommandParsers = std::vector<CommandParserBasePtr<FormatterContext>>;
 
-  FormatterBaseImpl(const std::string& format, bool omit_empty_values = false)
+  FormatterBaseImpl(absl::string_view format, bool omit_empty_values = false)
       : empty_value_string_(omit_empty_values ? absl::string_view{}
                                               : DefaultUnspecifiedValueStringView) {
     providers_ = SubstitutionFormatParser::parse<FormatterContext>(format);
   }
-  FormatterBaseImpl(const std::string& format, bool omit_empty_values,
+  FormatterBaseImpl(absl::string_view format, bool omit_empty_values,
                     const CommandParsers& command_parsers)
       : empty_value_string_(omit_empty_values ? absl::string_view{}
                                               : DefaultUnspecifiedValueStringView) {
@@ -169,7 +216,9 @@ private:
 };
 
 // Helper classes for StructFormatter::StructFormatMapVisitor.
-template <class... Ts> struct StructFormatMapVisitorHelper : Ts... { using Ts::operator()...; };
+template <class... Ts> struct StructFormatMapVisitorHelper : Ts... {
+  using Ts::operator()...;
+};
 template <class... Ts> StructFormatMapVisitorHelper(Ts...) -> StructFormatMapVisitorHelper<Ts...>;
 
 /**

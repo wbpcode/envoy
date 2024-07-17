@@ -9,9 +9,10 @@
 
 #include "source/common/common/logger.h"
 #include "source/common/common/utility.h"
-#include "source/common/formatter/http_specific_formatter.h"
-#include "source/common/formatter/stream_info_formatter.h"
 #include "source/common/formatter/substitution_formatter.h"
+#include "source/common/formatter/substitution_format_utility.h"
+#include "source/extensions/formatter/built_in_stream_info/stream_info_formatter.h"
+#include "source/extensions/formatter/built_in_http/http_specific_formatter.h"
 #include "source/common/http/header_map_impl.h"
 #include "source/common/json/json_loader.h"
 #include "source/common/network/address_impl.h"

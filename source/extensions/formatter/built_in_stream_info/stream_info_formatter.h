@@ -254,52 +254,6 @@ using StreamInfoFormatterProviderLookupTable =
 const StreamInfoFormatterProviderLookupTable& getKnownStreamInfoFormatterProviders();
 
 /**
- * FormatterProvider for string literals. It ignores headers and stream info and returns string by
- * which it was initialized.
- */
-template <class FormatterContext>
-class PlainStringFormatterBase : public FormatterProviderBase<FormatterContext> {
-public:
-  PlainStringFormatterBase(const std::string& str) { str_.set_string_value(str); }
-
-  // FormatterProviderBase
-  absl::optional<std::string> formatWithContext(const FormatterContext&,
-                                                const StreamInfo::StreamInfo&) const override {
-    return str_.string_value();
-  }
-  ProtobufWkt::Value formatValueWithContext(const FormatterContext&,
-                                            const StreamInfo::StreamInfo&) const override {
-    return str_;
-  }
-
-private:
-  ProtobufWkt::Value str_;
-};
-
-/**
- * FormatterProvider for numbers.
- */
-template <class FormatterContext>
-class PlainNumberFormatterBase : public FormatterProviderBase<FormatterContext> {
-public:
-  PlainNumberFormatterBase(double num) { num_.set_number_value(num); }
-
-  // FormatterProviderBase
-  absl::optional<std::string> formatWithContext(const FormatterContext&,
-                                                const StreamInfo::StreamInfo&) const override {
-    std::string str = absl::StrFormat("%g", num_.number_value());
-    return str;
-  }
-  ProtobufWkt::Value formatValueWithContext(const FormatterContext&,
-                                            const StreamInfo::StreamInfo&) const override {
-    return num_;
-  }
-
-private:
-  ProtobufWkt::Value num_;
-};
-
-/**
  * FormatterProvider based on StreamInfo fields.
  */
 template <class FormatterContext>
@@ -308,11 +262,8 @@ public:
   StreamInfoFormatterBase(const std::string& command, const std::string& sub_command = "",
                           absl::optional<size_t> max_length = absl::nullopt) {
 
-    const auto& formatters = getKnownStreamInfoFormatterProviders();
-
-    auto it = formatters.find(command);
-
-    if (it == formatters.end()) {
+    auto it = getKnownStreamInfoFormatterProviders().find(command);
+    if (it == getKnownStreamInfoFormatterProviders().end()) {
       throwEnvoyExceptionOrPanic(fmt::format("Not supported field in StreamInfo: {}", command));
     }
 
@@ -344,10 +295,36 @@ private:
   StreamInfoFormatterProviderPtr formatter_;
 };
 
+template <class FormatterContext>
+class BuiltInStreamInfoCommandParserBase : public CommandParserBase<FormatterContext> {
+public:
+  BuiltInStreamInfoCommandParserBase() = default;
+
+  // CommandParser
+  FormatterProviderBasePtr<FormatterContext>
+  parse(const std::string& command, const std::string& sub_command,
+        absl::optional<size_t>& max_length) const override {
+
+    auto it = getKnownStreamInfoFormatterProviders().find(command);
+
+    // No throw because the stream info command parser may not be the last parser and other
+    // formatter parsers may be tried.
+    if (it == getKnownStreamInfoFormatterProviders().end()) {
+      return nullptr;
+    }
+
+    // Check flags for the command.
+    THROW_IF_NOT_OK(
+        CommandSyntaxChecker::verifySyntax((*it).second.first, command, sub_command, max_length));
+
+    return std::make_unique<StreamInfoFormatterBase<FormatterContext>>(
+        (*it).second.second(sub_command, max_length));
+  }
+};
+
 // Aliases for backward compatibility.
-using PlainNumberFormatter = PlainNumberFormatterBase<HttpFormatterContext>;
-using PlainStringFormatter = PlainStringFormatterBase<HttpFormatterContext>;
 using StreamInfoFormatter = StreamInfoFormatterBase<HttpFormatterContext>;
+using BuiltInStreamInfoCommandParser = BuiltInStreamInfoCommandParserBase<HttpFormatterContext>;
 
 } // namespace Formatter
 } // namespace Envoy

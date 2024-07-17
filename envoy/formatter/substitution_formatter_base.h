@@ -104,9 +104,13 @@ public:
   createCommandParserFromProto(const Protobuf::Message& config,
                                Server::Configuration::GenericFactoryContext& context) PURE;
 
-  std::string category() const override {
-    return fmt::format("envoy.{}.formatters", FormatterContext::category());
-  }
+  std::string category() const override { return "envoy.formatters"; }
+};
+
+template <class FormatterContext>
+class BuiltInCommandParserFactoryBase : public Config::UntypedFactory {
+public:
+  std::string category() const override { return "envoy.formatters"; }
 };
 
 template <class FormatterContext> class BuiltInCommandParsersBase {
