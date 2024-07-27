@@ -27,7 +27,7 @@ Network::FilterFactoryCb ConfigFactory::createFilterFactoryFromProtoTyped(
 /**
  * Static registration for the tcp_proxy filter. @see RegisterFactory.
  */
-LEGACY_REGISTER_FACTORY(ConfigFactory, Server::Configuration::NamedNetworkFilterConfigFactory,
+REGISTER_FACTORY(ConfigFactory, Server::Configuration::NamedNetworkFilterConfigFactory,
                         "envoy.tcp_proxy");
 
 } // namespace TcpProxy

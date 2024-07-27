@@ -29,10 +29,10 @@ ProtobufTypes::MessagePtr RawBufferSocketFactory::createEmptyConfigProto() {
   return std::make_unique<envoy::extensions::transport_sockets::raw_buffer::v3::RawBuffer>();
 }
 
-LEGACY_REGISTER_FACTORY(UpstreamRawBufferSocketFactory,
+REGISTER_FACTORY(UpstreamRawBufferSocketFactory,
                         Server::Configuration::UpstreamTransportSocketConfigFactory, "raw_buffer");
 
-LEGACY_REGISTER_FACTORY(DownstreamRawBufferSocketFactory,
+REGISTER_FACTORY(DownstreamRawBufferSocketFactory,
                         Server::Configuration::DownstreamTransportSocketConfigFactory,
                         "raw_buffer");
 

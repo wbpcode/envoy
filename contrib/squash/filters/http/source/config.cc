@@ -31,7 +31,7 @@ Http::FilterFactoryCb SquashFilterConfigFactory::createFilterFactoryFromProtoTyp
 /**
  * Static registration for the squash filter. @see RegisterFactory.
  */
-LEGACY_REGISTER_FACTORY(SquashFilterConfigFactory,
+REGISTER_FACTORY(SquashFilterConfigFactory,
                         Server::Configuration::NamedHttpFilterConfigFactory, "envoy.squash");
 
 } // namespace Squash

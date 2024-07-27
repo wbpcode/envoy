@@ -502,34 +502,15 @@ private:
  * unit. For an example of a typical use case, @see NamedNetworkFilterConfigFactory.
  *
  * Example registration: REGISTER_FACTORY(SpecificFactory, BaseFactory);
- *                       LEGACY_REGISTER_FACTORY(SpecificFactory, BaseFactory, "deprecated_name");
+ *                       REGISTER_FACTORY(SpecificFactory, BaseFactory, "deprecated_name");
  */
 template <class T, class Base> class RegisterFactory {
 public:
   /**
-   * Constructor that registers an instance of the factory with the FactoryRegistry.
-   */
-  RegisterFactory() {
-    ASSERT(!instance_.name().empty());
-    FactoryRegistry<Base>::registerFactory(instance_, instance_.name());
-
-    // Also register this factory with its category.
-    //
-    // Each time a factory registers, the registry will attempt to
-    // register its category here. This means that we have to ignore
-    // multiple attempts to register the same category and can't detect
-    // duplicate categories.
-    if (!FactoryCategoryRegistry::isRegistered(instance_.category())) {
-      FactoryCategoryRegistry::registerCategory(instance_.category(),
-                                                new FactoryRegistryProxyImpl<Base>());
-    }
-  }
-
-  /**
    * Constructor that registers an instance of the factory with the FactoryRegistry along with
    * deprecated names.
    */
-  explicit RegisterFactory(std::initializer_list<absl::string_view> deprecated_names) {
+  explicit RegisterFactory(std::initializer_list<absl::string_view> deprecated_names = {}) {
     if (!instance_.name().empty()) {
       FactoryRegistry<Base>::registerFactory(instance_, instance_.name());
     } else {
@@ -550,19 +531,11 @@ public:
 
   /**
    * Constructor that registers an instance of the factory with the FactoryRegistry along with
-   * vendor specific version.
-   */
-  RegisterFactory(uint32_t major, uint32_t minor, uint32_t patch,
-                  const std::map<std::string, std::string>& version_metadata)
-      : RegisterFactory(major, minor, patch, version_metadata, {}) {}
-
-  /**
-   * Constructor that registers an instance of the factory with the FactoryRegistry along with
    * vendor specific version and deprecated names.
    */
   RegisterFactory(uint32_t major, uint32_t minor, uint32_t patch,
                   const std::map<std::string, std::string>& version_metadata,
-                  std::initializer_list<absl::string_view> deprecated_names) {
+                  std::initializer_list<absl::string_view> deprecated_names = {}) {
     auto version = makeBuildVersion(major, minor, patch, version_metadata);
     if (instance_.name().empty()) {
       ASSERT(deprecated_names.size() != 0);
@@ -617,39 +590,27 @@ private:
 
 #ifdef ENVOY_STATIC_EXTENSION_REGISTRATION
 /**
- * Macro used for static registration.
+ * Macro used for static registration. The variable argument could be anything that could be passed
+ * to the constructor of RegisterFactory. In most cases it should be empty or a list of deprecated
+ * names for the factory.
  */
-#define REGISTER_FACTORY(FACTORY, BASE)                                                            \
-  ABSL_ATTRIBUTE_UNUSED void forceRegister##FACTORY() {}                                           \
-  static Envoy::Registry::RegisterFactory</* NOLINT(fuchsia-statically-constructed-objects) */     \
-                                          FACTORY, BASE>                                           \
-      FACTORY##_registered
-/**
- * Macro used for static registration with deprecated name.
- */
-#define LEGACY_REGISTER_FACTORY(FACTORY, BASE, DEPRECATED_NAME)                                    \
+#define REGISTER_FACTORY(FACTORY, BASE, ...)                                                       \
   ABSL_ATTRIBUTE_UNUSED void forceRegister##FACTORY() {}                                           \
   static Envoy::Registry::RegisterFactory</* NOLINT(fuchsia-statically-constructed-objects) */     \
                                           FACTORY, BASE>                                           \
       FACTORY##_registered {                                                                       \
-    DEPRECATED_NAME                                                                                \
+    __VA_ARGS__                                                                                    \
   }
 #else
 /**
- * Macro used to define a registration function.
+ * Macro used for static registration. The variable argument could be anything that could be passed
+ * to the constructor of RegisterFactory. In most cases it should be empty or a list of deprecated
+ * names for the factory.
  */
-#define REGISTER_FACTORY(FACTORY, BASE)                                                            \
+#define REGISTER_FACTORY(FACTORY, BASE, ...)                                                       \
   ABSL_ATTRIBUTE_UNUSED void forceRegister##FACTORY() {                                            \
     ABSL_ATTRIBUTE_UNUSED static auto registered =                                                 \
-        new Envoy::Registry::RegisterFactory<FACTORY, BASE>();                                     \
-  }
-/**
- * Macro used to define a registration function with deprecated name.
- */
-#define LEGACY_REGISTER_FACTORY(FACTORY, BASE, DEPRECATED_NAME)                                    \
-  ABSL_ATTRIBUTE_UNUSED void forceRegister##FACTORY() {                                            \
-    ABSL_ATTRIBUTE_UNUSED static auto registered =                                                 \
-        new Envoy::Registry::RegisterFactory<FACTORY, BASE>({DEPRECATED_NAME});                    \
+        new Envoy::Registry::RegisterFactory<FACTORY, BASE>{__VA_ARGS__};                          \
   }
 #endif
 

@@ -36,7 +36,7 @@ GrpcJsonTranscoderFilterConfig::createRouteSpecificFilterConfigTyped(
 /**
  * Static registration for the grpc transcoding filter. @see RegisterNamedHttpFilterConfigFactory.
  */
-LEGACY_REGISTER_FACTORY(GrpcJsonTranscoderFilterConfig,
+REGISTER_FACTORY(GrpcJsonTranscoderFilterConfig,
                         Server::Configuration::NamedHttpFilterConfigFactory,
                         "envoy.grpc_json_transcoder");
 

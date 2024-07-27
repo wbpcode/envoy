@@ -252,7 +252,7 @@ ProtocolOptionsConfigImpl::ProtocolOptionsConfigImpl(
   ASSERT(Http2::Utility::initializeAndValidateOptions(validated_http2_options).status().ok());
 }
 
-LEGACY_REGISTER_FACTORY(ProtocolOptionsConfigFactory, Server::Configuration::ProtocolOptionsFactory,
+REGISTER_FACTORY(ProtocolOptionsConfigFactory, Server::Configuration::ProtocolOptionsFactory,
                         "envoy.upstreams.http.http_protocol_options");
 } // namespace Http
 } // namespace Upstreams

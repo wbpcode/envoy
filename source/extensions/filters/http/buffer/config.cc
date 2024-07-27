@@ -36,9 +36,9 @@ BufferFilterFactory::createRouteSpecificFilterConfigTyped(
 /**
  * Static registration for the buffer filter. @see RegisterFactory.
  */
-LEGACY_REGISTER_FACTORY(BufferFilterFactory, Server::Configuration::NamedHttpFilterConfigFactory,
+REGISTER_FACTORY(BufferFilterFactory, Server::Configuration::NamedHttpFilterConfigFactory,
                         "envoy.buffer");
-LEGACY_REGISTER_FACTORY(UpstreamBufferFilterFactory,
+REGISTER_FACTORY(UpstreamBufferFilterFactory,
                         Server::Configuration::UpstreamHttpFilterConfigFactory, "envoy.buffer");
 
 } // namespace BufferFilter

@@ -27,7 +27,7 @@ Http::FilterFactoryCb DynamoFilterConfig::createFilterFactoryFromProtoTyped(
 /**
  * Static registration for the http dynamodb filter. @see RegisterFactory.
  */
-LEGACY_REGISTER_FACTORY(DynamoFilterConfig, Server::Configuration::NamedHttpFilterConfigFactory,
+REGISTER_FACTORY(DynamoFilterConfig, Server::Configuration::NamedHttpFilterConfigFactory,
                         "envoy.http_dynamo_filter");
 
 } // namespace Dynamo

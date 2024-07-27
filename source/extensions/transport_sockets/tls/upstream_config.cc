@@ -31,7 +31,7 @@ ProtobufTypes::MessagePtr UpstreamSslSocketFactory::createEmptyConfigProto() {
   return std::make_unique<envoy::extensions::transport_sockets::tls::v3::UpstreamTlsContext>();
 }
 
-LEGACY_REGISTER_FACTORY(UpstreamSslSocketFactory,
+REGISTER_FACTORY(UpstreamSslSocketFactory,
                         Server::Configuration::UpstreamTransportSocketConfigFactory, "tls");
 
 } // namespace Tls

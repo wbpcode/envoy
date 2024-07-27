@@ -38,7 +38,7 @@ private:
 /**
  * Static registration for the echo filter. @see RegisterFactory.
  */
-LEGACY_REGISTER_FACTORY(EchoConfigFactory, Server::Configuration::NamedNetworkFilterConfigFactory,
+REGISTER_FACTORY(EchoConfigFactory, Server::Configuration::NamedNetworkFilterConfigFactory,
                         "envoy.echo");
 
 } // namespace Echo

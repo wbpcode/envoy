@@ -21,7 +21,7 @@ Http::FilterFactoryCb GrpcHttp1BridgeFilterConfig::createFilterFactoryFromProtoT
 /**
  * Static registration for the grpc HTTP1 bridge filter. @see RegisterFactory.
  */
-LEGACY_REGISTER_FACTORY(GrpcHttp1BridgeFilterConfig,
+REGISTER_FACTORY(GrpcHttp1BridgeFilterConfig,
                         Server::Configuration::NamedHttpFilterConfigFactory,
                         "envoy.grpc_http1_bridge");
 

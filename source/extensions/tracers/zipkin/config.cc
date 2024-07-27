@@ -28,7 +28,7 @@ Tracing::DriverSharedPtr ZipkinTracerFactory::createTracerDriverTyped(
 /**
  * Static registration for the Zipkin tracer. @see RegisterFactory.
  */
-LEGACY_REGISTER_FACTORY(ZipkinTracerFactory, Server::Configuration::TracerFactory, "envoy.zipkin");
+REGISTER_FACTORY(ZipkinTracerFactory, Server::Configuration::TracerFactory, "envoy.zipkin");
 
 } // namespace Zipkin
 } // namespace Tracers

@@ -325,7 +325,7 @@ MobileHttpConnectionManagerFilterConfigFactory::createFilterFactoryFromProtoType
 /**
  * Static registration for the HTTP connection manager filter.
  */
-LEGACY_REGISTER_FACTORY(HttpConnectionManagerFilterConfigFactory,
+REGISTER_FACTORY(HttpConnectionManagerFilterConfigFactory,
                         Server::Configuration::NamedNetworkFilterConfigFactory,
                         "envoy.http_connection_manager");
 

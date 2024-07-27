@@ -58,7 +58,7 @@ Http::FilterFactoryCb HealthCheckFilterConfig::createFilterFactoryFromProtoTyped
 /**
  * Static registration for the health check filter. @see RegisterFactory.
  */
-LEGACY_REGISTER_FACTORY(HealthCheckFilterConfig,
+REGISTER_FACTORY(HealthCheckFilterConfig,
                         Server::Configuration::NamedHttpFilterConfigFactory, "envoy.health_check");
 
 } // namespace HealthCheck

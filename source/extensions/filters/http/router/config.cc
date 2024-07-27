@@ -29,7 +29,7 @@ Http::FilterFactoryCb RouterFilterConfig::createFilterFactoryFromProtoTyped(
 /**
  * Static registration for the router filter. @see RegisterFactory.
  */
-LEGACY_REGISTER_FACTORY(RouterFilterConfig, Server::Configuration::NamedHttpFilterConfigFactory,
+REGISTER_FACTORY(RouterFilterConfig, Server::Configuration::NamedHttpFilterConfigFactory,
                         "envoy.router");
 
 } // namespace RouterFilter

@@ -64,9 +64,9 @@ ExternalProcessingFilterConfig::createFilterFactoryFromProtoWithServerContextTyp
   };
 }
 
-LEGACY_REGISTER_FACTORY(ExternalProcessingFilterConfig,
+REGISTER_FACTORY(ExternalProcessingFilterConfig,
                         Server::Configuration::NamedHttpFilterConfigFactory, "envoy.ext_proc");
-LEGACY_REGISTER_FACTORY(UpstreamExternalProcessingFilterConfig,
+REGISTER_FACTORY(UpstreamExternalProcessingFilterConfig,
                         Server::Configuration::UpstreamHttpFilterConfigFactory, "envoy.ext_proc");
 
 } // namespace ExternalProcessing

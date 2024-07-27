@@ -21,7 +21,7 @@ ProtocolOptionsConfigImpl::ProtocolOptionsConfigImpl(
   }
 }
 
-LEGACY_REGISTER_FACTORY(ProtocolOptionsConfigFactory, Server::Configuration::ProtocolOptionsFactory,
+REGISTER_FACTORY(ProtocolOptionsConfigFactory, Server::Configuration::ProtocolOptionsFactory,
                         "envoy.upstreams.tcp.tcp_protocol_options");
 } // namespace Tcp
 } // namespace Upstreams

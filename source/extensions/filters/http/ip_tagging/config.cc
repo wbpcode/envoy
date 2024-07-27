@@ -27,7 +27,7 @@ Http::FilterFactoryCb IpTaggingFilterFactory::createFilterFactoryFromProtoTyped(
 /**
  * Static registration for the ip tagging filter. @see RegisterFactory.
  */
-LEGACY_REGISTER_FACTORY(IpTaggingFilterFactory, Server::Configuration::NamedHttpFilterConfigFactory,
+REGISTER_FACTORY(IpTaggingFilterFactory, Server::Configuration::NamedHttpFilterConfigFactory,
                         "envoy.ip_tagging");
 
 } // namespace IpTagging

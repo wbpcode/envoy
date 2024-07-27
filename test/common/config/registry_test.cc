@@ -86,8 +86,8 @@ public:
   std::string name() const override { return "testing.published.versioned"; }
 };
 
-REGISTER_FACTORY(TestVersionedFactory,
-                 PublishedFactory){FACTORY_VERSION(2, 5, 39, {{"build.label", "alpha"}})};
+REGISTER_FACTORY(TestVersionedFactory, PublishedFactory,
+                 FACTORY_VERSION(2, 5, 39, {{"build.label", "alpha"}}));
 
 // Test registration of versioned factory
 TEST(RegistryTest, VersionedFactory) {

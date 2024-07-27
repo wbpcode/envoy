@@ -50,7 +50,7 @@ RateLimitFilterConfig::createRouteSpecificFilterConfigTyped(
 /**
  * Static registration for the rate limit filter. @see RegisterFactory.
  */
-LEGACY_REGISTER_FACTORY(RateLimitFilterConfig, Server::Configuration::NamedHttpFilterConfigFactory,
+REGISTER_FACTORY(RateLimitFilterConfig, Server::Configuration::NamedHttpFilterConfigFactory,
                         "envoy.rate_limit");
 
 } // namespace RateLimitFilter
