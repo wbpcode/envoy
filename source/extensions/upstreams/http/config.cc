@@ -253,7 +253,7 @@ ProtocolOptionsConfigImpl::ProtocolOptionsConfigImpl(
 }
 
 REGISTER_FACTORY(ProtocolOptionsConfigFactory, Server::Configuration::ProtocolOptionsFactory,
-                        "envoy.upstreams.http.http_protocol_options");
+                 "envoy.upstreams.http.http_protocol_options");
 } // namespace Http
 } // namespace Upstreams
 } // namespace Extensions

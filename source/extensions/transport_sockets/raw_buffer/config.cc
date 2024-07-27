@@ -30,11 +30,10 @@ ProtobufTypes::MessagePtr RawBufferSocketFactory::createEmptyConfigProto() {
 }
 
 REGISTER_FACTORY(UpstreamRawBufferSocketFactory,
-                        Server::Configuration::UpstreamTransportSocketConfigFactory, "raw_buffer");
+                 Server::Configuration::UpstreamTransportSocketConfigFactory, "raw_buffer");
 
 REGISTER_FACTORY(DownstreamRawBufferSocketFactory,
-                        Server::Configuration::DownstreamTransportSocketConfigFactory,
-                        "raw_buffer");
+                 Server::Configuration::DownstreamTransportSocketConfigFactory, "raw_buffer");
 
 } // namespace RawBuffer
 } // namespace TransportSockets

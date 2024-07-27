@@ -54,10 +54,10 @@ UpstreamStartTlsSocketFactory::createTransportSocketFactory(
 }
 
 REGISTER_FACTORY(DownstreamStartTlsSocketFactory,
-                        Server::Configuration::DownstreamTransportSocketConfigFactory, "starttls");
+                 Server::Configuration::DownstreamTransportSocketConfigFactory, "starttls");
 
 REGISTER_FACTORY(UpstreamStartTlsSocketFactory,
-                        Server::Configuration::UpstreamTransportSocketConfigFactory, "starttls");
+                 Server::Configuration::UpstreamTransportSocketConfigFactory, "starttls");
 
 } // namespace StartTls
 } // namespace TransportSockets

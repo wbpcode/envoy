@@ -32,7 +32,7 @@ ProtobufTypes::MessagePtr UpstreamSslSocketFactory::createEmptyConfigProto() {
 }
 
 REGISTER_FACTORY(UpstreamSslSocketFactory,
-                        Server::Configuration::UpstreamTransportSocketConfigFactory, "tls");
+                 Server::Configuration::UpstreamTransportSocketConfigFactory, "tls");
 
 } // namespace Tls
 } // namespace TransportSockets

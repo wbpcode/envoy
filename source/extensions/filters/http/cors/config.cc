@@ -38,7 +38,7 @@ CorsFilterFactory::createRouteSpecificFilterConfigTyped(
  * Static registration for the cors filter. @see RegisterFactory.
  */
 REGISTER_FACTORY(CorsFilterFactory, Server::Configuration::NamedHttpFilterConfigFactory,
-                        "envoy.cors");
+                 "envoy.cors");
 
 } // namespace Cors
 } // namespace HttpFilters

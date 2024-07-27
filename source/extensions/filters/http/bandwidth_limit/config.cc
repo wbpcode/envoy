@@ -35,9 +35,8 @@ BandwidthLimitFilterConfig::createRouteSpecificFilterConfigTyped(
 /**
  * Static registration for the bandwidth limit filter. @see RegisterFactory.
  */
-REGISTER_FACTORY(BandwidthLimitFilterConfig,
-                        Server::Configuration::NamedHttpFilterConfigFactory,
-                        "envoy.bandwidth_limit");
+REGISTER_FACTORY(BandwidthLimitFilterConfig, Server::Configuration::NamedHttpFilterConfigFactory,
+                 "envoy.bandwidth_limit");
 
 } // namespace BandwidthLimitFilter
 } // namespace HttpFilters

@@ -22,7 +22,7 @@ Http::FilterFactoryCb GrpcWebFilterConfig::createFilterFactoryFromProtoTyped(
  * Static registration for the gRPC-Web filter. @see RegisterFactory.
  */
 REGISTER_FACTORY(GrpcWebFilterConfig, Server::Configuration::NamedHttpFilterConfigFactory,
-                        "envoy.grpc_web");
+                 "envoy.grpc_web");
 
 } // namespace GrpcWeb
 } // namespace HttpFilters

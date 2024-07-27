@@ -54,7 +54,7 @@ std::string OpenTelemetrySinkFactory::name() const { return OpenTelemetryName; }
  * Static registration for the this sink factory. @see RegisterFactory.
  */
 REGISTER_FACTORY(OpenTelemetrySinkFactory, Server::Configuration::StatsSinkFactory,
-                        "envoy.open_telemetry_stat_sink");
+                 "envoy.open_telemetry_stat_sink");
 
 } // namespace OpenTelemetry
 } // namespace StatSinks

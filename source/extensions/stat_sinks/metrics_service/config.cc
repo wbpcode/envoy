@@ -54,7 +54,7 @@ std::string MetricsServiceSinkFactory::name() const { return MetricsServiceName;
  * Static registration for the this sink factory. @see RegisterFactory.
  */
 REGISTER_FACTORY(MetricsServiceSinkFactory, Server::Configuration::StatsSinkFactory,
-                        "envoy.metrics_service");
+                 "envoy.metrics_service");
 
 } // namespace MetricsService
 } // namespace StatSinks

@@ -47,8 +47,8 @@ public:
  * Static registration for the proxy protocol filter. @see RegisterFactory.
  */
 REGISTER_FACTORY(ProxyProtocolConfigFactory,
-                        Server::Configuration::NamedListenerFilterConfigFactory,
-                        "envoy.listener.proxy_protocol");
+                 Server::Configuration::NamedListenerFilterConfigFactory,
+                 "envoy.listener.proxy_protocol");
 
 } // namespace ProxyProtocol
 } // namespace ListenerFilters
