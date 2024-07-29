@@ -18,6 +18,7 @@
 
 #include "absl/container/flat_hash_map.h"
 #include "absl/types/optional.h"
+#include "re2/re2.h"
 
 namespace Envoy {
 namespace Formatter {
@@ -29,63 +30,50 @@ class SubstitutionFormatParser {
 public:
   template <class FormatterContext = HttpFormatterContext>
   static std::vector<FormatterProviderBasePtr<FormatterContext>>
-  parse(const std::string& format,
-        const std::vector<CommandParserBasePtr<FormatterContext>>& command_parsers = {}) {
-    std::string current_token;
+  parse(absl::string_view format,
+        absl::Span<const CommandParserBasePtr<FormatterContext>> command_parsers = {}) {
+    size_t consumed_size = 0;
     std::vector<FormatterProviderBasePtr<FormatterContext>> formatters;
 
-    for (size_t pos = 0; pos < format.size(); ++pos) {
+    for (size_t pos = 0; pos < format.size();) {
       if (format[pos] != '%') {
-        current_token += format[pos];
+        pos++;
         continue;
       }
 
       // escape '%%'
       if (format.size() > pos + 1) {
         if (format[pos + 1] == '%') {
-          current_token += '%';
-          pos++;
+          pos += 2;
           continue;
         }
       }
 
-      if (!current_token.empty()) {
+      if (pos > consumed_size) {
         formatters.emplace_back(FormatterProviderBasePtr<FormatterContext>{
-            new PlainStringFormatterBase<FormatterContext>(current_token)});
-        current_token = "";
+            new PlainStringFormatterBase<FormatterContext>(
+                format.substr(consumed_size, pos - consumed_size))});
+        consumed_size = pos;
       }
 
-      std::smatch m;
-      const std::string search_space = std::string(format.substr(pos));
-      if (!std::regex_search(search_space, m, commandWithArgsRegex())) {
+      absl::string_view sub_format = format.substr(consumed_size);
+      const size_t sub_format_size = sub_format.size();
+
+      absl::string_view command, command_arg;
+      absl::optional<size_t> max_len;
+
+      if (!re2::RE2::Consume(&sub_format, commandWithArgsRegex(), &command, &command_arg,
+                             &max_len)) {
         throwEnvoyExceptionOrPanic(
             fmt::format("Incorrect configuration: {}. Couldn't find valid command at position {}",
                         format, pos));
       }
 
-      const std::string match = m.str(0);
-      // command is at at index 1.
-      const std::string command = m.str(1);
-      // subcommand is at index 2.
-      const std::string subcommand = m.str(2);
-      // optional length is at index 3. If present, validate that it is valid integer.
-      absl::optional<size_t> max_length;
-      if (m.str(3).length() != 0) {
-        size_t length_value;
-        if (!absl::SimpleAtoi(m.str(3), &length_value)) {
-          throwEnvoyExceptionOrPanic(absl::StrCat("Length must be an integer, given: ", m.str(3)));
-        }
-        max_length = length_value;
-      }
-      std::vector<std::string> path;
-
-      const size_t command_end_position = pos + m.str(0).length() - 1;
-
       bool added = false;
 
       // First, try the built-in command parsers.
       for (const auto& cmd : BuiltInCommandParsersBase<FormatterContext>::commandParsers()) {
-        auto formatter = cmd->parse(command, subcommand, max_length);
+        auto formatter = cmd->parse(command, command_arg, max_len);
         if (formatter) {
           formatters.push_back(std::move(formatter));
           added = true;
@@ -96,7 +84,7 @@ public:
       // Next, try the command parsers provided by the user.
       if (!added) {
         for (const auto& cmd : command_parsers) {
-          auto formatter = cmd->parse(command, subcommand, max_length);
+          auto formatter = cmd->parse(command, command_arg, max_len);
           if (formatter) {
             formatters.push_back(std::move(formatter));
             added = true;
@@ -108,24 +96,25 @@ public:
       if (!added) {
         // Finally, try the context independent formatters.
         formatters.emplace_back(FormatterProviderBasePtr<FormatterContext>{
-            new StreamInfoFormatterBase<FormatterContext>(command, subcommand, max_length)});
+            new StreamInfoFormatterBase<FormatterContext>(command, command_arg, max_len)});
       }
 
-      pos = command_end_position;
+      pos += (sub_format_size - sub_format.size());
+      consumed_size = pos;
     }
 
-    if (!current_token.empty() || format.empty()) {
+    if (consumed_size < format.size()) {
       // Create a PlainStringFormatter with the final string literal. If the format string
       // was empty, this creates a PlainStringFormatter with an empty string.
       formatters.emplace_back(FormatterProviderBasePtr<FormatterContext>{
-          new PlainStringFormatterBase<FormatterContext>(current_token)});
+          new PlainStringFormatterBase<FormatterContext>(format.substr(consumed_size))});
     }
 
     return formatters;
   }
 
 private:
-  static const std::regex& commandWithArgsRegex();
+  static const re2::RE2& commandWithArgsRegex();
 };
 
 inline constexpr absl::string_view DefaultUnspecifiedValueStringView = "-";
@@ -169,7 +158,9 @@ private:
 };
 
 // Helper classes for StructFormatter::StructFormatMapVisitor.
-template <class... Ts> struct StructFormatMapVisitorHelper : Ts... { using Ts::operator()...; };
+template <class... Ts> struct StructFormatMapVisitorHelper : Ts... {
+  using Ts::operator()...;
+};
 template <class... Ts> StructFormatMapVisitorHelper(Ts...) -> StructFormatMapVisitorHelper<Ts...>;
 
 /**
