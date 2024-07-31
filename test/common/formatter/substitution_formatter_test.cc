@@ -4311,7 +4311,7 @@ TEST(SubstitutionFormatterTest, JsonFormatterTest) {
       protocol: '%PROTOCOL%'
   )EOF",
                             key_mapping);
-  JsonFormatterImpl formatter(key_mapping, false, false, false);
+  NewJsonFormatterImpl formatter(key_mapping, false, false, false);
 
   const std::string expected = R"EOF({
     "request_duration": "5",
@@ -4322,6 +4322,8 @@ TEST(SubstitutionFormatterTest, JsonFormatterTest) {
   })EOF";
 
   const std::string out_json = formatter.formatWithContext(formatter_context, stream_info);
+  std::cout << out_json << std::endl;
+
   EXPECT_TRUE(TestUtility::jsonStringEqual(out_json, expected));
 }
 
@@ -4355,7 +4357,7 @@ TEST(SubstitutionFormatterTest, JsonFormatterWithOrderedPropertiesTest) {
       protocol: '%PROTOCOL%'
   )EOF",
                             key_mapping);
-  JsonFormatterImpl formatter(key_mapping, false, false, true);
+  NewJsonFormatterImpl formatter(key_mapping, false, false, true);
 
   const std::string expected =
       "{\"afield\":\"vala\",\"bfield\":\"valb\",\"nested_level\":"
@@ -4363,7 +4365,7 @@ TEST(SubstitutionFormatterTest, JsonFormatterWithOrderedPropertiesTest) {
       "\"request_duration\":\"5\"}\n";
 
   const std::string out_json = formatter.formatWithContext(formatter_context, stream_info);
-
+  std::cout << out_json << std::endl;
   // Check string equality to verify the order.
   EXPECT_EQ(out_json, expected);
 }

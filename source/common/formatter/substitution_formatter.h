@@ -1,6 +1,7 @@
 #pragma once
 
 #include <bitset>
+#include <cstddef>
 #include <functional>
 #include <list>
 #include <regex>
@@ -12,9 +13,11 @@
 #include "envoy/formatter/substitution_formatter.h"
 #include "envoy/stream_info/stream_info.h"
 
+#include "google/protobuf/struct.pb.h"
 #include "source/common/common/utility.h"
 #include "source/common/formatter/http_formatter_context.h"
 #include "source/common/json/json_loader.h"
+#include "source/common/json/json_sanitizer.h"
 
 #include "absl/types/optional.h"
 
@@ -253,8 +256,298 @@ private:
   std::vector<FormatterProviderBasePtr<FormatterContext>> providers_;
 };
 
+// Methods for building the format map.
+template <class FormatterContext> class JsonFormatBuilder {
+public:
+  using CommandParsers = std::vector<CommandParserBasePtr<FormatterContext>>;
+
+  using RawString = std::string;
+  using Formatter = std::vector<FormatterProviderBasePtr<FormatterContext>>;
+
+  struct StructFormatDict;
+  struct StructFormatList;
+  using StructFormatValue = absl::variant<RawString, Formatter, StructFormatDict, StructFormatList>;
+
+  // std::vector is used here to keep the order of the properties if needed.
+  struct StructFormatDict {
+    std::vector<std::pair<std::string, StructFormatValue>> value_;
+  };
+  struct StructFormatList {
+    std::vector<StructFormatValue> value_;
+  };
+
+  using FormatterEelements = std::vector<absl::variant<RawString, Formatter>>;
+
+  explicit JsonFormatBuilder(const CommandParsers& commands, bool sort_properties,
+                             bool keep_value_type)
+      : commands_(commands), sort_properties_(sort_properties), keep_value_type_(keep_value_type) {}
+
+  FormatterEelements fromStruct(const ProtobufWkt::Struct& struct_format) const {
+    sanitize_buffer_.clear();
+    join_raw_string_.clear();
+    output_.clear();
+
+    StructFormatValue struct_output_format = toFormatStructValue(struct_format);
+    structFormatValueToFormatter(struct_output_format);
+
+    if (!join_raw_string_.empty()) {
+      output_.push_back(std::move(join_raw_string_));
+    }
+    return std::move(output_);
+  };
+
+private:
+  void structFormatValueToFormatter(StructFormatValue& value) const {
+    if (absl::holds_alternative<RawString>(value)) {
+      // Put the raw string into the current raw string.
+      // By this way we can merge adjacent raw strings into one.
+      join_raw_string_.append(absl::get<RawString>(value));
+    } else if (absl::holds_alternative<Formatter>(value)) {
+      // Now a formatter is coming, we need to push the current raw string
+      // into the output list.
+      if (!join_raw_string_.empty()) {
+        output_.push_back(std::move(join_raw_string_));
+        join_raw_string_.clear();
+      }
+      output_.push_back(std::move(absl::get<Formatter>(value)));
+    } else if (absl::holds_alternative<StructFormatDict>(value)) {
+      auto& dict_format = absl::get<StructFormatDict>(value).value_;
+      join_raw_string_.push_back('{');
+      for (size_t i = 0; i < dict_format.size(); ++i) {
+        if (i > 0) {
+          join_raw_string_.push_back(',');
+        }
+
+        join_raw_string_.push_back('"');
+        join_raw_string_.append(Json::sanitize(sanitize_buffer_, dict_format[i].first));
+        join_raw_string_.push_back('"');
+        join_raw_string_.push_back(':');
+        structFormatValueToFormatter(dict_format[i].second);
+      }
+      join_raw_string_.push_back('}');
+    } else if (absl::holds_alternative<StructFormatList>(value)) {
+      auto& list_format = absl::get<StructFormatList>(value).value_;
+      join_raw_string_.push_back('[');
+      for (size_t i = 0; i < list_format.size(); ++i) {
+        if (i > 0) {
+          join_raw_string_.push_back(',');
+        }
+        structFormatValueToFormatter(value);
+      }
+      join_raw_string_.push_back(']');
+    }
+  }
+
+  StructFormatDict toFormatStructValue(const ProtobufWkt::Struct& struct_format) const {
+    StructFormatDict output;
+    output.value_.reserve(struct_format.fields_size());
+
+    for (const auto& [key, value] : struct_format.fields()) {
+      switch (value.kind_case()) {
+      case ProtobufWkt::Value::KIND_NOT_SET:
+      case ProtobufWkt::Value::kNullValue:
+        break;
+      case ProtobufWkt::Value::kNumberValue:
+        output.value_.emplace_back(key, toFormatNumberValue(value.number_value()));
+        break;
+      case ProtobufWkt::Value::kStringValue:
+        output.value_.emplace_back(key, toFormatStringValue(value.string_value()));
+        break;
+      case ProtobufWkt::Value::kBoolValue:
+        output.value_.emplace_back(key, toFormatBoolValue(value.bool_value()));
+        break;
+      case ProtobufWkt::Value::kStructValue:
+        output.value_.emplace_back(key, toFormatStructValue(value.struct_value()));
+        break;
+      case ProtobufWkt::Value::kListValue:
+        output.value_.emplace_back(key, toFormatListValue(value.list_value()));
+        break;
+      }
+    }
+
+    if (sort_properties_) {
+      std::sort(output.value_.begin(), output.value_.end(),
+                [](const auto& a, const auto& b) { return a.first < b.first; });
+    }
+    return output;
+  }
+
+  StructFormatValue toFormatStringValue(absl::string_view string_format) const {
+    if (string_format.empty() || !absl::StrContains(string_format, '%')) {
+      return fmt::format(R"("{}")", Json::sanitize(sanitize_buffer_, string_format));
+    }
+    return SubstitutionFormatParser::parse<FormatterContext>(string_format, commands_);
+  }
+
+  StructFormatValue toFormatNumberValue(double value) const {
+    if (keep_value_type_) {
+      return fmt::to_string(value); // Keep the number type in JSON.
+    } else {
+      return fmt::format(R"("{}")", value); // Convert the number to string.
+    }
+  }
+
+  StructFormatValue toFormatBoolValue(bool value) const {
+    if (keep_value_type_) {
+      return fmt::to_string(value); // Keep the bool type in JSON.
+    } else {
+      return fmt::format(R"("{}")", value); // Convert the bool to string.
+    }
+  }
+
+  StructFormatValue toFormatListValue(const ProtobufWkt::ListValue& list_format) const {
+    StructFormatList output;
+    output.value_.reserve(list_format.values_size());
+
+    for (const auto& value : list_format.values()) {
+      switch (value.kind_case()) {
+      case ProtobufWkt::Value::KIND_NOT_SET:
+      case ProtobufWkt::Value::kNullValue:
+        break;
+      case ProtobufWkt::Value::kNumberValue:
+        output.value_.emplace_back(toFormatNumberValue(value.number_value()));
+        break;
+      case ProtobufWkt::Value::kStringValue:
+        output.value_.emplace_back(toFormatStringValue(value.string_value()));
+        break;
+      case ProtobufWkt::Value::kBoolValue:
+        output.value_.emplace_back(toFormatBoolValue(value.bool_value()));
+        break;
+      case ProtobufWkt::Value::kStructValue:
+        output.value_.emplace_back(toFormatStructValue(value.struct_value()));
+        break;
+      case ProtobufWkt::Value::kListValue:
+        output.value_.emplace_back(toFormatListValue(value.list_value()));
+        break;
+      }
+    }
+    return output;
+  }
+
+  const CommandParsers& commands_;
+  const bool sort_properties_{};
+  const bool keep_value_type_{};
+
+  mutable std::string sanitize_buffer_; // Buffer for sanitizing strings.
+  mutable std::string join_raw_string_; // Buffer for joining raw strings.
+  mutable FormatterEelements output_;   // Final output.
+};
+
+template <class FormatterContext>
+class NewJsonFormatterImplBase : public FormatterBase<FormatterContext> {
+public:
+  using FormatBuilder = JsonFormatBuilder<FormatterContext>;
+  using CommandParsers = FormatBuilder::CommandParsers;
+
+  NewJsonFormatterImplBase(const ProtobufWkt::Struct& struct_format, bool keep_value_type,
+                           bool omit_empty_values, bool sort_properties,
+                           const CommandParsers& commands = {})
+      : omit_empty_values_(omit_empty_values), keep_value_type_(keep_value_type),
+        empty_value_(omit_empty_values_ ? std::string()
+                                        : std::string(DefaultUnspecifiedValueStringView)),
+        elements_(
+            FormatBuilder(commands, sort_properties, keep_value_type).fromStruct(struct_format)) {}
+
+  std::string formatWithContext(const FormatterContext& context,
+                                const StreamInfo::StreamInfo& info) const {
+    std::string log_line;
+    log_line.reserve(512);
+
+    std::string sanitize_buffer;
+
+    for (const auto& element : elements_) {
+      // 1. Handle the raw string element.
+      if (absl::holds_alternative<typename FormatBuilder::RawString>(element)) {
+        log_line.append(absl::get<typename FormatBuilder::RawString>(element));
+        continue;
+      }
+      ASSERT(absl::holds_alternative<typename FormatBuilder::Formatter>(element));
+
+      const auto& formatter = absl::get<typename FormatBuilder::Formatter>(element);
+      ASSERT(!formatter.empty());
+
+      // 2. Handle the formatter element with multiple providers or case
+      //    that value type needs not to be kept.
+      if (formatter.size() > 1 || !keep_value_type_) {
+        // Multiple providers forces string output.
+        log_line.push_back('"');
+        for (const auto& provider : formatter) {
+          const auto bit = provider->formatWithContext(context, info);
+          if (!bit.has_value()) {
+            log_line.append(empty_value_);
+            continue;
+          }
+          log_line.append(Json::sanitize(sanitize_buffer, bit.value()));
+        }
+        log_line.push_back('"');
+
+        continue;
+      }
+
+      // 4. Handle the formatter element with a single provider and value
+      //    type needs to be kept.
+      auto value = formatter[0]->formatValueWithContext(context, info);
+      switch (value.kind_case()) {
+      case ProtobufWkt::Value::KIND_NOT_SET:
+      case ProtobufWkt::Value::kNullValue:
+        log_line.append(NullValue);
+        break;
+      case ProtobufWkt::Value::kNumberValue:
+        log_line.append(fmt::to_string(value.number_value()));
+        break;
+      case ProtobufWkt::Value::kStringValue:
+        log_line.push_back('"');
+        log_line.append(Json::sanitize(sanitize_buffer, value.string_value()));
+        log_line.push_back('"');
+        break;
+      case ProtobufWkt::Value::kBoolValue:
+        log_line.append(value.bool_value() ? BoolTrue : BoolFalse);
+        break;
+      case ProtobufWkt::Value::kStructValue:
+      case ProtobufWkt::Value::kListValue:
+        // Convert the struct or list to string. This may result in a performance
+        // degradation. But We rarely hit this case.
+        // Basically only metadata or filter state formatter may hit this case.
+#ifdef ENVOY_ENABLE_YAML
+        absl::StatusOr<std::string> json_or =
+            MessageUtil::getJsonStringFromMessage(value, false, true);
+        if (json_or.ok()) {
+          log_line.append(json_or.value());
+        } else {
+          log_line.push_back('"');
+          log_line.append(Json::sanitize(sanitize_buffer, json_or.status().message()));
+          log_line.push_back('"');
+        }
+#else
+        IS_ENVOY_BUG("Json support compiled out");
+        log_line.append(R"EOF("Json support compiled out")EOF");
+#endif
+        break;
+      }
+    }
+
+    log_line.push_back('\n');
+    return log_line;
+  }
+
+private:
+  static constexpr absl::string_view BoolFalse = "false";
+  static constexpr absl::string_view BoolTrue = "true";
+  static constexpr absl::string_view NullValue = "null";
+
+  const bool omit_empty_values_{};
+  const bool keep_value_type_{};
+  const std::string empty_value_;
+
+  const FormatBuilder::FormatterEelements elements_;
+};
+
+using NewJsonFormatterImpl = NewJsonFormatterImplBase<HttpFormatterContext>;
+
 // Helper classes for StructFormatter::StructFormatMapVisitor.
-template <class... Ts> struct StructFormatMapVisitorHelper : Ts... { using Ts::operator()...; };
+template <class... Ts> struct StructFormatMapVisitorHelper : Ts... {
+  using Ts::operator()...;
+};
 template <class... Ts> StructFormatMapVisitorHelper(Ts...) -> StructFormatMapVisitorHelper<Ts...>;
 
 /**
