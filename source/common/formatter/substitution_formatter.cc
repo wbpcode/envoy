@@ -54,5 +54,101 @@ const std::regex& SubstitutionFormatParser::commandWithArgsRegex() {
   // clang-format on
 }
 
+JsonFormatBuilder::FormatterEelements
+JsonFormatBuilder::fromStruct(const ProtobufWkt::Struct& struct_format) const {
+  sanitize_buffer_.clear();
+  join_raw_string_.clear();
+  output_.clear();
+
+  formatValueToFormatterEelements(struct_format);
+  if (!join_raw_string_.empty()) {
+    output_.push_back(JsonString{std::move(join_raw_string_)});
+  }
+  return std::move(output_);
+};
+
+void JsonFormatBuilder::formatValueToFormatterEelements(const ProtobufWkt::Value& value) const {
+  switch (value.kind_case()) {
+  case ProtobufWkt::Value::KIND_NOT_SET:
+  case ProtobufWkt::Value::kNullValue:
+    join_raw_string_.append(NullValue);
+    break;
+  case ProtobufWkt::Value::kNumberValue:
+    if (keep_value_type_) {
+      // Keep the number type in JSON.
+      join_raw_string_.append(fmt::to_string(value.number_value()));
+    } else {
+      // Convert the number to string.
+      join_raw_string_.append(fmt::format(R"("{}")", value.number_value()));
+    }
+    break;
+  case ProtobufWkt::Value::kStringValue: {
+    absl::string_view string_format = value.string_value();
+    if (string_format.empty() || !absl::StrContains(string_format, '%')) {
+      join_raw_string_.append(
+          fmt::format(R"("{}")", Json::sanitize(sanitize_buffer_, string_format)));
+    } else {
+      // The string contains a formatter, we need to push the current raw string
+      // into the output list first.
+      if (!join_raw_string_.empty()) {
+        output_.push_back(JsonString{std::move(join_raw_string_)});
+      }
+
+      // Now a formatter is coming, we need to push the current raw string into
+      // the output list.
+      output_.push_back(TmplString{std::string(string_format)});
+    }
+    break;
+  }
+  case ProtobufWkt::Value::kBoolValue:
+    if (keep_value_type_) {
+      // Keep the bool type in JSON.
+      join_raw_string_.append(fmt::to_string(value.bool_value()));
+    } else {
+      // Convert the bool to string.
+      join_raw_string_.append(fmt::format(R"("{}")", value.bool_value()));
+    }
+    break;
+  case ProtobufWkt::Value::kStructValue: {
+    formatValueToFormatterEelements(value.struct_value());
+    break;
+  case ProtobufWkt::Value::kListValue:
+    join_raw_string_.push_back('[');
+    for (int i = 0; i < value.list_value().values_size(); ++i) {
+      if (i > 0) {
+        join_raw_string_.push_back(',');
+      }
+      formatValueToFormatterEelements(value.list_value().values(i));
+    }
+    join_raw_string_.push_back(']');
+    break;
+  }
+  }
+}
+
+void JsonFormatBuilder::formatValueToFormatterEelements(const ProtobufWkt::Struct& value) const {
+  const auto& struct_fields = value.fields();
+  std::vector<absl::string_view> sorted_keys;
+  sorted_keys.reserve(struct_fields.size());
+  for (const auto& field : struct_fields) {
+    sorted_keys.push_back(field.first);
+  }
+  if (sort_properties_) {
+    std::sort(sorted_keys.begin(), sorted_keys.end());
+  }
+
+  join_raw_string_.push_back('{');
+  for (size_t index = 0; index < sorted_keys.size(); ++index) {
+    if (index > 0) {
+      join_raw_string_.push_back(',');
+    }
+
+    auto sanitized = Json::sanitize(sanitize_buffer_, sorted_keys[index]);
+    join_raw_string_.append(fmt::format(R"("{}":)", sanitized));
+    formatValueToFormatterEelements(struct_fields.at(sorted_keys[index]));
+  }
+  join_raw_string_.push_back('}');
+}
+
 } // namespace Formatter
 } // namespace Envoy
