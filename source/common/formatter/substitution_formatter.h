@@ -13,13 +13,13 @@
 #include "envoy/formatter/substitution_formatter.h"
 #include "envoy/stream_info/stream_info.h"
 
-#include "google/protobuf/struct.pb.h"
 #include "source/common/common/utility.h"
 #include "source/common/formatter/http_formatter_context.h"
 #include "source/common/json/json_loader.h"
 #include "source/common/json/json_sanitizer.h"
 
 #include "absl/types/optional.h"
+#include "google/protobuf/struct.pb.h"
 
 namespace Envoy {
 namespace Formatter {
@@ -273,13 +273,10 @@ public:
 
   /**
    * Constructor of JsonFormatBuilder.
-   * @param sort_properties whether to sort the properties in the JSON. If false
-   * the default order of the proto struct will be used.
    * @param keep_value_type whether to keep the value type in JSON. If false
    * then all values will be converted to string.
    */
-  explicit JsonFormatBuilder(bool sort_properties, bool keep_value_type)
-      : sort_properties_(sort_properties), keep_value_type_(keep_value_type) {}
+  explicit JsonFormatBuilder(bool keep_value_type) : keep_value_type_(keep_value_type) {}
 
   /**
    * Convert a proto struct format configuration to a list of raw JSON string and
@@ -301,7 +298,7 @@ public:
    *     nested:
    *       text: "nested_text"
    *
-   * It will be parsed to the following list:
+   * It will be parsed to the following peaces:
    *
    *   - '{"text":"text","tmpl":'
    *   - '%START_TIME%'
@@ -321,29 +318,26 @@ private:
   void formatValueToFormatterEelements(const ProtobufWkt::Struct& value) const;
   void formatValueToFormatterEelements(const ProtobufWkt::Value& value) const;
 
-  const bool sort_properties_{};
   const bool keep_value_type_{};
 
   mutable std::string sanitize_buffer_; // Buffer for sanitizing strings.
-  mutable std::string join_raw_string_; // Buffer for joining raw strings.
+  mutable std::string raw_json_string_; // Buffer for joining raw strings.
   mutable FormatterEelements output_;   // Final output.
 };
 
 template <class FormatterContext>
-class NewJsonFormatterImplBase : public FormatterBase<FormatterContext> {
+class JsonFormatterImplBase : public FormatterBase<FormatterContext> {
 public:
   using CommandParsers = std::vector<CommandParserBasePtr<FormatterContext>>;
   using Formatters = std::vector<FormatterProviderBasePtr<FormatterContext>>;
 
-  NewJsonFormatterImplBase(const ProtobufWkt::Struct& struct_format, bool keep_value_type,
-                           bool omit_empty_values, bool sort_properties,
-                           const CommandParsers& commands = {})
+  JsonFormatterImplBase(const ProtobufWkt::Struct& struct_format, bool keep_value_type,
+                        bool omit_empty_values, const CommandParsers& commands = {})
       : omit_empty_values_(omit_empty_values), keep_value_type_(keep_value_type),
         empty_value_(omit_empty_values_ ? std::string()
                                         : std::string(DefaultUnspecifiedValueStringView)) {
-    JsonFormatBuilder builder(sort_properties, keep_value_type);
-    auto elements = builder.fromStruct(struct_format);
-    for (auto& element : elements) {
+    const auto elements = JsonFormatBuilder(keep_value_type).fromStruct(struct_format);
+    for (const auto& element : elements) {
       if (absl::holds_alternative<JsonFormatBuilder::TmplString>(element)) {
         elements_.emplace_back(SubstitutionFormatParser::parse<FormatterContext>(
             absl::get<JsonFormatBuilder::TmplString>(element).value_, commands));
@@ -444,12 +438,8 @@ private:
   std::vector<absl::variant<std::string, Formatters>> elements_;
 };
 
-using NewJsonFormatterImpl = NewJsonFormatterImplBase<HttpFormatterContext>;
-
 // Helper classes for StructFormatter::StructFormatMapVisitor.
-template <class... Ts> struct StructFormatMapVisitorHelper : Ts... {
-  using Ts::operator()...;
-};
+template <class... Ts> struct StructFormatMapVisitorHelper : Ts... { using Ts::operator()...; };
 template <class... Ts> StructFormatMapVisitorHelper(Ts...) -> StructFormatMapVisitorHelper<Ts...>;
 
 /**
@@ -655,13 +645,13 @@ template <class FormatterContext>
 using StructFormatterBasePtr = std::unique_ptr<StructFormatterBase<FormatterContext>>;
 
 template <class FormatterContext>
-class JsonFormatterBaseImpl : public FormatterBase<FormatterContext> {
+class LegacyJsonFormatterBaseImpl : public FormatterBase<FormatterContext> {
 public:
   using CommandParsers = std::vector<CommandParserBasePtr<FormatterContext>>;
 
-  JsonFormatterBaseImpl(const ProtobufWkt::Struct& format_mapping, bool preserve_types,
-                        bool omit_empty_values, bool sort_properties,
-                        const CommandParsers& commands = {})
+  LegacyJsonFormatterBaseImpl(const ProtobufWkt::Struct& format_mapping, bool preserve_types,
+                              bool omit_empty_values, bool sort_properties,
+                              const CommandParsers& commands = {})
       : struct_formatter_(format_mapping, preserve_types, omit_empty_values, commands),
         sort_properties_(sort_properties) {}
 
@@ -694,7 +684,8 @@ using StructFormatterPtr = std::unique_ptr<StructFormatter>;
 
 // Aliases for backwards compatibility.
 using FormatterImpl = FormatterBaseImpl<HttpFormatterContext>;
-using JsonFormatterImpl = JsonFormatterBaseImpl<HttpFormatterContext>;
+using LegacyJsonFormatterImpl = LegacyJsonFormatterBaseImpl<HttpFormatterContext>;
+using JsonFormatterImpl = JsonFormatterImplBase<HttpFormatterContext>;
 
 } // namespace Formatter
 } // namespace Envoy

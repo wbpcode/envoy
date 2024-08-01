@@ -77,22 +77,6 @@ TEST_F(SubstitutionFormatStringUtilsTest, TestFromProtoConfigJson) {
   EXPECT_TRUE(TestUtility::jsonStringEqual(out_json, expected));
 }
 
-TEST_F(SubstitutionFormatStringUtilsTest, TestInvalidConfigs) {
-  const std::vector<std::string> invalid_configs = {
-      R"(
-  json_format:
-    field: true
-)",
-  };
-  for (const auto& yaml : invalid_configs) {
-    TestUtility::loadFromYaml(yaml, config_);
-    EXPECT_THROW_WITH_MESSAGE(SubstitutionFormatStringUtils::fromProtoConfig(config_, context_),
-                              EnvoyException,
-                              "Only string values, nested structs, list values and number values "
-                              "are supported in structured access log format.");
-  }
-}
-
 TEST_F(SubstitutionFormatStringUtilsTest, TestFromProtoConfigFormatterExtension) {
   TestCommandFactory factory;
   Registry::InjectFactory<CommandParserFactory> command_register(factory);

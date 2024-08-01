@@ -4286,7 +4286,8 @@ TEST(SubstitutionFormatterTest, StructFormatterTypedTest) {
 
 TEST(SubstitutionFormatterTest, JsonFormatterTest) {
   NiceMock<StreamInfo::MockStreamInfo> stream_info;
-  Http::TestRequestHeaderMapImpl request_header;
+  Http::TestRequestHeaderMapImpl request_header{{"key_1", "value_1"},
+                                                {"key_2", R"(value_with_quotes_"_)"}};
   Http::TestResponseHeaderMapImpl response_header;
   Http::TestResponseTrailerMapImpl response_trailer;
   std::string body;
@@ -4309,22 +4310,27 @@ TEST(SubstitutionFormatterTest, JsonFormatterTest) {
     nested_level:
       plain_string: plain_string_value
       protocol: '%PROTOCOL%'
+    request_key: '%REQ(key_1)%_@!!!_"_%REQ(key_2)%'
   )EOF",
                             key_mapping);
-  NewJsonFormatterImpl formatter(key_mapping, false, false, false);
+  JsonFormatterImpl formatter(key_mapping, false, false);
 
   const std::string expected = R"EOF({
     "request_duration": "5",
     "nested_level": {
       "plain_string": "plain_string_value",
       "protocol": "HTTP/1.1"
-    }
+    },
+    "request_key": "value_1_@!!!_\"_value_with_quotes_\"_"
   })EOF";
 
   const std::string out_json = formatter.formatWithContext(formatter_context, stream_info);
-  std::cout << out_json << std::endl;
-
   EXPECT_TRUE(TestUtility::jsonStringEqual(out_json, expected));
+
+  LegacyJsonFormatterImpl legacy_formatter(key_mapping, false, false, false);
+  const std::string legacy_out_json =
+      legacy_formatter.formatWithContext(formatter_context, stream_info);
+  EXPECT_TRUE(TestUtility::jsonStringEqual(legacy_out_json, expected));
 }
 
 TEST(SubstitutionFormatterTest, JsonFormatterWithOrderedPropertiesTest) {
@@ -4357,7 +4363,8 @@ TEST(SubstitutionFormatterTest, JsonFormatterWithOrderedPropertiesTest) {
       protocol: '%PROTOCOL%'
   )EOF",
                             key_mapping);
-  NewJsonFormatterImpl formatter(key_mapping, false, false, true);
+  // The new formatter will always order the properties alphabetically.
+  JsonFormatterImpl formatter(key_mapping, false, false);
 
   const std::string expected =
       "{\"afield\":\"vala\",\"bfield\":\"valb\",\"nested_level\":"
@@ -4365,9 +4372,15 @@ TEST(SubstitutionFormatterTest, JsonFormatterWithOrderedPropertiesTest) {
       "\"request_duration\":\"5\"}\n";
 
   const std::string out_json = formatter.formatWithContext(formatter_context, stream_info);
+
   std::cout << out_json << std::endl;
   // Check string equality to verify the order.
   EXPECT_EQ(out_json, expected);
+
+  LegacyJsonFormatterImpl legacy_formatter(key_mapping, false, false, true);
+  const std::string legacy_out_json =
+      legacy_formatter.formatWithContext(formatter_context, stream_info);
+  EXPECT_EQ(legacy_out_json, expected);
 }
 
 TEST(SubstitutionFormatterTest, CompositeFormatterSuccess) {
