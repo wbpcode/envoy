@@ -19,7 +19,6 @@
 #include "source/common/json/json_sanitizer.h"
 
 #include "absl/types/optional.h"
-#include "google/protobuf/struct.pb.h"
 
 namespace Envoy {
 namespace Formatter {
@@ -439,7 +438,9 @@ private:
 };
 
 // Helper classes for StructFormatter::StructFormatMapVisitor.
-template <class... Ts> struct StructFormatMapVisitorHelper : Ts... { using Ts::operator()...; };
+template <class... Ts> struct StructFormatMapVisitorHelper : Ts... {
+  using Ts::operator()...;
+};
 template <class... Ts> StructFormatMapVisitorHelper(Ts...) -> StructFormatMapVisitorHelper<Ts...>;
 
 /**
