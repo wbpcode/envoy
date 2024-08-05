@@ -106,5 +106,25 @@ absl::string_view stripDoubleQuotes(absl::string_view str) {
   return str;
 }
 
+JsonSanitizer::JsonSanitizer(uint64_t initial_raw_json_buffer_size,
+                             uint64_t initial_sanitize_buffer_size) {
+  raw_json_buffer_.reserve(initial_raw_json_buffer_size);
+  sanitize_buffer_.reserve(initial_sanitize_buffer_size);
+}
+
+std::string JsonSanitizer::getAndCleanBuffer() { return std::move(raw_json_buffer_); }
+
+void JsonSanitizer::addMapBegDelimiter() { raw_json_buffer_.push_back('{'); }
+
+void JsonSanitizer::addMapEndDelimiter() { raw_json_buffer_.push_back('}'); }
+
+void JsonSanitizer::addArrayBegDelimiter() { raw_json_buffer_.push_back('['); }
+
+void JsonSanitizer::addArrayEndDelimiter() { raw_json_buffer_.push_back(']'); }
+
+void JsonSanitizer::addKeyValueDelimiter() { raw_json_buffer_.push_back(':'); }
+
+void JsonSanitizer::addElementsDelimiter() { raw_json_buffer_.push_back(','); }
+
 } // namespace Json
 } // namespace Envoy

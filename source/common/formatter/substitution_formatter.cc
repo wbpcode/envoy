@@ -1,4 +1,5 @@
 #include "source/common/formatter/substitution_formatter.h"
+#include "substitution_formatter.h"
 
 namespace Envoy {
 namespace Formatter {
@@ -54,96 +55,96 @@ const re2::RE2& SubstitutionFormatParser::commandWithArgsRegex() {
   // clang-format on
 }
 
-JsonFormatBuilder::FormatterEelements
-JsonFormatBuilder::fromStruct(const ProtobufWkt::Struct& struct_format) const {
-  sanitize_buffer_.clear();
-  raw_json_string_.clear();
+JsonFormatBuilder::FormatElements
+JsonFormatBuilder::fromStruct(const ProtobufWkt::Struct& struct_format) {
   output_.clear();
 
-  formatValueToFormatterEelements(struct_format);
-  if (!raw_json_string_.empty()) {
-    output_.push_back(JsonString{std::move(raw_json_string_)});
+  formatValueToFormatElements(struct_format.fields());
+  std::string json_piece = buffer_.getAndCleanBuffer();
+  if (!json_piece.empty()) {
+    output_.push_back(JsonString{std::move(json_piece)});
   }
   return std::move(output_);
 };
 
-void JsonFormatBuilder::formatValueToFormatterEelements(const ProtobufWkt::Value& value) const {
+void JsonFormatBuilder::formatValueToFormatElements(const ProtobufWkt::Value& value) {
   switch (value.kind_case()) {
   case ProtobufWkt::Value::KIND_NOT_SET:
   case ProtobufWkt::Value::kNullValue:
-    raw_json_string_.append(NullValue);
+    buffer_.addNull();
     break;
   case ProtobufWkt::Value::kNumberValue:
-    if (keep_value_type_) {
-      // Keep the number type in JSON.
-      raw_json_string_.append(fmt::to_string(value.number_value()));
-    } else {
-      // Convert the number to string.
-      raw_json_string_.append(fmt::format(R"("{}")", value.number_value()));
-    }
+    keep_value_type_ ? buffer_.addNumber(value.number_value())
+                     : buffer_.addNumber<true>(value.number_value());
     break;
   case ProtobufWkt::Value::kStringValue: {
     absl::string_view string_format = value.string_value();
-    if (string_format.empty() || !absl::StrContains(string_format, '%')) {
-      raw_json_string_.append(
-          fmt::format(R"("{}")", Json::sanitize(sanitize_buffer_, string_format)));
-    } else {
-      // The string contains a formatter, we need to push the current raw string
-      // into the output list first.
-      if (!raw_json_string_.empty()) {
-        output_.push_back(JsonString{std::move(raw_json_string_)});
-      }
-
-      // Now a formatter is coming, we need to push the current raw string into
-      // the output list.
-      output_.push_back(TmplString{std::string(string_format)});
+    if (!absl::StrContains(string_format, '%')) {
+      buffer_.addString(string_format);
+      break;
     }
+
+    // The string contains a formatter, we need to push the current raw string
+    // into the output list first.
+    std::string json_piece = buffer_.getAndCleanBuffer();
+    if (!json_piece.empty()) {
+      output_.push_back(JsonString{std::move(json_piece)});
+    }
+
+    // Now a formatter is coming, we need to push the current raw string into
+    // the output list.
+    output_.push_back(TmplString{std::string(string_format)});
     break;
   }
   case ProtobufWkt::Value::kBoolValue:
-    if (keep_value_type_) {
-      // Keep the bool type in JSON.
-      raw_json_string_.append(fmt::to_string(value.bool_value()));
-    } else {
-      // Convert the bool to string.
-      raw_json_string_.append(fmt::format(R"("{}")", value.bool_value()));
-    }
+    keep_value_type_ ? buffer_.addBool(value.bool_value())
+                     : buffer_.addBool<true>(value.bool_value());
+
     break;
   case ProtobufWkt::Value::kStructValue: {
-    formatValueToFormatterEelements(value.struct_value());
+    formatValueToFormatElements(value.struct_value().fields());
     break;
   case ProtobufWkt::Value::kListValue:
-    raw_json_string_.push_back('[');
-    for (int i = 0; i < value.list_value().values_size(); ++i) {
-      if (i > 0) {
-        raw_json_string_.push_back(',');
-      }
-      formatValueToFormatterEelements(value.list_value().values(i));
-    }
-    raw_json_string_.push_back(']');
+    formatValueToFormatElements(value.list_value().values());
     break;
   }
   }
 }
 
-void JsonFormatBuilder::formatValueToFormatterEelements(const ProtobufWkt::Struct& value) const {
-  const auto& fields = value.fields();
+void JsonFormatBuilder::formatValueToFormatElements(const ProtoList& list_value) {
+  buffer_.addArrayBegDelimiter(); // Delimiter to start list.
+  for (int i = 0; i < list_value.size(); ++i) {
+    if (i > 0) {
+      buffer_.addElementsDelimiter(); // Delimiter to separate list elements.
+    }
+    formatValueToFormatElements(list_value[i]);
+  }
+  buffer_.addArrayEndDelimiter(); // Delimiter to end list.
+}
+
+void JsonFormatBuilder::formatValueToFormatElements(const ProtoDict& dict_value) {
+  std::vector<std::pair<absl::string_view, ProtoDict::const_iterator>> sorted_fields;
+  sorted_fields.reserve(dict_value.size());
+
+  for (auto it = dict_value.begin(); it != dict_value.end(); ++it) {
+    sorted_fields.push_back({it->first, it});
+  }
 
   // Sort the keys to make the output deterministic.
-  std::set<absl::string_view> keys;
-  std::for_each(fields.begin(), fields.end(), [&keys](const auto& p) { keys.insert(p.first); });
+  std::sort(sorted_fields.begin(), sorted_fields.end(),
+            [](const auto& a, const auto& b) { return a.first < b.first; });
 
-  raw_json_string_.push_back('{');
-  for (auto it = keys.begin(); it != keys.end(); ++it) {
-    if (it != keys.begin()) {
-      raw_json_string_.push_back(',');
+  buffer_.addMapBegDelimiter(); // Delimiter to start map.
+  for (size_t i = 0; i < sorted_fields.size(); ++i) {
+    if (i > 0) {
+      buffer_.addElementsDelimiter(); // Delimiter to separate map elements.
     }
+    buffer_.addString(sorted_fields[i].first); // Add the key value.
+    buffer_.addKeyValueDelimiter();            // Delimiter to separate key and value.
 
-    auto sanitized = Json::sanitize(sanitize_buffer_, *it);
-    raw_json_string_.append(fmt::format(R"("{}":)", sanitized));
-    formatValueToFormatterEelements(fields.at(*it));
+    formatValueToFormatElements(sorted_fields[i].second->second);
   }
-  raw_json_string_.push_back('}');
+  buffer_.addMapEndDelimiter(); // Delimiter to end map.
 }
 
 } // namespace Formatter

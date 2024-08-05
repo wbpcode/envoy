@@ -248,17 +248,14 @@ private:
 // Helper class to parse the Json format configuration.
 class JsonFormatBuilder {
 public:
-  static constexpr absl::string_view BoolFalse = "false";
-  static constexpr absl::string_view BoolTrue = "true";
-  static constexpr absl::string_view NullValue = "null";
-
   struct JsonString {
     std::string value_;
   };
   struct TmplString {
     std::string value_;
   };
-  using FormatterEelements = std::vector<absl::variant<JsonString, TmplString>>;
+  using FormatElement = absl::variant<JsonString, TmplString>;
+  using FormatElements = std::vector<FormatElement>;
 
   /**
    * Constructor of JsonFormatBuilder.
@@ -268,10 +265,16 @@ public:
   explicit JsonFormatBuilder(bool keep_value_type) : keep_value_type_(keep_value_type) {}
 
   /**
-   * Convert a proto struct format configuration to a list of raw JSON string and
-   * substitution template string.
-   * Given a proto struct format configuration, it will be parsed to a list of raw
-   * string and substitution template string.
+   * Convert a proto struct format configuration to an array of raw JSON pieces and
+   * substitution format template strings.
+   *
+   * The keys, raw values, delimiters will be serialized as JSON string pieces (raw
+   * JSON strings) directly when loading the configuration.
+   * The substitution format template strings will be kept as TmplString pieces and
+   * will be parsed to formatter providers by the JsonFormatter.
+   *
+   * NOTE: This class is used to parse the configuration of the proto struct format
+   * and should only be used in the context of parsing the configuration.
    *
    * For example given the following proto struct format configuration:
    *
@@ -287,150 +290,166 @@ public:
    *     nested:
    *       text: "nested_text"
    *
-   * It will be parsed to the following peaces:
+   * It will be parsed to the following pieces:
    *
-   *   - '{"text":"text","tmpl":'
-   *   - '%START_TIME%'
-   *   - ',"number":2,"bool":true,"list":["list_raw_value",false,'
-   *   - '%EMIT_TIME%'
-   *   - '],"nested":{"text":"nested_text"}}'
+   *   - '{"text":"text","tmpl":'                                   # Raw JSON piece.
+   *   - '%START_TIME%'                                             # Format template piece.
+   *   - ',"number":2,"bool":true,"list":["list_raw_value",false,'  # Raw JSON piece.
+   *   - '%EMIT_TIME%'                                              # Format template piece.
+   *   - '],"nested":{"text":"nested_text"}}'                       # Raw JSON piece.
    *
-   * Finally the substitution template string will be parsed to a list of substitution
-   * formatters. Then join the raw string and output of substitution formatters in order
-   * to get the final output.
+   * Finally, join the raw JSON pieces and output of substitution formatters in order
+   * to construct the final JSON output.
    *
    * @param struct_format the proto struct format configuration.
    */
-  FormatterEelements fromStruct(const ProtobufWkt::Struct& struct_format) const;
+  FormatElements fromStruct(const ProtobufWkt::Struct& struct_format);
 
 private:
-  void formatValueToFormatterEelements(const ProtobufWkt::Struct& value) const;
-  void formatValueToFormatterEelements(const ProtobufWkt::Value& value) const;
+  using ProtoDict = Protobuf::Map<std::string, ProtobufWkt::Value>;
+  using ProtoList = Protobuf::RepeatedPtrField<ProtobufWkt::Value>;
+
+  void formatValueToFormatElements(const ProtoDict& dict_value);
+  void formatValueToFormatElements(const ProtobufWkt::Value& value);
+  void formatValueToFormatElements(const ProtoList& list_value);
 
   const bool keep_value_type_{};
 
-  mutable std::string sanitize_buffer_; // Buffer for sanitizing strings.
-  mutable std::string raw_json_string_; // Buffer for joining raw strings.
-  mutable FormatterEelements output_;   // Final output.
+  Json::JsonSanitizer buffer_; // Buffer to sanitize JSON pieces.
+  FormatElements output_;      // Output configuration.
 };
 
 template <class FormatterContext>
 class JsonFormatterImplBase : public FormatterBase<FormatterContext> {
 public:
   using CommandParsers = std::vector<CommandParserBasePtr<FormatterContext>>;
-  using Formatters = std::vector<FormatterProviderBasePtr<FormatterContext>>;
+  using Formatter = FormatterProviderBasePtr<FormatterContext>;
+  using Formatters = std::vector<Formatter>;
 
   JsonFormatterImplBase(const ProtobufWkt::Struct& struct_format, bool keep_value_type,
                         bool omit_empty_values, const CommandParsers& commands = {})
       : omit_empty_values_(omit_empty_values), keep_value_type_(keep_value_type),
         empty_value_(omit_empty_values_ ? std::string()
                                         : std::string(DefaultUnspecifiedValueStringView)) {
-    const auto elements = JsonFormatBuilder(keep_value_type).fromStruct(struct_format);
-    for (const auto& element : elements) {
+
+    JsonFormatBuilder::FormatElements elements =
+        JsonFormatBuilder(keep_value_type).fromStruct(struct_format);
+
+    for (JsonFormatBuilder::FormatElement& element : elements) {
       if (absl::holds_alternative<JsonFormatBuilder::TmplString>(element)) {
-        elements_.emplace_back(SubstitutionFormatParser::parse<FormatterContext>(
+        parsed_elements_.emplace_back(SubstitutionFormatParser::parse<FormatterContext>(
             absl::get<JsonFormatBuilder::TmplString>(element).value_, commands));
       } else {
-        elements_.emplace_back(absl::get<JsonFormatBuilder::JsonString>(element).value_);
+        parsed_elements_.emplace_back(
+            std::move(absl::get<JsonFormatBuilder::JsonString>(element).value_));
       }
     }
   }
 
   std::string formatWithContext(const FormatterContext& context,
                                 const StreamInfo::StreamInfo& info) const {
-    std::string log_line;
-    log_line.reserve(512);
+    Json::JsonSanitizer buffer(512, 64);
 
-    std::string sanitize_buffer;
-
-    for (const auto& element : elements_) {
+    for (const ParsedFormatElement& element : parsed_elements_) {
       // 1. Handle the raw string element.
       if (absl::holds_alternative<std::string>(element)) {
-        log_line.append(absl::get<std::string>(element));
+        // The raw string element will be added to the buffer directly.
+        // It is sanitized when loading the configuration.
+        buffer.addPiece(absl::get<std::string>(element));
         continue;
       }
-      ASSERT(absl::holds_alternative<Formatters>(element));
 
-      const auto& formatters = absl::get<Formatters>(element);
+      ASSERT(absl::holds_alternative<Formatters>(element));
+      const Formatters& formatters = absl::get<Formatters>(element);
       ASSERT(!formatters.empty());
 
       // 2. Handle the formatter element with multiple providers or case
       //    that value type needs not to be kept.
       if (formatters.size() > 1 || !keep_value_type_) {
-        // Multiple providers forces string output.
-        log_line.push_back('"');
-        for (const auto& provider : formatters) {
-          const auto bit = provider->formatWithContext(context, info);
-          if (!bit.has_value()) {
-            log_line.append(empty_value_);
-            continue;
-          }
-          log_line.append(Json::sanitize(sanitize_buffer, bit.value()));
-        }
-        log_line.push_back('"');
-
+        stringValueToLogLine(formatters, context, info, buffer);
         continue;
       }
 
       // 4. Handle the formatter element with a single provider and value
       //    type needs to be kept.
-      auto value = formatters[0]->formatValueWithContext(context, info);
-      switch (value.kind_case()) {
-      case ProtobufWkt::Value::KIND_NOT_SET:
-      case ProtobufWkt::Value::kNullValue:
-        log_line.append(JsonFormatBuilder::NullValue);
-        break;
-      case ProtobufWkt::Value::kNumberValue:
-        log_line.append(fmt::to_string(value.number_value()));
-        break;
-      case ProtobufWkt::Value::kStringValue:
-        log_line.push_back('"');
-        log_line.append(Json::sanitize(sanitize_buffer, value.string_value()));
-        log_line.push_back('"');
-        break;
-      case ProtobufWkt::Value::kBoolValue:
-        log_line.append(value.bool_value() ? JsonFormatBuilder::BoolTrue
-                                           : JsonFormatBuilder::BoolFalse);
-        break;
-      case ProtobufWkt::Value::kStructValue:
-      case ProtobufWkt::Value::kListValue:
-        // Convert the struct or list to string. This may result in a performance
-        // degradation. But We rarely hit this case.
-        // Basically only metadata or filter state formatter may hit this case.
-#ifdef ENVOY_ENABLE_YAML
-        absl::StatusOr<std::string> json_or =
-            MessageUtil::getJsonStringFromMessage(value, false, true);
-        if (json_or.ok()) {
-          log_line.append(json_or.value());
-        } else {
-          log_line.push_back('"');
-          log_line.append(Json::sanitize(sanitize_buffer, json_or.status().message()));
-          log_line.push_back('"');
-        }
-#else
-        IS_ENVOY_BUG("Json support compiled out");
-        log_line.append(R"EOF("Json support compiled out")EOF");
-#endif
-        break;
-      }
+      typedValueToLogLine(formatters, context, info, buffer);
     }
 
+    std::string log_line = buffer.getAndCleanBuffer();
     log_line.push_back('\n');
     return log_line;
   }
 
 private:
+  void stringValueToLogLine(const Formatters& formatters, const FormatterContext& context,
+                            const StreamInfo::StreamInfo& info, Json::JsonSanitizer& buffer) const {
+
+    buffer.addPiece(Json::JsonSanitizer::QuoteValue); // Start the JSON string.
+    for (const Formatter& formatter : formatters) {
+      const absl::optional<std::string> value = formatter->formatWithContext(context, info);
+      if (!value.has_value()) {
+        // Add the empty value. This needn't be sanitized.
+        buffer.addPiece(empty_value_);
+        continue;
+      }
+      // Sanitize the string value and add it to the buffer. The string value will not be quoted
+      // since we handle the quoting by ourselves at the outer level.
+      buffer.addString<false>(value.value());
+    }
+    buffer.addPiece(Json::JsonSanitizer::QuoteValue); // End the JSON string.
+  }
+
+  void typedValueToLogLine(const Formatters& formatters, const FormatterContext& context,
+                           const StreamInfo::StreamInfo& info, Json::JsonSanitizer& buffer) const {
+
+    const ProtobufWkt::Value value = formatters[0]->formatValueWithContext(context, info);
+
+    switch (value.kind_case()) {
+    case ProtobufWkt::Value::KIND_NOT_SET:
+    case ProtobufWkt::Value::kNullValue:
+      buffer.addNull();
+      break;
+    case ProtobufWkt::Value::kNumberValue:
+      buffer.addNumber(value.number_value());
+      break;
+    case ProtobufWkt::Value::kStringValue:
+      buffer.addString(value.string_value());
+      break;
+    case ProtobufWkt::Value::kBoolValue:
+      buffer.addBool(value.bool_value());
+      break;
+    case ProtobufWkt::Value::kStructValue:
+    case ProtobufWkt::Value::kListValue:
+      // Convert the struct or list to string. This may result in a performance
+      // degradation. But We rarely hit this case.
+      // Basically only metadata or filter state formatter may hit this case.
+#ifdef ENVOY_ENABLE_YAML
+      absl::StatusOr<std::string> json_or =
+          MessageUtil::getJsonStringFromMessage(value, false, true);
+      if (json_or.ok()) {
+        // We assume the output of getJsonStringFromMessage is a valid JSON string piece.
+        buffer.addPiece(json_or.value());
+      } else {
+        buffer.addString(json_or.status().ToString());
+      }
+#else
+      IS_ENVOY_BUG("Json support compiled out");
+      buffer.addPiece(R"EOF("Json support compiled out")EOF");
+#endif
+      break;
+    }
+  }
+
   const bool omit_empty_values_{};
   const bool keep_value_type_{};
   const std::string empty_value_;
 
-  std::vector<absl::variant<std::string, Formatters>> elements_;
+  using ParsedFormatElement = absl::variant<std::string, Formatters>;
+  std::vector<ParsedFormatElement> parsed_elements_;
 };
 
 // Helper classes for StructFormatter::StructFormatMapVisitor.
-template <class... Ts> struct StructFormatMapVisitorHelper : Ts... {
-  using Ts::operator()...;
-};
+template <class... Ts> struct StructFormatMapVisitorHelper : Ts... { using Ts::operator()...; };
 template <class... Ts> StructFormatMapVisitorHelper(Ts...) -> StructFormatMapVisitorHelper<Ts...>;
 
 /**
