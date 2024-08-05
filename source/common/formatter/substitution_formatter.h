@@ -270,7 +270,7 @@ public:
    *
    * The keys, raw values, delimiters will be serialized as JSON string pieces (raw
    * JSON strings) directly when loading the configuration.
-   * The substitution format template strings will be kept as TmplString pieces and
+   * The substitution format template strings will be kept as template string pieces and
    * will be parsed to formatter providers by the JsonFormatter.
    *
    * NOTE: This class is used to parse the configuration of the proto struct format
@@ -280,7 +280,7 @@ public:
    *
    *   json_format:
    *     text: "text"
-   *     tmpl: "%START_TIME%"
+   *     template: "%START_TIME%"
    *     number: 2
    *     bool: true
    *     list:
@@ -292,7 +292,7 @@ public:
    *
    * It will be parsed to the following pieces:
    *
-   *   - '{"text":"text","tmpl":'                                   # Raw JSON piece.
+   *   - '{"text":"text","template":'                               # Raw JSON piece.
    *   - '%START_TIME%'                                             # Format template piece.
    *   - ',"number":2,"bool":true,"list":["list_raw_value",false,'  # Raw JSON piece.
    *   - '%EMIT_TIME%'                                              # Format template piece.

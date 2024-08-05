@@ -71,32 +71,32 @@ public:
                 uint64_t initial_sanitize_buffer_size = 64);
 
   /**
-   * Add delimieter '{' to the raw JSON piece buffer.
+   * Add delimiter '{' to the raw JSON piece buffer.
    */
   void addMapBegDelimiter();
 
   /**
-   * Add delimieter '}' to the raw JSON piece buffer.
+   * Add delimiter '}' to the raw JSON piece buffer.
    */
   void addMapEndDelimiter();
 
   /**
-   * Add delimieter '[' to the raw JSON piece buffer.
+   * Add delimiter '[' to the raw JSON piece buffer.
    */
   void addArrayBegDelimiter();
 
   /**
-   * Add delimieter ']' to the raw JSON piece buffer.
+   * Add delimiter ']' to the raw JSON piece buffer.
    */
   void addArrayEndDelimiter();
 
   /**
-   * Add delimieter ':' to the raw JSON piece buffer.
+   * Add delimiter ':' to the raw JSON piece buffer.
    */
   void addKeyValueDelimiter();
 
   /**
-   * Add delimieter ',' to the raw JSON piece buffer.
+   * Add delimiter ',' to the raw JSON piece buffer.
    */
   void addElementsDelimiter();
 
