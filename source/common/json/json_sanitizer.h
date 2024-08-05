@@ -50,7 +50,7 @@ absl::string_view stripDoubleQuotes(absl::string_view str);
 /**
  * Helper class to sanitize keys, values, and delimiters to short JSON pieces
  * (strings).
- * NOTE: Use this class carefully. YOUSELF should make sure the JSON pieces
+ * NOTE: Use this class carefully. YOURSELF should make sure the JSON pieces
  * are sanitized and constructed correctly.
  * NOTE: Although this class could but is not designed to construct a complete
  * JSON output. It is designed to sanitize and construct partial JSON pieces

@@ -348,7 +348,7 @@ public:
 
   std::string formatWithContext(const FormatterContext& context,
                                 const StreamInfo::StreamInfo& info) const {
-    Json::JsonSanitizer buffer(512, 64);
+    Json::JsonSanitizer buffer(1024, 64);
 
     for (const ParsedFormatElement& element : parsed_elements_) {
       // 1. Handle the raw string element.
