@@ -74,13 +74,8 @@ void JsonFormatBuilder::formatValueToFormatElements(const ProtobufWkt::Value& va
     buffer_.addNull();
     break;
   case ProtobufWkt::Value::kNumberValue:
-    if (!keep_value_type_) {
-      // TODO(wbpcode): use the Buffer::Util::serializeDouble function to serialize the
-      // double value.
-      buffer_.addString(fmt::to_string(value.number_value()));
-    } else {
-      buffer_.addNumber(value.number_value());
-    }
+    keep_value_type_ ? buffer_.addNumber(value.number_value())
+                     : buffer_.addNumber<true>(value.number_value());
     break;
   case ProtobufWkt::Value::kStringValue: {
     absl::string_view string_format = value.string_value();
@@ -102,12 +97,9 @@ void JsonFormatBuilder::formatValueToFormatElements(const ProtobufWkt::Value& va
     break;
   }
   case ProtobufWkt::Value::kBoolValue:
-    if (!keep_value_type_) {
-      buffer_.addString(value.bool_value() ? Json::JsonSanitizer::TrueValue
-                                           : Json::JsonSanitizer::FalseValue);
-    } else {
-      buffer_.addBool(value.bool_value());
-    }
+    keep_value_type_ ? buffer_.addBool(value.bool_value())
+                     : buffer_.addBool<true>(value.bool_value());
+
     break;
   case ProtobufWkt::Value::kStructValue: {
     formatValueToFormatElements(value.struct_value().fields());
