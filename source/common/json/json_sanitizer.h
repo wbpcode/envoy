@@ -124,28 +124,23 @@ public:
    * parameter should be false unless the caller wants to serialize the
    * number value as a string.
    */
-  template <bool QUOTE = false> void addNumber(double value) {
+  void addNumber(double value) {
     // TODO(wbpcode): use the Buffer::Util::serializeDouble function to serialize the
     // double value.
-    addPiece<QUOTE>(fmt::to_string(value));
+    raw_json_buffer_.append(fmt::to_string(value));
   }
 
   /**
    * Add a bool value to the raw JSON piece buffer.
    *
    * @param value The bool value to be added.
-   * @param QUOTE Whether to quote the bool value. Default is false. This
-   * parameter should be false unless the caller wants to serialize the
-   * bool value as a string.
    */
-  template <bool QUOTE = false> void addBool(bool value) {
-    addPiece<QUOTE>(value ? TrueValue : FalseValue);
-  }
+  void addBool(bool value) { raw_json_buffer_.append(value ? TrueValue : FalseValue); }
 
   /**
    * Add a null value to the raw JSON piece buffer.
    */
-  void addNull() { addPiece<false>(NullValue); }
+  void addNull() { raw_json_buffer_.append(NullValue); }
 
   /**
    * Add a raw string piece to the buffer. Please make sure the string piece
@@ -174,6 +169,8 @@ public:
    * call.
    */
   std::string getAndCleanBuffer();
+
+  absl::string_view getBuffer() const { return raw_json_buffer_; }
 
   /**
    * Clear the raw JSON pieces buffer.
