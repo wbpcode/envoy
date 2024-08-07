@@ -60,7 +60,7 @@ JsonFormatBuilder::fromStruct(const ProtobufWkt::Struct& struct_format) {
   output_.clear();
 
   formatValueToFormatElements(struct_format.fields());
-  std::string json_piece = buffer_.getAndCleanBuffer();
+  std::string json_piece = std::move(writer_.buffer_);
   if (!json_piece.empty()) {
     output_.push_back(JsonString{std::move(json_piece)});
   }
@@ -71,22 +71,22 @@ void JsonFormatBuilder::formatValueToFormatElements(const ProtobufWkt::Value& va
   switch (value.kind_case()) {
   case ProtobufWkt::Value::KIND_NOT_SET:
   case ProtobufWkt::Value::kNullValue:
-    buffer_.addNull();
+    serializer_.addNull();
     break;
   case ProtobufWkt::Value::kNumberValue:
-    keep_value_type_ ? buffer_.addNumber(value.number_value())
-                     : buffer_.addNumber<true>(value.number_value());
+    keep_value_type_ ? serializer_.addNumber(value.number_value())
+                     : serializer_.addNumber<true>(value.number_value());
     break;
   case ProtobufWkt::Value::kStringValue: {
     absl::string_view string_format = value.string_value();
     if (!absl::StrContains(string_format, '%')) {
-      buffer_.addString(string_format);
+      serializer_.addString(string_format);
       break;
     }
 
     // The string contains a formatter, we need to push the current raw string
     // into the output list first.
-    std::string json_piece = buffer_.getAndCleanBuffer();
+    std::string json_piece = std::move(writer_.buffer_);
     if (!json_piece.empty()) {
       output_.push_back(JsonString{std::move(json_piece)});
     }
@@ -97,8 +97,8 @@ void JsonFormatBuilder::formatValueToFormatElements(const ProtobufWkt::Value& va
     break;
   }
   case ProtobufWkt::Value::kBoolValue:
-    keep_value_type_ ? buffer_.addBool(value.bool_value())
-                     : buffer_.addBool<true>(value.bool_value());
+    keep_value_type_ ? serializer_.addBool(value.bool_value())
+                     : serializer_.addBool<true>(value.bool_value());
 
     break;
   case ProtobufWkt::Value::kStructValue: {
@@ -112,14 +112,14 @@ void JsonFormatBuilder::formatValueToFormatElements(const ProtobufWkt::Value& va
 }
 
 void JsonFormatBuilder::formatValueToFormatElements(const ProtoList& list_value) {
-  buffer_.addArrayBegDelimiter(); // Delimiter to start list.
+  serializer_.addArrayBegDelimiter(); // Delimiter to start list.
   for (int i = 0; i < list_value.size(); ++i) {
     if (i > 0) {
-      buffer_.addElementsDelimiter(); // Delimiter to separate list elements.
+      serializer_.addElementsDelimiter(); // Delimiter to separate list elements.
     }
     formatValueToFormatElements(list_value[i]);
   }
-  buffer_.addArrayEndDelimiter(); // Delimiter to end list.
+  serializer_.addArrayEndDelimiter(); // Delimiter to end list.
 }
 
 void JsonFormatBuilder::formatValueToFormatElements(const ProtoDict& dict_value) {
@@ -134,17 +134,17 @@ void JsonFormatBuilder::formatValueToFormatElements(const ProtoDict& dict_value)
   std::sort(sorted_fields.begin(), sorted_fields.end(),
             [](const auto& a, const auto& b) { return a.first < b.first; });
 
-  buffer_.addMapBegDelimiter(); // Delimiter to start map.
+  serializer_.addMapBegDelimiter(); // Delimiter to start map.
   for (size_t i = 0; i < sorted_fields.size(); ++i) {
     if (i > 0) {
-      buffer_.addElementsDelimiter(); // Delimiter to separate map elements.
+      serializer_.addElementsDelimiter(); // Delimiter to separate map elements.
     }
-    buffer_.addString(sorted_fields[i].first); // Add the key value.
-    buffer_.addKeyValueDelimiter();            // Delimiter to separate key and value.
+    serializer_.addString(sorted_fields[i].first); // Add the key value.
+    serializer_.addKeyValueDelimiter();            // Delimiter to separate key and value.
 
     formatValueToFormatElements(sorted_fields[i].second->second);
   }
-  buffer_.addMapEndDelimiter(); // Delimiter to end map.
+  serializer_.addMapEndDelimiter(); // Delimiter to end map.
 }
 
 } // namespace Formatter

@@ -50,3 +50,13 @@ static void BM_NlohmannWithEscape(benchmark::State& state) {
   }
 }
 BENCHMARK(BM_NlohmannWithEscape);
+
+// NOLINTNEXTLINE(readability-identifier-naming)
+static void BM_NlohmannWithEscapeAndExeptionFree(benchmark::State& state) {
+  std::string buffer;
+
+  for (auto _ : state) { // NOLINT
+    Envoy::Json::Utility::escape(escaped_encoding);
+  }
+}
+BENCHMARK(BM_NlohmannWithEscapeAndExeptionFree);
