@@ -350,7 +350,7 @@ public:
   }
 
   std::string formatWithContext(const FormatterContext& context,
-                                const StreamInfo::StreamInfo& info) const {
+                                const StreamInfo::StreamInfo& info) const override {
     Json::StringWriter buffer;
     JsonSerializer serializer(buffer);
 
