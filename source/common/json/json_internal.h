@@ -41,9 +41,9 @@ public:
     friend class Envoy::Json::Utility;
 
     EscapedString(std::string str) : escaped_string_(std::move(str)) {
-      ASSERT(str.size() >= 2);
-      ASSERT(str.front() == '"');
-      ASSERT(str.back() == '"');
+      ASSERT(absl::get<std::string>(escaped_string_).size() >= 2);
+      ASSERT(absl::get<std::string>(escaped_string_).front() == '"');
+      ASSERT(absl::get<std::string>(escaped_string_).back() == '"');
     }
 
     absl::variant<absl::string_view, std::string> escaped_string_;
