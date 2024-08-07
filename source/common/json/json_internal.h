@@ -85,7 +85,7 @@ public:
    *
    * @param str string to be serialized.
    * @param replace_invalid_utf8 if true, invalid UTF-8 sequences will be replaced with the
-   * unicode U+FFFD. Or the invalid UTF-8 will result in an exception.
+   * unicode ``U+FFFD``. Or the invalid UTF-8 will result in an exception.
    * NOTE: THIS MUST BE TRUE FOR SCENARIO WHERE THE EXCEPTION IS DISABLED.
    * @return A string suitable for inclusion in a JSON stream, including double-quotes.
    */
