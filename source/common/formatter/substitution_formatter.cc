@@ -1,5 +1,4 @@
 #include "source/common/formatter/substitution_formatter.h"
-#include "substitution_formatter.h"
 
 namespace Envoy {
 namespace Formatter {
