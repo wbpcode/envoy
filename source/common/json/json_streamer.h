@@ -18,6 +18,8 @@ namespace Json {
  * protobuf with reflection. The advantage of this approach is that it does not
  * require building an intermediate data structure with redundant copies of all
  * strings, maps, and arrays.
+ * NOTE: Streamer does exactly the same thing as Serializer, except using strings.
+ * Choose which to use based on context.
  */
 class Streamer {
 public:

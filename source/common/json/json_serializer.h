@@ -36,6 +36,8 @@ public:
  * on demand.
  * NOTE: If a complete JSON output is needed, using Envoy::Json::Streamer first
  * except YOU KNOW WHAT YOU ARE DOING.
+ * NOTE: Serializer does exactly the same thing as Streamer, except using strings.
+ * Choose which to use based on context.
  */
 template <class Writer> class Serializer {
 public:
