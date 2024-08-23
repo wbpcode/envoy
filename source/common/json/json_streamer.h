@@ -283,9 +283,9 @@ public:
   ArrayPtr makeRootArray();
 
 private:
-  friend class Level;
-  friend class Map;
-  friend class Array;
+  friend Level;
+  friend Map;
+  friend Array;
 
   /**
    * Flushes out any pending fragments.
