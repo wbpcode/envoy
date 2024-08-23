@@ -22,44 +22,35 @@ namespace Json {
  * complete JSON output. Please use Streamer as priority.
  * NOTE: If Serializer is preferred please ensure YOU KNOW WHAT YOU ARE DOING.
  */
-template <class Writer> class Serializer {
+template <class OutputBuffer> class Serializer {
 public:
-  static constexpr absl::string_view QuoteValue = R"(")";
+  // Constants for common JSON values.
   static constexpr absl::string_view TrueValue = R"(true)";
   static constexpr absl::string_view FalseValue = R"(false)";
   static constexpr absl::string_view NullValue = R"(null)";
 
-  // Constructor with writer to write the JSON pieces.
-  Serializer(Writer& writer) : writer_(writer) {}
+  // Constants for JSON delimiters.
+  static constexpr absl::string_view MapBeg = R"({)";
+  static constexpr absl::string_view MapEnd = R"(})";
+  static constexpr absl::string_view ArrayBeg = R"([)";
+  static constexpr absl::string_view ArrayEnd = R"(])";
+  static constexpr absl::string_view Quote = R"(")";
+  static constexpr absl::string_view Comma = R"(,)";
+
+  // Constructor with output buffer to write the JSON pieces.
+  Serializer(OutputBuffer& output_buffer) : output_buffer_(output_buffer) {}
 
   /**
-   * Add delimiter '{' to the raw JSON piece buffer.
+   * Add raw JSON piece to the output buffer. The value could be delimiters,
+   * or sanitized JSON piece.
+   *
+   * @param value The raw JSON piece to be added.
    */
-  void addMapBegDelimiter() { writer_.addFragments({"{"}); }
+  void addPiece(absl::string_view value) { output_buffer_.addFragments({value}); }
 
   /**
-   * Add delimiter '}' to the raw JSON piece buffer.
-   */
-  void addMapEndDelimiter() { writer_.addFragments({"}"}); }
-
-  /**
-   * Add delimiter '[' to the raw JSON piece buffer.
-   */
-  void addArrayBegDelimiter() { writer_.addFragments({"["}); }
-
-  /**
-   * Add delimiter ']' to the raw JSON piece buffer.
-   */
-  void addArrayEndDelimiter() { writer_.addFragments({"]"}); }
-
-  /**
-   * Add delimiter ',' to the raw JSON piece buffer.
-   */
-  void addElementsDelimiter() { writer_.addFragments({","}); }
-
-  /**
-   * Add a string value to the raw JSON piece buffer. The string value will
-   * be sanitized per JSON rules.
+   * Add a string value to the JSON buffer. The string value will be sanitized
+   * per JSON rules.
    *
    * @param value The string value or key to be sanitized and added.
    * @param prefix prefix string that will be appended before the value.
@@ -69,11 +60,11 @@ public:
    *
    * NOTE: Both key and string values should use this method to sanitize.
    */
-  void addString(absl::string_view value, absl::string_view prefix = QuoteValue,
-                 absl::string_view suffix = QuoteValue) {
+  void addString(absl::string_view value, absl::string_view prefix = Quote,
+                 absl::string_view suffix = Quote) {
     // Sanitize the string value and quote it on demand of the caller.
     absl::string_view sanitized = Json::sanitize(sanitize_buffer_, value);
-    writer_.addFragments({prefix, sanitized, suffix});
+    output_buffer_.addFragments({prefix, sanitized, suffix});
   }
 
   /**
@@ -83,13 +74,13 @@ public:
    */
   template <class Integer> void addNumber(Integer value) {
     // TODO(wbpcode): will fmt::format_int provide better performance?
-    writer_.addFragments({absl::StrCat(value)});
+    output_buffer_.addFragments({absl::StrCat(value)});
   }
   template <> void addNumber<double>(double value) {
     if (std::isnan(value)) {
-      writer_.addFragments({"null"});
+      output_buffer_.addFragments({NullValue});
     } else {
-      Buffer::Util::serializeDouble(value, writer_);
+      Buffer::Util::serializeDouble(value, output_buffer_);
     }
   }
 
@@ -98,15 +89,15 @@ public:
    *
    * @param value The bool value to be added.
    */
-  void addBool(bool value) { writer_.addFragments({value ? TrueValue : FalseValue}); }
+  void addBool(bool value) { output_buffer_.addFragments({value ? TrueValue : FalseValue}); }
 
   /**
    * Add a null value to the raw JSON piece buffer.
    */
-  void addNull() { writer_.addFragments({NullValue}); }
+  void addNull() { output_buffer_.addFragments({NullValue}); }
 
 protected:
-  Writer& writer_;
+  OutputBuffer& output_buffer_;
   std::string sanitize_buffer_;
 };
 
@@ -141,7 +132,7 @@ public:
    */
   class Level {
   public:
-    Level(Streamer& streamer);
+    Level(Streamer& streamer, absl::string_view opener, absl::string_view closer);
     virtual ~Level();
 
     /**
@@ -213,6 +204,7 @@ public:
 
     bool is_first_{true}; // Used to control whether a comma-separator is added for a new entry.
     Streamer& streamer_;
+    absl::string_view closer_;
   };
   using LevelPtr = std::unique_ptr<Level>;
 
@@ -225,8 +217,7 @@ public:
     using NameValue = std::pair<const absl::string_view, Value>;
     using Entries = absl::Span<const NameValue>;
 
-    Map(Streamer& streamer) : Level(streamer) { streamer.addMapBegDelimiter(); }
-    ~Map() override { streamer_.addMapEndDelimiter(); }
+    Map(Streamer& streamer) : Level(streamer, MapBeg, MapEnd) {}
 
     /**
      * Initiates a new map key. This must be followed by rendering a value,
@@ -260,9 +251,7 @@ public:
    */
   class Array : public Level {
   public:
-    Array(Streamer& streamer) : Level(streamer) { streamer.addArrayBegDelimiter(); }
-    ~Array() override { streamer_.addArrayEndDelimiter(); }
-
+    Array(Streamer& streamer) : Level(streamer, ArrayBeg, ArrayEnd) {}
     using Entries = absl::Span<const Value>;
 
     /**

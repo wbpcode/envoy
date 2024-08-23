@@ -26,7 +26,9 @@ namespace Json {
 #define ASSERT_LEVELS_EMPTY ASSERT(levels_.empty())
 #endif
 
-Streamer::Level::Level(Streamer& streamer) : streamer_(streamer) {
+Streamer::Level::Level(Streamer& streamer, absl::string_view opener, absl::string_view closer)
+    : streamer_(streamer), closer_(closer) {
+  streamer_.addPiece(opener);
 #ifndef NDEBUG
   streamer_.push(this);
 #endif
@@ -103,7 +105,7 @@ void Streamer::Level::nextField() {
   if (is_first_) {
     is_first_ = false;
   } else {
-    streamer_.addElementsDelimiter();
+    streamer_.addPiece(Comma);
   }
 }
 
@@ -119,7 +121,7 @@ void Streamer::Map::addKey(absl::string_view key) {
   ASSERT_THIS_IS_TOP_LEVEL;
   ASSERT(!expecting_value_);
   nextField();
-  streamer_.addString(key, QuoteValue, R"(":)");
+  streamer_.addString(key, Quote, R"(":)");
   expecting_value_ = true;
 }
 
