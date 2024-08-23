@@ -35,6 +35,7 @@ Streamer::Level::Level(Streamer& streamer, absl::string_view opener, absl::strin
 }
 
 Streamer::Level::~Level() {
+  streamer_.addPiece(closer_);
 #ifndef NDEBUG
   streamer_.pop(this);
 #endif
