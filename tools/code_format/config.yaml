@@ -229,6 +229,7 @@ paths:
     include:
     - source/common/common/thread.h
     - source/exe/terminate_handler.cc
+    - source/common/json/json_sanitizer.cc
 
   # Files matching these exact names can reference real-world time. These include the class
   # definitions for real-world time, the construction of them in main(), and perf annotation.

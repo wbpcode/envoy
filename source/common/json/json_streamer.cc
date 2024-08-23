@@ -2,9 +2,6 @@
 
 #include <type_traits>
 
-#include "source/common/buffer/buffer_util.h"
-#include "source/common/json/json_sanitizer.h"
-
 namespace Envoy {
 namespace Json {
 
@@ -29,16 +26,13 @@ namespace Json {
 #define ASSERT_LEVELS_EMPTY ASSERT(levels_.empty())
 #endif
 
-Streamer::Level::Level(Streamer& streamer, absl::string_view opener, absl::string_view closer)
-    : streamer_(streamer), closer_(closer) {
-  streamer_.addConstantString(opener);
+Streamer::Level::Level(Streamer& streamer) : streamer_(streamer) {
 #ifndef NDEBUG
   streamer_.push(this);
 #endif
 }
 
 Streamer::Level::~Level() {
-  streamer_.addConstantString(closer_);
 #ifndef NDEBUG
   streamer_.pop(this);
 #endif
@@ -93,7 +87,7 @@ void Streamer::Level::addBool(bool b) {
 void Streamer::Level::addString(absl::string_view str) {
   ASSERT_THIS_IS_TOP_LEVEL;
   nextField();
-  streamer_.addSanitized("\"", str, "\"");
+  streamer_.addString(str);
 }
 
 #ifndef NDEBUG
@@ -109,7 +103,7 @@ void Streamer::Level::nextField() {
   if (is_first_) {
     is_first_ = false;
   } else {
-    streamer_.addConstantString(",");
+    streamer_.addElementsDelimiter();
   }
 }
 
@@ -125,7 +119,7 @@ void Streamer::Map::addKey(absl::string_view key) {
   ASSERT_THIS_IS_TOP_LEVEL;
   ASSERT(!expecting_value_);
   nextField();
-  streamer_.addSanitized("\"", key, "\":");
+  streamer_.addString(key, QuoteValue, R"(":)");
   expecting_value_ = true;
 }
 
@@ -173,26 +167,6 @@ void Streamer::Array::addEntries(const Entries& values) {
   for (const Value& value : values) {
     addValue(value);
   }
-}
-
-void Streamer::addNumber(double number) {
-  if (std::isnan(number)) {
-    response_.addFragments({"null"});
-  } else {
-    Buffer::Util::serializeDouble(number, response_);
-  }
-}
-
-void Streamer::addNumber(uint64_t number) { response_.addFragments({absl::StrCat(number)}); }
-
-void Streamer::addNumber(int64_t number) { response_.addFragments({absl::StrCat(number)}); }
-
-void Streamer::addBool(bool b) { response_.addFragments({b ? "true" : "false"}); }
-
-void Streamer::addSanitized(absl::string_view prefix, absl::string_view str,
-                            absl::string_view suffix) {
-  absl::string_view sanitized = Json::sanitize(sanitize_buffer_, str);
-  response_.addFragments({prefix, sanitized, suffix});
 }
 
 } // namespace Json

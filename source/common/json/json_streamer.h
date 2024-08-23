@@ -6,11 +6,109 @@
 
 #include "envoy/buffer/buffer.h"
 
+#include "source/common/buffer/buffer_util.h"
+#include "source/common/json/json_sanitizer.h"
+
 #include "absl/strings/string_view.h"
 #include "absl/types/variant.h"
 
 namespace Envoy {
 namespace Json {
+
+/**
+ * Helper class that provides low level methods to sanitize keys, values, and
+ * delimiters to output buffer or string.
+ * NOTE: Streamer provides high level methods based on the Serializer to construct
+ * complete JSON output. Please use Streamer as priority.
+ * NOTE: If Serializer is preferred please ensure YOU KNOW WHAT YOU ARE DOING.
+ */
+template <class Writer> class Serializer {
+public:
+  static constexpr absl::string_view QuoteValue = R"(")";
+  static constexpr absl::string_view TrueValue = R"(true)";
+  static constexpr absl::string_view FalseValue = R"(false)";
+  static constexpr absl::string_view NullValue = R"(null)";
+
+  // Constructor with writer to write the JSON pieces.
+  Serializer(Writer& writer) : writer_(writer) {}
+
+  /**
+   * Add delimiter '{' to the raw JSON piece buffer.
+   */
+  void addMapBegDelimiter() { writer_.addFragments({"{"}); }
+
+  /**
+   * Add delimiter '}' to the raw JSON piece buffer.
+   */
+  void addMapEndDelimiter() { writer_.addFragments({"}"}); }
+
+  /**
+   * Add delimiter '[' to the raw JSON piece buffer.
+   */
+  void addArrayBegDelimiter() { writer_.addFragments({"["}); }
+
+  /**
+   * Add delimiter ']' to the raw JSON piece buffer.
+   */
+  void addArrayEndDelimiter() { writer_.addFragments({"]"}); }
+
+  /**
+   * Add delimiter ',' to the raw JSON piece buffer.
+   */
+  void addElementsDelimiter() { writer_.addFragments({","}); }
+
+  /**
+   * Add a string value to the raw JSON piece buffer. The string value will
+   * be sanitized per JSON rules.
+   *
+   * @param value The string value or key to be sanitized and added.
+   * @param prefix prefix string that will be appended before the value.
+   * Default be `"`.
+   * @param suffix suffix string that will be appended after the value.
+   * Default be `"`.
+   *
+   * NOTE: Both key and string values should use this method to sanitize.
+   */
+  void addString(absl::string_view value, absl::string_view prefix = QuoteValue,
+                 absl::string_view suffix = QuoteValue) {
+    // Sanitize the string value and quote it on demand of the caller.
+    absl::string_view sanitized = Json::sanitize(sanitize_buffer_, value);
+    writer_.addFragments({prefix, sanitized, suffix});
+  }
+
+  /**
+   * Add a number value to the raw JSON piece buffer.
+   *
+   * @param value The number value to be added.
+   */
+  template <class Integer> void addNumber(Integer value) {
+    // TODO(wbpcode): will fmt::format_int provide better performance?
+    writer_.addFragments({absl::StrCat(value)});
+  }
+  template <> void addNumber<double>(double value) {
+    if (std::isnan(value)) {
+      writer_.addFragments({"null"});
+    } else {
+      Buffer::Util::serializeDouble(value, writer_);
+    }
+  }
+
+  /**
+   * Add a bool value to the raw JSON piece buffer.
+   *
+   * @param value The bool value to be added.
+   */
+  void addBool(bool value) { writer_.addFragments({value ? TrueValue : FalseValue}); }
+
+  /**
+   * Add a null value to the raw JSON piece buffer.
+   */
+  void addNull() { writer_.addFragments({NullValue}); }
+
+protected:
+  Writer& writer_;
+  std::string sanitize_buffer_;
+};
 
 /**
  * Provides an API for streaming JSON output, as an alternative to populating a
@@ -19,7 +117,7 @@ namespace Json {
  * require building an intermediate data structure with redundant copies of all
  * strings, maps, and arrays.
  */
-class Streamer {
+class Streamer : Serializer<Buffer::Instance> {
 public:
   using Value = absl::variant<absl::string_view, double, uint64_t, int64_t, bool>;
 
@@ -29,7 +127,8 @@ public:
    *                 the entire json structure in memory before streaming it to
    *                 the network.
    */
-  explicit Streamer(Buffer::Instance& response) : response_(response) {}
+  explicit Streamer(Buffer::Instance& response)
+      : Envoy::Json::Serializer<Buffer::Instance>(response) {}
 
   class Array;
   using ArrayPtr = std::unique_ptr<Array>;
@@ -42,7 +141,7 @@ public:
    */
   class Level {
   public:
-    Level(Streamer& streamer, absl::string_view opener, absl::string_view closer);
+    Level(Streamer& streamer);
     virtual ~Level();
 
     /**
@@ -114,7 +213,6 @@ public:
 
     bool is_first_{true}; // Used to control whether a comma-separator is added for a new entry.
     Streamer& streamer_;
-    absl::string_view closer_;
   };
   using LevelPtr = std::unique_ptr<Level>;
 
@@ -127,7 +225,8 @@ public:
     using NameValue = std::pair<const absl::string_view, Value>;
     using Entries = absl::Span<const NameValue>;
 
-    Map(Streamer& streamer) : Level(streamer, "{", "}") {}
+    Map(Streamer& streamer) : Level(streamer) { streamer.addMapBegDelimiter(); }
+    ~Map() override { streamer_.addMapEndDelimiter(); }
 
     /**
      * Initiates a new map key. This must be followed by rendering a value,
@@ -161,7 +260,9 @@ public:
    */
   class Array : public Level {
   public:
-    Array(Streamer& streamer) : Level(streamer, "[", "]") {}
+    Array(Streamer& streamer) : Level(streamer) { streamer.addArrayBegDelimiter(); }
+    ~Array() override { streamer_.addArrayEndDelimiter(); }
+
     using Entries = absl::Span<const Value>;
 
     /**
@@ -193,34 +294,14 @@ public:
   ArrayPtr makeRootArray();
 
 private:
-  friend Level;
-  friend Map;
-  friend Array;
-
-  /**
-   * Takes a raw string, sanitizes it using JSON syntax, surrounds it
-   * with a prefix and suffix, and streams it out.
-   */
-  void addSanitized(absl::string_view prefix, absl::string_view token, absl::string_view suffix);
-
-  /**
-   * Serializes a number.
-   */
-  void addNumber(double d);
-  void addNumber(uint64_t u);
-  void addNumber(int64_t i);
-  void addBool(bool b);
+  friend class Level;
+  friend class Map;
+  friend class Array;
 
   /**
    * Flushes out any pending fragments.
    */
   void flush();
-
-  /**
-   * Adds a constant string to the output stream. The string must outlive the
-   * Streamer object, and is intended for literal strings such as punctuation.
-   */
-  void addConstantString(absl::string_view str) { response_.addFragments({str}); }
 
 #ifndef NDEBUG
   /**
@@ -238,9 +319,6 @@ private:
    */
   void pop(Level* level);
 #endif
-
-  Buffer::Instance& response_;
-  std::string sanitize_buffer_;
 
 #ifndef NDEBUG
   // Keeps a stack of Maps or Arrays (subclasses of Level) to facilitate
