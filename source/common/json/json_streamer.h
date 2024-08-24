@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cmath>
 #include <memory>
 #include <stack>
 #include <string>
@@ -15,6 +16,22 @@
 namespace Envoy {
 namespace Json {
 
+class Constants {
+public:
+  // Constants for common JSON values.
+  static constexpr absl::string_view True = R"(true)";
+  static constexpr absl::string_view False = R"(false)";
+  static constexpr absl::string_view Null = R"(null)";
+
+  // Constants for JSON delimiters.
+  static constexpr absl::string_view MapBeg = R"({)";
+  static constexpr absl::string_view MapEnd = R"(})";
+  static constexpr absl::string_view ArrayBeg = R"([)";
+  static constexpr absl::string_view ArrayEnd = R"(])";
+  static constexpr absl::string_view Quote = R"(")";
+  static constexpr absl::string_view Comma = R"(,)";
+};
+
 /**
  * Helper class that provides low level methods to sanitize keys, values, and
  * delimiters to output buffer or string.
@@ -24,19 +41,6 @@ namespace Json {
  */
 template <class OutputBuffer> class Serializer {
 public:
-  // Constants for common JSON values.
-  static constexpr absl::string_view TrueValue = R"(true)";
-  static constexpr absl::string_view FalseValue = R"(false)";
-  static constexpr absl::string_view NullValue = R"(null)";
-
-  // Constants for JSON delimiters.
-  static constexpr absl::string_view MapBeg = R"({)";
-  static constexpr absl::string_view MapEnd = R"(})";
-  static constexpr absl::string_view ArrayBeg = R"([)";
-  static constexpr absl::string_view ArrayEnd = R"(])";
-  static constexpr absl::string_view Quote = R"(")";
-  static constexpr absl::string_view Comma = R"(,)";
-
   // Constructor with output buffer to write the JSON pieces.
   Serializer(OutputBuffer& output_buffer) : output_buffer_(output_buffer) {}
 
@@ -60,8 +64,8 @@ public:
    *
    * NOTE: Both key and string values should use this method to sanitize.
    */
-  void addString(absl::string_view value, absl::string_view prefix = Quote,
-                 absl::string_view suffix = Quote) {
+  void addString(absl::string_view value, absl::string_view prefix = Constants::Quote,
+                 absl::string_view suffix = Constants::Quote) {
     // Sanitize the string value and quote it on demand of the caller.
     absl::string_view sanitized = Json::sanitize(sanitize_buffer_, value);
     output_buffer_.addFragments({prefix, sanitized, suffix});
@@ -71,14 +75,13 @@ public:
    * Add a number value to the raw JSON piece buffer.
    *
    * @param value The number value to be added.
+   * TODO(wbpcode): will fmt::format_int provide better performance for integer?
    */
-  template <class Integer> void addNumber(Integer value) {
-    // TODO(wbpcode): will fmt::format_int provide better performance?
-    output_buffer_.addFragments({absl::StrCat(value)});
-  }
-  template <> void addNumber<double>(double value) {
+  void addNumber(int64_t value) { output_buffer_.addFragments({absl::StrCat(value)}); }
+  void addNumber(uint64_t value) { output_buffer_.addFragments({absl::StrCat(value)}); }
+  void addNumber(double value) {
     if (std::isnan(value)) {
-      output_buffer_.addFragments({NullValue});
+      output_buffer_.addFragments({Constants::Null});
     } else {
       Buffer::Util::serializeDouble(value, output_buffer_);
     }
@@ -89,12 +92,14 @@ public:
    *
    * @param value The bool value to be added.
    */
-  void addBool(bool value) { output_buffer_.addFragments({value ? TrueValue : FalseValue}); }
+  void addBool(bool value) {
+    output_buffer_.addFragments({value ? Constants::True : Constants::False});
+  }
 
   /**
    * Add a null value to the raw JSON piece buffer.
    */
-  void addNull() { output_buffer_.addFragments({NullValue}); }
+  void addNull() { output_buffer_.addFragments({Constants::Null}); }
 
 protected:
   OutputBuffer& output_buffer_;
@@ -217,7 +222,7 @@ public:
     using NameValue = std::pair<const absl::string_view, Value>;
     using Entries = absl::Span<const NameValue>;
 
-    Map(Streamer& streamer) : Level(streamer, MapBeg, MapEnd) {}
+    Map(Streamer& streamer) : Level(streamer, Constants::MapBeg, Constants::MapEnd) {}
 
     /**
      * Initiates a new map key. This must be followed by rendering a value,
@@ -251,7 +256,7 @@ public:
    */
   class Array : public Level {
   public:
-    Array(Streamer& streamer) : Level(streamer, ArrayBeg, ArrayEnd) {}
+    Array(Streamer& streamer) : Level(streamer, Constants::ArrayBeg, Constants::ArrayEnd) {}
     using Entries = absl::Span<const Value>;
 
     /**
