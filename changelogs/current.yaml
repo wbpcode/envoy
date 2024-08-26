@@ -32,6 +32,14 @@ behavior_changes:
   change: |
     Added new tag extraction so that scoped rds stats have their :ref:'scope_route_config_name
     <envoy_v3_api_msg_config/route/v3/scoped_route>' and stat prefix extracted.
+- area: access_log
+  change: |
+    Added new JSON access log formatter implementation which provides 16-25x performance improvement over the old
+    implementation. The old implementation is deprecated and will be removed in a future release.
+    The :ref:`sort_properties <envoy_v3_api_field_config.core.v3.JsonFormatOptions.sort_properties>` field will
+    be ignored in the new implementation because the new implementation always sorts properties.
+    The behavior change can be reverted by setting the runtime guard
+    ``envoy.reloadable_features.logging_with_fast_json_formatter`` to false.
 
 minor_behavior_changes:
 # *Changes that may cause incompatibilities for some users, but should not for most*
@@ -234,5 +242,14 @@ new_features:
 - area: geoip
   change: |
     Added ``envoy.reloadable_features.mmdb_files_reload_enabled`` runtime flag that enables reload of mmdb files by default.
+- area: access_log
+  change: |
+    Added new JSON access log formatter implementation which provides 16-25x performance improvement over the old
+    implementation. The legacy implementation will be enabled by default for now but will be deprecated and removed
+    in a future release.
+    The :ref:`sort_properties <envoy_v3_api_field_config.core.v3.JsonFormatOptions.sort_properties>` field will
+    be ignored in the new implementation because the new implementation always sorts properties.
+    The new JSON formatter could be enabled by setting the runtime guard
+    ``envoy.reloadable_features.logging_with_fast_json_formatter`` to true.
 
 deprecated:

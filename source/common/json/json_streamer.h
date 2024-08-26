@@ -16,6 +16,20 @@
 namespace Envoy {
 namespace Json {
 
+using BufferOutput = Envoy::Buffer::Instance;
+
+class StringOutput {
+public:
+  StringOutput(size_t initial_buffer_size = 2048) { buffer_.reserve(initial_buffer_size); }
+
+  void addFragments(absl::Span<const absl::string_view> fragments) {
+    for (absl::string_view fragment : fragments) {
+      buffer_.append(fragment.data(), fragment.size());
+    }
+  }
+  std::string buffer_;
+};
+
 class Constants {
 public:
   // Constants for common JSON values.
@@ -113,7 +127,7 @@ protected:
  * require building an intermediate data structure with redundant copies of all
  * strings, maps, and arrays.
  */
-class Streamer : Serializer<Buffer::Instance> {
+class Streamer : Serializer<BufferOutput> {
 public:
   using Value = absl::variant<absl::string_view, double, uint64_t, int64_t, bool>;
 
@@ -123,8 +137,7 @@ public:
    *                 the entire json structure in memory before streaming it to
    *                 the network.
    */
-  explicit Streamer(Buffer::Instance& response)
-      : Envoy::Json::Serializer<Buffer::Instance>(response) {}
+  explicit Streamer(BufferOutput& response) : Envoy::Json::Serializer<BufferOutput>(response) {}
 
   class Array;
   using ArrayPtr = std::unique_ptr<Array>;
