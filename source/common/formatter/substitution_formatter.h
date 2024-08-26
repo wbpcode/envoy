@@ -458,6 +458,8 @@ private:
   std::vector<ParsedFormatElement> parsed_elements_;
 };
 
+using JsonFormatterImpl = JsonFormatterImplBase<HttpFormatterContext>;
+
 #endif
 
 // Helper classes for StructFormatter::StructFormatMapVisitor.
@@ -707,7 +709,6 @@ using StructFormatterPtr = std::unique_ptr<StructFormatter>;
 // Aliases for backwards compatibility.
 using FormatterImpl = FormatterBaseImpl<HttpFormatterContext>;
 using LegacyJsonFormatterImpl = LegacyJsonFormatterBaseImpl<HttpFormatterContext>;
-using JsonFormatterImpl = JsonFormatterImplBase<HttpFormatterContext>;
 
 } // namespace Formatter
 } // namespace Envoy
