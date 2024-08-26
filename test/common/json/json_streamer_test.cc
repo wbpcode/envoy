@@ -85,7 +85,7 @@ TEST_F(JsonStreamerTest, MapOneSanitized) {
   {
     Streamer::MapPtr map = streamer_.makeRootMap();
     map->addKey("a");
-    map->addString("\b\001");
+    map->addValue("\b\001");
   }
   EXPECT_EQ(R"EOF({"a":"\b\u0001"})EOF", buffer_.toString());
 }
@@ -94,9 +94,9 @@ TEST_F(JsonStreamerTest, MapTwoSanitized) {
   {
     Streamer::MapPtr map = streamer_.makeRootMap();
     map->addKey("a");
-    map->addString("\b\001");
+    map->addValue("\b\001");
     map->addKey("b");
-    map->addString("\r\002");
+    map->addValue("\r\002");
   }
   EXPECT_EQ(R"EOF({"a":"\b\u0001","b":"\r\u0002"})EOF", buffer_.toString());
 }
