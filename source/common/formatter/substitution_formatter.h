@@ -390,7 +390,7 @@ public:
       typedValueToLogLine(formatters, context, info, log_line, serializer);
     }
 
-    log_line.writeByte('\n');
+    log_line.addFragments({"\n"});
     return log_line.toString();
   }
 
@@ -399,7 +399,7 @@ private:
                             const StreamInfo::StreamInfo& info, Buffer::Instance& buffer,
                             BufferJsonStreamer& serializer) const {
 
-    buffer.writeByte('"'); // Start the JSON string.
+    buffer.addFragments({"\""}); // Start the JSON string.
     for (const Formatter& formatter : formatters) {
       const absl::optional<std::string> value = formatter->formatWithContext(context, info);
       if (!value.has_value()) {
@@ -411,7 +411,7 @@ private:
       // since we handle the quoting by ourselves at the outer level.
       serializer.addSanitized({}, value.value(), {});
     }
-    buffer.writeByte('"'); // End the JSON string.
+    buffer.addFragments({"\""}); // End the JSON string.
   }
 
   void typedValueToLogLine(const Formatters& formatters, const FormatterContext& context,
