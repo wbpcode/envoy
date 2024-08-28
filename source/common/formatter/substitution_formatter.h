@@ -16,6 +16,7 @@
 #include "source/common/common/utility.h"
 #include "source/common/formatter/http_formatter_context.h"
 #include "source/common/json/json_loader.h"
+#include "source/common/buffer/buffer_impl.h"
 
 #if !defined(ENVOY_DISABLE_EXCEPTIONS)
 #include "source/common/json/json_streamer.h"
@@ -360,15 +361,16 @@ public:
     // std::string log_line;
     // log_line.reserve(2048);
     // StringJsonStreamer serializer(log_line);
-    Buffer::OwnedImpl buffer;
-    BufferJsonStreamer serializer(buffer);
+
+    Buffer::OwnedImpl log_line;
+    BufferJsonStreamer serializer(log_line);
 
     for (const ParsedFormatElement& element : parsed_elements_) {
       // 1. Handle the raw string element.
       if (absl::holds_alternative<std::string>(element)) {
         // The raw string element will be added to the buffer directly.
         // It is sanitized when loading the configuration.
-        log_line.append(absl::get<std::string>(element));
+        log_line.addFragments({absl::get<std::string>(element)});
         continue;
       }
 
@@ -388,33 +390,33 @@ public:
       typedValueToLogLine(formatters, context, info, log_line, serializer);
     }
 
-    log_line.push_back('\n');
-    return log_line;
+    log_line.writeByte('\n');
+    return log_line.toString();
   }
 
 private:
   void stringValueToLogLine(const Formatters& formatters, const FormatterContext& context,
-                            const StreamInfo::StreamInfo& info, std::string& buffer,
-                            StringJsonStreamer& serializer) const {
+                            const StreamInfo::StreamInfo& info, Buffer::Instance& buffer,
+                            BufferJsonStreamer& serializer) const {
 
-    buffer.push_back('"'); // Start the JSON string.
+    buffer.writeByte('"'); // Start the JSON string.
     for (const Formatter& formatter : formatters) {
       const absl::optional<std::string> value = formatter->formatWithContext(context, info);
       if (!value.has_value()) {
         // Add the empty value. This needn't be sanitized.
-        buffer.append(empty_value_);
+        buffer.addFragments({empty_value_});
         continue;
       }
       // Sanitize the string value and add it to the buffer. The string value will not be quoted
       // since we handle the quoting by ourselves at the outer level.
       serializer.addSanitized({}, value.value(), {});
     }
-    buffer.push_back('"'); // End the JSON string.
+    buffer.writeByte('"'); // End the JSON string.
   }
 
   void typedValueToLogLine(const Formatters& formatters, const FormatterContext& context,
-                           const StreamInfo::StreamInfo& info, std::string& buffer,
-                           StringJsonStreamer& serializer) const {
+                           const StreamInfo::StreamInfo& info, Buffer::Instance& buffer,
+                           BufferJsonStreamer& serializer) const {
 
     const ProtobufWkt::Value value = formatters[0]->formatValueWithContext(context, info);
 
@@ -442,7 +444,7 @@ private:
           MessageUtil::getJsonStringFromMessage(value, false, true);
       if (json_or.ok()) {
         // We assume the output of getJsonStringFromMessage is a valid JSON string piece.
-        buffer.append(json_or.value());
+        buffer.addFragments({json_or.value()});
       } else {
         serializer.addString(json_or.status().ToString());
       }
