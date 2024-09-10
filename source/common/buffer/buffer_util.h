@@ -25,7 +25,7 @@ public:
    * @param number the number to convert.
    * @param buffer the buffer in which to write the double.
    */
-  template <class BufferType> static void serializeDouble(double number, BufferType& buffer) {
+  template <class Output> static void serializeDouble(double number, Output& buffer) {
     // Converting a double to a string: who would think it would be so complex?
     // It's easy if you don't care about speed or accuracy :). Here we are measuring
     // the speed with test/server/admin/stats_handler_speed_test

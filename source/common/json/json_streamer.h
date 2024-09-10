@@ -4,10 +4,12 @@
 #include <stack>
 #include <string>
 #include <type_traits>
+#include <variant>
 
 #include "envoy/buffer/buffer.h"
 
 #include "source/common/buffer/buffer_util.h"
+#include "source/common/json/constants.h"
 #include "source/common/json/json_sanitizer.h"
 
 #include "absl/strings/string_view.h"
@@ -37,41 +39,30 @@ namespace Json {
 #define ASSERT_LEVELS_EMPTY ASSERT(this->levels_.empty())
 #endif
 
-class Constants {
-public:
-  // Constants for common JSON values.
-  static constexpr absl::string_view True = R"(true)";
-  static constexpr absl::string_view False = R"(false)";
-  static constexpr absl::string_view Null = R"(null)";
-
-  // Constants for JSON delimiters.
-  static constexpr absl::string_view MapBeg = R"({)";
-  static constexpr absl::string_view MapEnd = R"(})";
-  static constexpr absl::string_view ArrayBeg = R"([)";
-  static constexpr absl::string_view ArrayEnd = R"(])";
-  static constexpr absl::string_view Quote = R"(")";
-  static constexpr absl::string_view Comma = R"(,)";
-};
-
+// Buffer wrapper that implements the necessary abstraction for the template
+// StreamerBase.
+// This could be used to stream JSON output of StreamerBase to a Buffer.
 class BufferOutput {
 public:
-  explicit BufferOutput(Buffer::Instance& output) : buffer_(output) {}
   void add(absl::string_view a) { buffer_.addFragments({a}); }
   void add(absl::string_view a, absl::string_view b, absl::string_view c) {
     buffer_.addFragments({a, b, c});
   }
 
+  explicit BufferOutput(Buffer::Instance& output) : buffer_(output) {}
   Buffer::Instance& buffer_;
 };
 
+// String wrapper that implements the necessary abstraction for the template
+// StreamerBase.
+// This could be used to stream JSON output of StreamerBase to a single string.
 class StringOutput {
 public:
-  explicit StringOutput(std::string& output) : buffer_(output) {}
-
   void add(absl::string_view a) { buffer_.append(a); }
   void add(absl::string_view a, absl::string_view b, absl::string_view c) {
     absl::StrAppend(&buffer_, a, b, c);
   }
+  explicit StringOutput(std::string& output) : buffer_(output) {}
 
   std::string& buffer_;
 };
@@ -82,18 +73,21 @@ public:
  * protobuf with reflection. The advantage of this approach is that it does not
  * require building an intermediate data structure with redundant copies of all
  * strings, maps, and arrays.
+ *
+ * NOTE: This template take a type that can be used to stream output. This is either
+ * BufferOutput, StringOutput or any other types that have implemented
+ * add(absl::string_view) and
+ * add(absl::string_view, absl::string_view, absl::string_view) methods.
  */
-template <class OutputType> class StreamerBase {
+template <class OutputBufferType> class StreamerBase {
 public:
   using Value = absl::variant<absl::monostate, absl::string_view, double, uint64_t, int64_t, bool>;
 
   /**
-   * @param output The buffer in which to stream output. Note: this buffer can
-   *               be flushed during population; it is not necessary to hold
-   *               the entire json structure in memory before streaming it to
-   *               the network.
+   * @param response The buffer in which to stream output.
+   * NOTE: The response must could be used to construct instance of OutputBufferType.
    */
-  template <class T> explicit StreamerBase(T& output) : output_(output) {}
+  template <class T> explicit StreamerBase(T& response) : response_(response) {}
 
   class Array;
   using ArrayPtr = std::unique_ptr<Array>;
@@ -108,13 +102,13 @@ public:
   public:
     Level(StreamerBase& streamer, absl::string_view opener, absl::string_view closer)
         : streamer_(streamer), closer_(closer) {
-      streamer_.addDirectly(opener);
+      streamer_.addWithoutSanitizing(opener);
 #ifndef NDEBUG
       streamer_.push(this);
 #endif
     }
     virtual ~Level() {
-      streamer_.addDirectly(closer_);
+      streamer_.addWithoutSanitizing(closer_);
 #ifndef NDEBUG
       streamer_.pop(this);
 #endif
@@ -149,51 +143,49 @@ public:
     }
 
     /**
-     * Serializes a number or string or bool to the output stream. Doubles that are NaN are
-     * rendered as 'null'. Strings are sanitized if needed, and surrounded by quotes.
+     * Adds a numeric value to the current array or map. It's a programming
+     * error to call this method on a map or array that's not the top level.
+     * It's also a programming error to call this on map that isn't expecting
+     * a value. You must call Map::addKey prior to calling this.
+     */
+    void addNumber(double number) {
+      ASSERT_THIS_IS_TOP_LEVEL;
+      nextField();
+      streamer_.addNumber(number);
+    }
+    void addNumber(uint64_t number) {
+      ASSERT_THIS_IS_TOP_LEVEL;
+      nextField();
+      streamer_.addNumber(number);
+    }
+    void addNumber(int64_t number) {
+      ASSERT_THIS_IS_TOP_LEVEL;
+      nextField();
+      streamer_.addNumber(number);
+    }
+
+    /**
+     * Adds a string constant value to the current array or map. The string
+     * will be sanitized per JSON rules.
      *
      * @param value the variant value to render.
      */
-    void addValue(const Value& value) {
+    void addString(absl::string_view str) {
       ASSERT_THIS_IS_TOP_LEVEL;
       nextField();
+      streamer_.addString(str);
+    }
 
-      switch (value.index()) {
-      case 0:
-        static_assert(isSameType<decltype(absl::get<0>(value)), absl::monostate>(),
-                      "value at index 0 must be an absl::monostate");
-        this->streamer_.addNull();
-        break;
-      case 1:
-        static_assert(isSameType<decltype(absl::get<1>(value)), absl::string_view>(),
-                      "value at index 1 must be an absl::string_vlew");
-        this->streamer_.addString(absl::get<absl::string_view>(value));
-        break;
-      case 2:
-        static_assert(isSameType<decltype(absl::get<2>(value)), double>(),
-                      "value at index 2 must be a double");
-        this->streamer_.addNumber(absl::get<double>(value));
-        break;
-      case 3:
-        static_assert(isSameType<decltype(absl::get<3>(value)), uint64_t>(),
-                      "value at index 3 must be a uint64_t");
-        this->streamer_.addNumber(absl::get<uint64_t>(value));
-        break;
-      case 4:
-        static_assert(isSameType<decltype(absl::get<4>(value)), int64_t>(),
-                      "value at index 4 must be an int64_t");
-        this->streamer_.addNumber(absl::get<int64_t>(value));
-        break;
-      case 5:
-        static_assert(isSameType<decltype(absl::get<5>(value)), bool>(),
-                      "value at index 5 must be a bool");
-        this->streamer_.addBool(absl::get<bool>(value));
-        break;
-      default:
-        IS_ENVOY_BUG(absl::StrCat("addValue invalid index: ", value.index()));
-        this->streamer_.addNull();
-        break;
-      }
+    /**
+     * Adds a bool constant value to the current array or map. It's a programming
+     * error to call this method on a map or array that's not the top level.
+     * It's also a programming error to call this on map that isn't expecting
+     * a value. You must call Map::addKey prior to calling this.
+     */
+    void addBool(bool b) {
+      ASSERT_THIS_IS_TOP_LEVEL;
+      nextField();
+      streamer_.addBool(b);
     }
 
   protected:
@@ -210,10 +202,50 @@ public:
       if (is_first_) {
         is_first_ = false;
       } else {
-        streamer_.addDirectly(Constants::Comma);
+        streamer_.addWithoutSanitizing(",");
       }
     }
 
+    /**
+     * Renders a string or a number in json format. Doubles that are NaN are
+     * rendered as 'null'. Strings are json-sanitized if needed, and surrounded
+     * by quotes.
+     *
+     * @param Value the value to render.
+     */
+    void addValue(const Value& value) {
+      static_assert(absl::variant_size_v<Value> == 5, "Value must be a variant with 5 types");
+
+      switch (value.index()) {
+      case 0:
+        static_assert(std::is_same<decltype(absl::get<0>(value)), const absl::string_view&>::value,
+                      "value at index 0 must be an absl::string_vlew");
+        addString(absl::get<absl::string_view>(value));
+        break;
+      case 1:
+        static_assert(std::is_same<decltype(absl::get<1>(value)), const double&>::value,
+                      "value at index 1 must be a double");
+        addNumber(absl::get<double>(value));
+        break;
+      case 2:
+        static_assert(std::is_same<decltype(absl::get<2>(value)), const uint64_t&>::value,
+                      "value at index 2 must be a uint64_t");
+        addNumber(absl::get<uint64_t>(value));
+        break;
+      case 3:
+        static_assert(std::is_same<decltype(absl::get<3>(value)), const int64_t&>::value,
+                      "value at index 3 must be an int64_t");
+        addNumber(absl::get<int64_t>(value));
+        break;
+      case 4:
+        static_assert(std::is_same<decltype(absl::get<4>(value)), const bool&>::value,
+                      "value at index 4 must be a bool");
+        addBool(absl::get<bool>(value));
+        break;
+      }
+    }
+
+  protected:
     bool is_first_{true}; // Used to control whether a comma-separator is added for a new entry.
     StreamerBase& streamer_;
     absl::string_view closer_;
@@ -229,7 +261,7 @@ public:
     using NameValue = std::pair<const absl::string_view, Value>;
     using Entries = absl::Span<const NameValue>;
 
-    Map(StreamerBase& streamer) : Level(streamer, Constants::MapBeg, Constants::MapEnd) {}
+    Map(StreamerBase& streamer) : Level(streamer, "{", "}") {}
 
     /**
      * Initiates a new map key. This must be followed by rendering a value,
@@ -244,7 +276,7 @@ public:
       ASSERT_THIS_IS_TOP_LEVEL;
       ASSERT(!expecting_value_);
       nextField();
-      this->streamer_.addSanitized(Constants::Quote, key, R"(":)");
+      this->streamer_.addSanitized("\"", key, "\":");
       expecting_value_ = true;
     }
 
@@ -254,7 +286,7 @@ public:
      * programming error to call this method on a map that's not the current top
      * level.
      */
-    void addEntries(Entries entries) {
+    void addEntries(const Entries& entries) {
       for (const NameValue& entry : entries) {
         addKey(entry.first);
         this->addValue(entry.second);
@@ -280,7 +312,7 @@ public:
    */
   class Array : public Level {
   public:
-    Array(StreamerBase& streamer) : Level(streamer, Constants::ArrayBeg, Constants::ArrayEnd) {}
+    Array(StreamerBase& streamer) : Level(streamer, "[", "]") {}
     using Entries = absl::Span<const Value>;
 
     /**
@@ -290,7 +322,7 @@ public:
      *
      * @param entries the array of numeric or string values.
      */
-    void addEntries(Entries entries) {
+    void addEntries(const Entries& entries) {
       for (const Value& value : entries) {
         this->addValue(value);
       }
@@ -327,51 +359,43 @@ public:
    */
   void addSanitized(absl::string_view prefix, absl::string_view token, absl::string_view suffix) {
     absl::string_view sanitized = Json::sanitize(sanitize_buffer_, token);
-    output_.add(prefix, sanitized, suffix);
+    response_.add(prefix, sanitized, suffix);
   }
 
   /**
-   * Serializes a string to the output stream. The string is sanitized if needed, and surrounded
-   * by quotes.
+   * Serializes a string to the output stream. The input string value will be sanitized and
+   * surrounded by quotes.
+   * @param str the string to be serialized.
    */
-  void addString(absl::string_view str) { addSanitized(Constants::Quote, str, Constants::Quote); }
-  void addString(const char* str) { addSanitized(Constants::Quote, str, Constants::Quote); }
+  void addString(absl::string_view str) { addSanitized("\"", str, "\""); }
 
   /**
    * Serializes a number.
    */
   void addNumber(double d) {
     if (std::isnan(d)) {
-      output_.add(Constants::Null);
+      response_.add(Constants::Null);
     } else {
-      Buffer::Util::serializeDouble(d, output_);
+      Buffer::Util::serializeDouble(d, response_);
     }
   }
-  void addNumber(uint64_t u) { output_.add(absl::StrCat(u)); }
-  void addNumber(int64_t i) { output_.add(absl::StrCat(i)); }
+  void addNumber(uint64_t u) { response_.add(absl::StrCat(u)); }
+  void addNumber(int64_t i) { response_.add(absl::StrCat(i)); }
 
   /**
    * Serializes a bool to the output stream.
    */
-  void addBool(bool b) { output_.add(b ? Constants::True : Constants::False); }
+  void addBool(bool b) { response_.add(b ? Constants::True : Constants::False); }
 
   /**
-   * Serializes a null to the output stream.
+   * Adds a pre-sanitized string or which doesn't require sanitizing to the output stream.
+   * NOTE: use this with care as it bypasses the sanitization process and may result in
+   * invalid JSON. If you are not sure if the string is already sanitized, use addString()
+   * or addSanitized() instead.
    */
-  void addNull() { output_.add(Constants::Null); }
-
-  /**
-   * Adds a raw string piece to the output stream. The string must be pre-sanitized and is legal
-   * JSON piece.
-   * @param str the string to append.
-   */
-  void addDirectly(absl::string_view str) { output_.add(str); }
+  void addWithoutSanitizing(absl::string_view str) { response_.add(str); }
 
 private:
-  friend Level;
-  friend Map;
-  friend Array;
-
 #ifndef NDEBUG
   /**
    * @return the top Level*. This is used for asserts.
@@ -393,7 +417,7 @@ private:
 
 #endif
 
-  OutputType output_;
+  OutputBufferType response_;
   std::string sanitize_buffer_;
 
 #ifndef NDEBUG
@@ -403,6 +427,9 @@ private:
 #endif
 };
 
+/**
+ * A Streamer that streams to a Buffer::Instance.
+ */
 using Streamer = StreamerBase<BufferOutput>;
 
 } // namespace Json

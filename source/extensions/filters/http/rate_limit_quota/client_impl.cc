@@ -128,14 +128,17 @@ void RateLimitClientImpl::onReceiveMessage(RateLimitQuotaResponsePtr&& response)
       case envoy::service::rate_limit_quota::v3::RateLimitQuotaResponse_BucketAction::
           kAbandonAction: {
         quota_buckets_.erase(bucket_id);
+        ENVOY_LOG(debug, "Bucket id {} removed from the cache by abandon action.", bucket_id);
         break;
       }
       default: {
-        ENVOY_LOG_EVERY_POW_2(error, "Unset bucket action type {}", action.bucket_action_case());
+        ENVOY_LOG_EVERY_POW_2(error, "Unset bucket action type {}",
+                              static_cast<int>(action.bucket_action_case()));
         break;
       }
       }
     }
+    ENVOY_LOG(debug, "Assignment cached for bucket id {}.", bucket_id);
   }
 
   // `rlqs_callback_` has been reset to nullptr for periodical report case.
