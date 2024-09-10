@@ -2,6 +2,7 @@ load(
     "//bazel:envoy_build_system.bzl",
     "envoy_cc_library",
     "envoy_package",
+    "envoy_select_enable_exceptions",
 )
 
 licenses(["notice"])  # Apache 2
@@ -28,7 +29,9 @@ envoy_cc_library(
         "//source/common/http:utility_lib",
         "//source/common/json:json_loader_lib",
         "@envoy_api//envoy/config/core/v3:pkg_cc_proto",
-    ],
+    ] + envoy_select_enable_exceptions([
+        "//source/common/json:json_streamer_lib",
+    ]),
 )
 
 envoy_cc_library(
@@ -55,6 +58,7 @@ envoy_cc_library(
         "//source/common/http:header_utility_lib",
         "//source/common/http:utility_lib",
         "//source/common/protobuf:utility_lib",
+        "//source/common/runtime:runtime_features_lib",
         "//source/common/stream_info:utility_lib",
     ],
 )
