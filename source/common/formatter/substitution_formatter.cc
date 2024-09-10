@@ -61,7 +61,7 @@ JsonFormatBuilder::fromStruct(const ProtobufWkt::Struct& struct_format) {
   output_.clear();
 
   formatValueToFormatElements(struct_format.fields());
-  std::string json_piece = std::move(writer_);
+  std::string json_piece = std::move(buffer_);
   if (!json_piece.empty()) {
     output_.push_back(JsonString{std::move(json_piece)});
   }
@@ -90,7 +90,7 @@ void JsonFormatBuilder::formatValueToFormatElements(const ProtobufWkt::Value& va
 
     // The string contains a formatter, we need to push the current raw string
     // into the output list first.
-    std::string json_piece = std::move(writer_);
+    std::string json_piece = std::move(buffer_);
     if (!json_piece.empty()) {
       output_.push_back(JsonString{std::move(json_piece)});
     }
@@ -117,14 +117,14 @@ void JsonFormatBuilder::formatValueToFormatElements(const ProtobufWkt::Value& va
 }
 
 void JsonFormatBuilder::formatValueToFormatElements(const ProtoList& list_value) {
-  serializer_.addDirectly(Json::Constants::ArrayBeg); // Delimiter to start list.
+  buffer_.append(Json::Constants::ArrayBegin); // Delimiter to start list.
   for (int i = 0; i < list_value.size(); ++i) {
     if (i > 0) {
-      serializer_.addDirectly(Json::Constants::Comma); // Delimiter to separate list elements.
+      buffer_.append(Json::Constants::Comma); // Delimiter to separate list elements.
     }
     formatValueToFormatElements(list_value[i]);
   }
-  serializer_.addDirectly(Json::Constants::ArrayEnd); // Delimiter to end list.
+  buffer_.append(Json::Constants::ArrayEnd); // Delimiter to end list.
 }
 
 void JsonFormatBuilder::formatValueToFormatElements(const ProtoDict& dict_value) {
@@ -139,17 +139,17 @@ void JsonFormatBuilder::formatValueToFormatElements(const ProtoDict& dict_value)
   std::sort(sorted_fields.begin(), sorted_fields.end(),
             [](const auto& a, const auto& b) { return a.first < b.first; });
 
-  serializer_.addDirectly(Json::Constants::MapBeg); // Delimiter to start map.
+  buffer_.append(Json::Constants::MapBegin); // Delimiter to start map.
   for (size_t i = 0; i < sorted_fields.size(); ++i) {
     if (i > 0) {
-      serializer_.addDirectly(Json::Constants::Comma); // Delimiter to separate map elements.
+      buffer_.append(Json::Constants::Comma); // Delimiter to separate map elements.
     }
     // Add the key.
-    serializer_.addSanitized(Json::Constants::Quote, sorted_fields[i].first, R"(":)");
-
+    serializer_.addString(sorted_fields[i].first);
+    buffer_.append(Json::Constants::Colon); // Delimiter to separate key and value.
     formatValueToFormatElements(sorted_fields[i].second->second);
   }
-  serializer_.addDirectly(Json::Constants::MapEnd); // Delimiter to end map.
+  buffer_.append(Json::Constants::MapEnd); // Delimiter to end map.
 }
 
 #endif
