@@ -16,6 +16,7 @@
 #include "envoy/tracing/trace_reason.h"
 #include "envoy/upstream/host_description.h"
 
+#include "filter_state.h"
 #include "source/common/common/assert.h"
 #include "source/common/protobuf/protobuf.h"
 #include "source/common/singleton/const_singleton.h"
@@ -541,14 +542,13 @@ public:
   /**
    * @param connection_info sets the upstream ssl connection.
    */
-  virtual void
-  setUpstreamSslConnection(const Ssl::ConnectionInfoConstSharedPtr& ssl_connection_info) PURE;
+  virtual void setUpstreamSslConnection(Ssl::ConnectionInfoConstSharedPtr ssl_connection_info) PURE;
 
   /**
    * @return the upstream SSL connection. This will be nullptr if the upstream
    * connection does not use SSL.
    */
-  virtual Ssl::ConnectionInfoConstSharedPtr upstreamSslConnection() const PURE;
+  virtual OptRef<const Ssl::ConnectionInfo> upstreamSslConnection() const PURE;
 
   /*
    * @return the upstream timing for this stream
@@ -560,24 +560,24 @@ public:
    * @param upstream_local_address sets the local address of the upstream connection. Note that it
    * can be different than the local address of the downstream connection.
    */
-  virtual void setUpstreamLocalAddress(
-      const Network::Address::InstanceConstSharedPtr& upstream_local_address) PURE;
+  virtual void
+  setUpstreamLocalAddress(Network::Address::InstanceConstSharedPtr upstream_local_address) PURE;
 
   /**
    * @return the upstream local address.
    */
-  virtual const Network::Address::InstanceConstSharedPtr& upstreamLocalAddress() const PURE;
+  virtual OptRef<const Network::Address::Instance> upstreamLocalAddress() const PURE;
 
   /**
    * @param upstream_remote_address sets the remote address of the upstream connection.
    */
-  virtual void setUpstreamRemoteAddress(
-      const Network::Address::InstanceConstSharedPtr& upstream_remote_address) PURE;
+  virtual void
+  setUpstreamRemoteAddress(Network::Address::InstanceConstSharedPtr upstream_remote_address) PURE;
 
   /**
    * @return the upstream remote address.
    */
-  virtual const Network::Address::InstanceConstSharedPtr& upstreamRemoteAddress() const PURE;
+  virtual OptRef<const Network::Address::Instance> upstreamRemoteAddress() const PURE;
 
   /**
    * @param failure_reason the upstream transport failure reason.
@@ -605,8 +605,8 @@ public:
    * @param pointer to upstream connections filter state.
    * @return pointer to filter state to be used by upstream connections.
    */
-  virtual const FilterStateSharedPtr& upstreamFilterState() const PURE;
-  virtual void setUpstreamFilterState(const FilterStateSharedPtr& filter_state) PURE;
+  virtual OptRef<FilterState> upstreamFilterState() const PURE;
+  virtual void setUpstreamFilterState(FilterStateSharedPtr filter_state) PURE;
 
   /**
    * Getters and setters for the number of streams started on this connection.

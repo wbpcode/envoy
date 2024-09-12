@@ -21,11 +21,11 @@ const re2::RE2& getSystemTimeFormatNewlinePattern() {
   CONSTRUCT_ON_FIRST_USE(re2::RE2, "%[-_0^#]*[1-9]*(E|O)?n");
 }
 
-Network::Address::InstanceConstSharedPtr
+OptRef<const Network::Address::Instance>
 getUpstreamRemoteAddress(const StreamInfo::StreamInfo& stream_info) {
   auto opt_ref = stream_info.upstreamInfo();
   if (!opt_ref.has_value()) {
-    return nullptr;
+    return {};
   }
 
   // TODO(wbpcode): remove this after the flag is removed.
@@ -33,15 +33,12 @@ getUpstreamRemoteAddress(const StreamInfo::StreamInfo& stream_info) {
       "envoy.reloadable_features.upstream_remote_address_use_connection");
   if (!use_upstream_remote_address) {
     if (auto host = opt_ref->upstreamHost(); host != nullptr) {
-      return host->address();
+      return {*host->address()};
     }
-    return nullptr;
+    return {};
   }
 
-  if (auto addr = opt_ref->upstreamRemoteAddress(); addr != nullptr) {
-    return addr;
-  }
-  return nullptr;
+  return opt_ref->upstreamRemoteAddress();
 }
 
 } // namespace
@@ -206,7 +203,7 @@ FilterStateFormatter::filterState(const StreamInfo::StreamInfo& stream_info) con
   if (is_upstream_) {
     const OptRef<const StreamInfo::UpstreamInfo> upstream_info = stream_info.upstreamInfo();
     if (upstream_info) {
-      filter_state = upstream_info->upstreamFilterState().get();
+      filter_state = upstream_info->upstreamFilterState().ptr();
     }
   } else {
     filter_state = &stream_info.filterState();
@@ -507,7 +504,7 @@ DownstreamPeerCertVStartFormatter::DownstreamPeerCertVStartFormatter(absl::strin
                       [](const StreamInfo::StreamInfo& stream_info) -> absl::optional<SystemTime> {
                         const auto connection_info =
                             stream_info.downstreamAddressProvider().sslConnection();
-                        return connection_info != nullptr
+                        return connection_info.has_value()
                                    ? connection_info->validFromPeerCertificate()
                                    : absl::optional<SystemTime>();
                       })) {}
@@ -517,34 +514,34 @@ DownstreamPeerCertVEndFormatter::DownstreamPeerCertVEndFormatter(absl::string_vi
                       [](const StreamInfo::StreamInfo& stream_info) -> absl::optional<SystemTime> {
                         const auto connection_info =
                             stream_info.downstreamAddressProvider().sslConnection();
-                        return connection_info != nullptr
+                        return connection_info.has_value()
                                    ? connection_info->expirationPeerCertificate()
                                    : absl::optional<SystemTime>();
                       })) {}
 UpstreamPeerCertVStartFormatter::UpstreamPeerCertVStartFormatter(absl::string_view format)
     : SystemTimeFormatter(
-          format, std::make_unique<SystemTimeFormatter::TimeFieldExtractor>(
-                      [](const StreamInfo::StreamInfo& stream_info) -> absl::optional<SystemTime> {
-                        return stream_info.upstreamInfo() &&
-                                       stream_info.upstreamInfo()->upstreamSslConnection() !=
-                                           nullptr
-                                   ? stream_info.upstreamInfo()
-                                         ->upstreamSslConnection()
-                                         ->validFromPeerCertificate()
-                                   : absl::optional<SystemTime>();
-                      })) {}
+          format,
+          std::make_unique<SystemTimeFormatter::TimeFieldExtractor>(
+              [](const StreamInfo::StreamInfo& stream_info) -> absl::optional<SystemTime> {
+                return stream_info.upstreamInfo() &&
+                               stream_info.upstreamInfo()->upstreamSslConnection().has_value()
+                           ? stream_info.upstreamInfo()
+                                 ->upstreamSslConnection()
+                                 ->validFromPeerCertificate()
+                           : absl::optional<SystemTime>();
+              })) {}
 UpstreamPeerCertVEndFormatter::UpstreamPeerCertVEndFormatter(absl::string_view format)
     : SystemTimeFormatter(
-          format, std::make_unique<SystemTimeFormatter::TimeFieldExtractor>(
-                      [](const StreamInfo::StreamInfo& stream_info) -> absl::optional<SystemTime> {
-                        return stream_info.upstreamInfo() &&
-                                       stream_info.upstreamInfo()->upstreamSslConnection() !=
-                                           nullptr
-                                   ? stream_info.upstreamInfo()
-                                         ->upstreamSslConnection()
-                                         ->expirationPeerCertificate()
-                                   : absl::optional<SystemTime>();
-                      })) {}
+          format,
+          std::make_unique<SystemTimeFormatter::TimeFieldExtractor>(
+              [](const StreamInfo::StreamInfo& stream_info) -> absl::optional<SystemTime> {
+                return stream_info.upstreamInfo() &&
+                               stream_info.upstreamInfo()->upstreamSslConnection().has_value()
+                           ? stream_info.upstreamInfo()
+                                 ->upstreamSslConnection()
+                                 ->expirationPeerCertificate()
+                           : absl::optional<SystemTime>();
+              })) {}
 
 SystemTimeFormatter::SystemTimeFormatter(absl::string_view format, TimeFieldExtractorPtr f,
                                          bool local_time)
@@ -676,7 +673,7 @@ private:
 class StreamInfoAddressFormatterProvider : public StreamInfoFormatterProvider {
 public:
   using FieldExtractor =
-      std::function<Network::Address::InstanceConstSharedPtr(const StreamInfo::StreamInfo&)>;
+      std::function<OptRef<const Network::Address::Instance>(const StreamInfo::StreamInfo&)>;
 
   static std::unique_ptr<StreamInfoAddressFormatterProvider> withPort(FieldExtractor f) {
     return std::make_unique<StreamInfoAddressFormatterProvider>(
@@ -699,7 +696,7 @@ public:
 
   // StreamInfoFormatterProvider
   absl::optional<std::string> format(const StreamInfo::StreamInfo& stream_info) const override {
-    Network::Address::InstanceConstSharedPtr address = field_extractor_(stream_info);
+    OptRef<const Network::Address::Instance> address = field_extractor_(stream_info);
     if (!address) {
       return absl::nullopt;
     }
@@ -707,7 +704,7 @@ public:
     return toString(*address);
   }
   ProtobufWkt::Value formatValue(const StreamInfo::StreamInfo& stream_info) const override {
-    Network::Address::InstanceConstSharedPtr address = field_extractor_(stream_info);
+    OptRef<const Network::Address::Instance> address = field_extractor_(stream_info);
     if (!address) {
       return SubstitutionFormatUtils::unspecifiedValue();
     }
@@ -749,7 +746,7 @@ public:
   StreamInfoSslConnectionInfoFormatterProvider(FieldExtractor f) : field_extractor_(f) {}
 
   absl::optional<std::string> format(const StreamInfo::StreamInfo& stream_info) const override {
-    if (stream_info.downstreamAddressProvider().sslConnection() == nullptr) {
+    if (stream_info.downstreamAddressProvider().sslConnection().has_value()) {
       return absl::nullopt;
     }
 
@@ -762,7 +759,7 @@ public:
   }
 
   ProtobufWkt::Value formatValue(const StreamInfo::StreamInfo& stream_info) const override {
-    if (stream_info.downstreamAddressProvider().sslConnection() == nullptr) {
+    if (stream_info.downstreamAddressProvider().sslConnection().has_value()) {
       return SubstitutionFormatUtils::unspecifiedValue();
     }
 
@@ -787,7 +784,7 @@ public:
 
   absl::optional<std::string> format(const StreamInfo::StreamInfo& stream_info) const override {
     if (!stream_info.upstreamInfo() ||
-        stream_info.upstreamInfo()->upstreamSslConnection() == nullptr) {
+        stream_info.upstreamInfo()->upstreamSslConnection().has_value()) {
       return absl::nullopt;
     }
 
@@ -801,7 +798,7 @@ public:
 
   ProtobufWkt::Value formatValue(const StreamInfo::StreamInfo& stream_info) const override {
     if (!stream_info.upstreamInfo() ||
-        stream_info.upstreamInfo()->upstreamSslConnection() == nullptr) {
+        stream_info.upstreamInfo()->upstreamSslConnection().has_value()) {
       return SubstitutionFormatUtils::unspecifiedValue();
     }
 
@@ -1089,16 +1086,16 @@ const StreamInfoFormatterProviderLookupTable& getKnownStreamInfoFormatterProvide
             [](absl::string_view, absl::optional<size_t>) {
               return StreamInfoAddressFormatterProvider::withPort(
                   [](const StreamInfo::StreamInfo& stream_info)
-                      -> Network::Address::InstanceConstSharedPtr {
+                      -> OptRef<const Network::Address::Instance> {
                     const auto opt_ref = stream_info.upstreamInfo();
                     if (!opt_ref.has_value()) {
-                      return nullptr;
+                      return {};
                     }
                     const auto host = opt_ref->upstreamHost();
                     if (host == nullptr) {
-                      return nullptr;
+                      return {};
                     }
-                    return host->address();
+                    return {*host->address()};
                   });
             }}},
           {"UPSTREAM_CONNECTION_ID",
@@ -1152,11 +1149,11 @@ const StreamInfoFormatterProviderLookupTable& getKnownStreamInfoFormatterProvide
             [](absl::string_view, absl::optional<size_t>) {
               return StreamInfoAddressFormatterProvider::withPort(
                   [](const StreamInfo::StreamInfo& stream_info)
-                      -> Network::Address::InstanceConstSharedPtr {
+                      -> OptRef<const Network::Address::Instance> {
                     if (stream_info.upstreamInfo().has_value()) {
                       return stream_info.upstreamInfo().value().get().upstreamLocalAddress();
                     }
-                    return nullptr;
+                    return {};
                   });
             }}},
           {"UPSTREAM_LOCAL_ADDRESS_WITHOUT_PORT",
@@ -1164,11 +1161,11 @@ const StreamInfoFormatterProviderLookupTable& getKnownStreamInfoFormatterProvide
             [](absl::string_view, absl::optional<size_t>) {
               return StreamInfoAddressFormatterProvider::withoutPort(
                   [](const StreamInfo::StreamInfo& stream_info)
-                      -> Network::Address::InstanceConstSharedPtr {
+                      -> OptRef<const Network::Address::Instance> {
                     if (stream_info.upstreamInfo().has_value()) {
                       return stream_info.upstreamInfo().value().get().upstreamLocalAddress();
                     }
-                    return nullptr;
+                    return {};
                   });
             }}},
           {"UPSTREAM_LOCAL_PORT",
@@ -1176,11 +1173,11 @@ const StreamInfoFormatterProviderLookupTable& getKnownStreamInfoFormatterProvide
             [](absl::string_view, absl::optional<size_t>) {
               return StreamInfoAddressFormatterProvider::justPort(
                   [](const StreamInfo::StreamInfo& stream_info)
-                      -> Network::Address::InstanceConstSharedPtr {
+                      -> OptRef<const Network::Address::Instance> {
                     if (stream_info.upstreamInfo().has_value()) {
                       return stream_info.upstreamInfo().value().get().upstreamLocalAddress();
                     }
-                    return nullptr;
+                    return {};
                   });
             }}},
           {"UPSTREAM_REMOTE_ADDRESS",
@@ -1188,7 +1185,7 @@ const StreamInfoFormatterProviderLookupTable& getKnownStreamInfoFormatterProvide
             [](absl::string_view, absl::optional<size_t>) {
               return StreamInfoAddressFormatterProvider::withPort(
                   [](const StreamInfo::StreamInfo& stream_info)
-                      -> Network::Address::InstanceConstSharedPtr {
+                      -> OptRef<const Network::Address::Instance> {
                     return getUpstreamRemoteAddress(stream_info);
                   });
             }}},
@@ -1197,7 +1194,7 @@ const StreamInfoFormatterProviderLookupTable& getKnownStreamInfoFormatterProvide
             [](absl::string_view, absl::optional<size_t>) {
               return StreamInfoAddressFormatterProvider::withoutPort(
                   [](const StreamInfo::StreamInfo& stream_info)
-                      -> Network::Address::InstanceConstSharedPtr {
+                      -> OptRef<const Network::Address::Instance> {
                     return getUpstreamRemoteAddress(stream_info);
                   });
             }}},
@@ -1206,7 +1203,7 @@ const StreamInfoFormatterProviderLookupTable& getKnownStreamInfoFormatterProvide
             [](absl::string_view, absl::optional<size_t>) {
               return StreamInfoAddressFormatterProvider::justPort(
                   [](const StreamInfo::StreamInfo& stream_info)
-                      -> Network::Address::InstanceConstSharedPtr {
+                      -> OptRef<const Network::Address::Instance> {
                     return getUpstreamRemoteAddress(stream_info);
                   });
             }}},
@@ -1270,7 +1267,8 @@ const StreamInfoFormatterProviderLookupTable& getKnownStreamInfoFormatterProvide
            {CommandSyntaxChecker::COMMAND_ONLY,
             [](absl::string_view, absl::optional<size_t>) {
               return StreamInfoAddressFormatterProvider::withPort(
-                  [](const StreamInfo::StreamInfo& stream_info) {
+                  [](const StreamInfo::StreamInfo& stream_info)
+                      -> OptRef<const Network::Address::Instance> {
                     return stream_info.downstreamAddressProvider().localAddress();
                   });
             }}},
@@ -1278,7 +1276,8 @@ const StreamInfoFormatterProviderLookupTable& getKnownStreamInfoFormatterProvide
            {CommandSyntaxChecker::COMMAND_ONLY,
             [](absl::string_view, absl::optional<size_t>) {
               return StreamInfoAddressFormatterProvider::withoutPort(
-                  [](const Envoy::StreamInfo::StreamInfo& stream_info) {
+                  [](const Envoy::StreamInfo::StreamInfo& stream_info)
+                      -> OptRef<const Network::Address::Instance> {
                     return stream_info.downstreamAddressProvider().localAddress();
                   });
             }}},
@@ -1286,7 +1285,8 @@ const StreamInfoFormatterProviderLookupTable& getKnownStreamInfoFormatterProvide
            {CommandSyntaxChecker::COMMAND_ONLY,
             [](absl::string_view, absl::optional<size_t>) {
               return StreamInfoAddressFormatterProvider::justPort(
-                  [](const Envoy::StreamInfo::StreamInfo& stream_info) {
+                  [](const Envoy::StreamInfo::StreamInfo& stream_info)
+                      -> OptRef<const Network::Address::Instance> {
                     return stream_info.downstreamAddressProvider().localAddress();
                   });
             }}},
@@ -1294,7 +1294,8 @@ const StreamInfoFormatterProviderLookupTable& getKnownStreamInfoFormatterProvide
            {CommandSyntaxChecker::COMMAND_ONLY,
             [](absl::string_view, absl::optional<size_t>) {
               return StreamInfoAddressFormatterProvider::withPort(
-                  [](const StreamInfo::StreamInfo& stream_info) {
+                  [](const StreamInfo::StreamInfo& stream_info)
+                      -> OptRef<const Network::Address::Instance> {
                     return stream_info.downstreamAddressProvider().remoteAddress();
                   });
             }}},
@@ -1302,7 +1303,8 @@ const StreamInfoFormatterProviderLookupTable& getKnownStreamInfoFormatterProvide
            {CommandSyntaxChecker::COMMAND_ONLY,
             [](absl::string_view, absl::optional<size_t>) {
               return StreamInfoAddressFormatterProvider::withoutPort(
-                  [](const StreamInfo::StreamInfo& stream_info) {
+                  [](const StreamInfo::StreamInfo& stream_info)
+                      -> OptRef<const Network::Address::Instance> {
                     return stream_info.downstreamAddressProvider().remoteAddress();
                   });
             }}},
@@ -1310,7 +1312,8 @@ const StreamInfoFormatterProviderLookupTable& getKnownStreamInfoFormatterProvide
            {CommandSyntaxChecker::COMMAND_ONLY,
             [](absl::string_view, absl::optional<size_t>) {
               return StreamInfoAddressFormatterProvider::justPort(
-                  [](const Envoy::StreamInfo::StreamInfo& stream_info) {
+                  [](const Envoy::StreamInfo::StreamInfo& stream_info)
+                      -> OptRef<const Network::Address::Instance> {
                     return stream_info.downstreamAddressProvider().remoteAddress();
                   });
             }}},
@@ -1318,7 +1321,8 @@ const StreamInfoFormatterProviderLookupTable& getKnownStreamInfoFormatterProvide
            {CommandSyntaxChecker::COMMAND_ONLY,
             [](absl::string_view, absl::optional<size_t>) {
               return StreamInfoAddressFormatterProvider::withPort(
-                  [](const StreamInfo::StreamInfo& stream_info) {
+                  [](const StreamInfo::StreamInfo& stream_info)
+                      -> OptRef<const Network::Address::Instance> {
                     return stream_info.downstreamAddressProvider().directRemoteAddress();
                   });
             }}},
@@ -1326,7 +1330,8 @@ const StreamInfoFormatterProviderLookupTable& getKnownStreamInfoFormatterProvide
            {CommandSyntaxChecker::COMMAND_ONLY,
             [](absl::string_view, absl::optional<size_t>) {
               return StreamInfoAddressFormatterProvider::withoutPort(
-                  [](const StreamInfo::StreamInfo& stream_info) {
+                  [](const StreamInfo::StreamInfo& stream_info)
+                      -> OptRef<const Network::Address::Instance> {
                     return stream_info.downstreamAddressProvider().directRemoteAddress();
                   });
             }}},
@@ -1334,7 +1339,8 @@ const StreamInfoFormatterProviderLookupTable& getKnownStreamInfoFormatterProvide
            {CommandSyntaxChecker::COMMAND_ONLY,
             [](absl::string_view, absl::optional<size_t>) {
               return StreamInfoAddressFormatterProvider::justPort(
-                  [](const Envoy::StreamInfo::StreamInfo& stream_info) {
+                  [](const Envoy::StreamInfo::StreamInfo& stream_info)
+                      -> OptRef<const Network::Address::Instance> {
                     return stream_info.downstreamAddressProvider().directRemoteAddress();
                   });
             }}},

@@ -204,7 +204,7 @@ public:
   /**
    * @return the local address of the socket.
    */
-  virtual const Address::InstanceConstSharedPtr& localAddress() const PURE;
+  virtual OptRef<const Address::Instance> localAddress() const PURE;
 
   /**
    * @return true if the local address has been restored to a value that is different from the
@@ -215,13 +215,13 @@ public:
   /**
    * @return the remote address of the socket.
    */
-  virtual const Address::InstanceConstSharedPtr& remoteAddress() const PURE;
+  virtual OptRef<const Address::Instance> remoteAddress() const PURE;
 
   /**
    * @return the direct remote address of the socket. This is the address of the directly
    *         connected peer, and cannot be modified by listener filters.
    */
-  virtual const Address::InstanceConstSharedPtr& directRemoteAddress() const PURE;
+  virtual OptRef<const Address::Instance> directRemoteAddress() const PURE;
 
   /**
    * @return SNI value for downstream host.
@@ -251,7 +251,7 @@ public:
    * @return the downstream SSL connection. This will be nullptr if the downstream
    * connection does not use SSL.
    */
-  virtual Ssl::ConnectionInfoConstSharedPtr sslConnection() const PURE;
+  virtual OptRef<Ssl::ConnectionInfo> sslConnection() const PURE;
 
   /**
    * @return ja3 fingerprint hash of the downstream connection, if any.
@@ -261,7 +261,7 @@ public:
   /**
    * @return roundTripTime of the connection
    */
-  virtual const absl::optional<std::chrono::milliseconds>& roundTripTime() const PURE;
+  virtual absl::optional<std::chrono::milliseconds> roundTripTime() const PURE;
 
   /**
    * @return the filter chain info provider backing this socket.
@@ -295,17 +295,17 @@ public:
    *
    * @param local_address the new local address.
    */
-  virtual void restoreLocalAddress(const Address::InstanceConstSharedPtr& local_address) PURE;
+  virtual void restoreLocalAddress(Address::InstanceConstSharedPtr local_address) PURE;
 
   /**
    * Set the remote address of the socket.
    */
-  virtual void setRemoteAddress(const Address::InstanceConstSharedPtr& remote_address) PURE;
+  virtual void setRemoteAddress(Address::InstanceConstSharedPtr remote_address) PURE;
 
   /**
    * @param SNI value requested.
    */
-  virtual void setRequestedServerName(const absl::string_view requested_server_name) PURE;
+  virtual void setRequestedServerName(absl::string_view requested_server_name) PURE;
 
   /**
    * @param id Connection ID of the downstream connection.
@@ -316,7 +316,7 @@ public:
    * @param enable whether to enable or disable setting interface name. While having an interface
    *               name might be helpful for debugging, it might come at a performance cost.
    */
-  virtual void enableSettingInterfaceName(const bool enable) PURE;
+  virtual void enableSettingInterfaceName(bool enable) PURE;
 
   /**
    * @param interface_name the name of the network interface used by the local end of the
@@ -327,7 +327,7 @@ public:
   /**
    * @param connection_info sets the downstream ssl connection.
    */
-  virtual void setSslConnection(const Ssl::ConnectionInfoConstSharedPtr& ssl_connection_info) PURE;
+  virtual void setSslConnection(Ssl::ConnectionInfoConstSharedPtr ssl_connection_info) PURE;
 
   /**
    * @param JA3 fingerprint.
