@@ -33,5 +33,6 @@ envoy_cc_library(
         "//envoy/registry",
         "//envoy/server:factory_context_interface",
         "//envoy/stream_info:stream_info_interface",
+        "@com_google_absl//absl/types:variant",
     ],
 )

@@ -37,13 +37,7 @@ public:
                     absl::optional<size_t> max_length, GetMetadataFunction get);
 
   // StreamInfoFormatterProvider
-  absl::optional<std::string> format(const StreamInfo::StreamInfo& stream_info) const override;
-  ProtobufWkt::Value formatValue(const StreamInfo::StreamInfo& stream_info) const override;
-
-protected:
-  absl::optional<std::string>
-  formatMetadata(const envoy::config::core::v3::Metadata& metadata) const;
-  ProtobufWkt::Value formatMetadataValue(const envoy::config::core::v3::Metadata& metadata) const;
+  Value format(const StreamInfo::StreamInfo& stream_info) const override;
 
 private:
   std::string filter_namespace_;
@@ -97,8 +91,7 @@ public:
                        absl::string_view field_name = {});
 
   // StreamInfoFormatterProvider
-  absl::optional<std::string> format(const StreamInfo::StreamInfo&) const override;
-  ProtobufWkt::Value formatValue(const StreamInfo::StreamInfo&) const override;
+  Value format(const StreamInfo::StreamInfo&) const override;
 
 private:
   const Envoy::StreamInfo::FilterState::Object*
@@ -126,8 +119,7 @@ public:
         duration_precision_(duration_precision) {}
 
   // StreamInfoFormatterProvider
-  absl::optional<std::string> format(const StreamInfo::StreamInfo&) const override;
-  ProtobufWkt::Value formatValue(const StreamInfo::StreamInfo&) const override;
+  Value format(const StreamInfo::StreamInfo&) const override;
 
   static const absl::flat_hash_map<absl::string_view, TimePointGetter> KnownTimePointGetters;
 
@@ -174,8 +166,7 @@ public:
   SystemTimeFormatter(absl::string_view format, TimeFieldExtractorPtr f, bool local_time = false);
 
   // StreamInfoFormatterProvider
-  absl::optional<std::string> format(const StreamInfo::StreamInfo&) const override;
-  ProtobufWkt::Value formatValue(const StreamInfo::StreamInfo&) const override;
+  Value format(const StreamInfo::StreamInfo&) const override;
 
 private:
   const Envoy::DateFormatter date_formatter_;
@@ -236,11 +227,10 @@ public:
   EnvironmentFormatter(absl::string_view key, absl::optional<size_t> max_length);
 
   // StreamInfoFormatterProvider
-  absl::optional<std::string> format(const StreamInfo::StreamInfo&) const override;
-  ProtobufWkt::Value formatValue(const StreamInfo::StreamInfo&) const override;
+  Value format(const StreamInfo::StreamInfo&) const override;
 
 private:
-  ProtobufWkt::Value str_;
+  std::string str_;
 };
 
 class DefaultBuiltInStreamInfoCommandParserFactory : public BuiltInStreamInfoCommandParserFactory {

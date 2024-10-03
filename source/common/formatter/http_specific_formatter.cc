@@ -18,28 +18,14 @@
 namespace Envoy {
 namespace Formatter {
 
-absl::optional<std::string>
-LocalReplyBodyFormatter::formatWithContext(const HttpFormatterContext& context,
-                                           const StreamInfo::StreamInfo&) const {
-  return std::string(context.localReplyBody());
+Value LocalReplyBodyFormatter::format(const HttpFormatterContext& context,
+                                      const StreamInfo::StreamInfo&) const {
+  return context.localReplyBody();
 }
 
-ProtobufWkt::Value
-LocalReplyBodyFormatter::formatValueWithContext(const HttpFormatterContext& context,
-                                                const StreamInfo::StreamInfo&) const {
-  return ValueUtil::stringValue(std::string(context.localReplyBody()));
-}
-
-absl::optional<std::string>
-AccessLogTypeFormatter::formatWithContext(const HttpFormatterContext& context,
-                                          const StreamInfo::StreamInfo&) const {
-  return AccessLogType_Name(context.accessLogType());
-}
-
-ProtobufWkt::Value
-AccessLogTypeFormatter::formatValueWithContext(const HttpFormatterContext& context,
-                                               const StreamInfo::StreamInfo&) const {
-  return ValueUtil::stringValue(AccessLogType_Name(context.accessLogType()));
+Value AccessLogTypeFormatter::format(const HttpFormatterContext& context,
+                                     const StreamInfo::StreamInfo&) const {
+  return absl::string_view{AccessLogType_Name(context.accessLogType())};
 }
 
 HeaderFormatter::HeaderFormatter(absl::string_view main_header,
@@ -59,26 +45,13 @@ const Http::HeaderEntry* HeaderFormatter::findHeader(const Http::HeaderMap& head
   return header.empty() ? nullptr : header[0];
 }
 
-absl::optional<std::string> HeaderFormatter::format(const Http::HeaderMap& headers) const {
+Value HeaderFormatter::format(const Http::HeaderMap& headers) const {
   const Http::HeaderEntry* header = findHeader(headers);
   if (!header) {
-    return absl::nullopt;
+    return absl::monostate{};
   }
 
-  absl::string_view val = header->value().getStringView();
-  val = SubstitutionFormatUtils::truncateStringView(val, max_length_);
-  return std::string(val);
-}
-
-ProtobufWkt::Value HeaderFormatter::formatValue(const Http::HeaderMap& headers) const {
-  const Http::HeaderEntry* header = findHeader(headers);
-  if (!header) {
-    return SubstitutionFormatUtils::unspecifiedValue();
-  }
-
-  absl::string_view val = header->value().getStringView();
-  val = SubstitutionFormatUtils::truncateStringView(val, max_length_);
-  return ValueUtil::stringValue(std::string(val));
+  return SubstitutionFormatUtils::truncateStringView(header->value().getStringView(), max_length_);
 }
 
 ResponseHeaderFormatter::ResponseHeaderFormatter(absl::string_view main_header,
@@ -86,16 +59,9 @@ ResponseHeaderFormatter::ResponseHeaderFormatter(absl::string_view main_header,
                                                  absl::optional<size_t> max_length)
     : HeaderFormatter(main_header, alternative_header, max_length) {}
 
-absl::optional<std::string>
-ResponseHeaderFormatter::formatWithContext(const HttpFormatterContext& context,
-                                           const StreamInfo::StreamInfo&) const {
+Value ResponseHeaderFormatter::format(const HttpFormatterContext& context,
+                                      const StreamInfo::StreamInfo&) const {
   return HeaderFormatter::format(context.responseHeaders());
-}
-
-ProtobufWkt::Value
-ResponseHeaderFormatter::formatValueWithContext(const HttpFormatterContext& context,
-                                                const StreamInfo::StreamInfo&) const {
-  return HeaderFormatter::formatValue(context.responseHeaders());
 }
 
 RequestHeaderFormatter::RequestHeaderFormatter(absl::string_view main_header,
@@ -103,16 +69,9 @@ RequestHeaderFormatter::RequestHeaderFormatter(absl::string_view main_header,
                                                absl::optional<size_t> max_length)
     : HeaderFormatter(main_header, alternative_header, max_length) {}
 
-absl::optional<std::string>
-RequestHeaderFormatter::formatWithContext(const HttpFormatterContext& context,
-                                          const StreamInfo::StreamInfo&) const {
+Value RequestHeaderFormatter::format(const HttpFormatterContext& context,
+                                     const StreamInfo::StreamInfo&) const {
   return HeaderFormatter::format(context.requestHeaders());
-}
-
-ProtobufWkt::Value
-RequestHeaderFormatter::formatValueWithContext(const HttpFormatterContext& context,
-                                               const StreamInfo::StreamInfo&) const {
-  return HeaderFormatter::formatValue(context.requestHeaders());
 }
 
 ResponseTrailerFormatter::ResponseTrailerFormatter(absl::string_view main_header,
@@ -120,64 +79,32 @@ ResponseTrailerFormatter::ResponseTrailerFormatter(absl::string_view main_header
                                                    absl::optional<size_t> max_length)
     : HeaderFormatter(main_header, alternative_header, max_length) {}
 
-absl::optional<std::string>
-ResponseTrailerFormatter::formatWithContext(const HttpFormatterContext& context,
-                                            const StreamInfo::StreamInfo&) const {
+Value ResponseTrailerFormatter::format(const HttpFormatterContext& context,
+                                       const StreamInfo::StreamInfo&) const {
   return HeaderFormatter::format(context.responseTrailers());
-}
-
-ProtobufWkt::Value
-ResponseTrailerFormatter::formatValueWithContext(const HttpFormatterContext& context,
-                                                 const StreamInfo::StreamInfo&) const {
-  return HeaderFormatter::formatValue(context.responseTrailers());
 }
 
 HeadersByteSizeFormatter::HeadersByteSizeFormatter(const HeaderType header_type)
     : header_type_(header_type) {}
 
-uint64_t HeadersByteSizeFormatter::extractHeadersByteSize(
-    const Http::RequestHeaderMap& request_headers, const Http::ResponseHeaderMap& response_headers,
-    const Http::ResponseTrailerMap& response_trailers) const {
+Value HeadersByteSizeFormatter::format(const HttpFormatterContext& context,
+                                       const StreamInfo::StreamInfo&) const {
   switch (header_type_) {
   case HeaderType::RequestHeaders:
-    return request_headers.byteSize();
+    return context.requestHeaders().byteSize();
   case HeaderType::ResponseHeaders:
-    return response_headers.byteSize();
+    return context.responseHeaders().byteSize();
   case HeaderType::ResponseTrailers:
-    return response_trailers.byteSize();
+    return context.responseTrailers().byteSize();
   }
   PANIC_DUE_TO_CORRUPT_ENUM;
 }
 
-absl::optional<std::string>
-HeadersByteSizeFormatter::formatWithContext(const HttpFormatterContext& context,
-                                            const StreamInfo::StreamInfo&) const {
-  return absl::StrCat(extractHeadersByteSize(context.requestHeaders(), context.responseHeaders(),
-                                             context.responseTrailers()));
-}
-
-ProtobufWkt::Value
-HeadersByteSizeFormatter::formatValueWithContext(const HttpFormatterContext& context,
-                                                 const StreamInfo::StreamInfo&) const {
-  return ValueUtil::numberValue(extractHeadersByteSize(
-      context.requestHeaders(), context.responseHeaders(), context.responseTrailers()));
-}
-
-ProtobufWkt::Value TraceIDFormatter::formatValueWithContext(const HttpFormatterContext& context,
-                                                            const StreamInfo::StreamInfo&) const {
+Value TraceIDFormatter::format(const HttpFormatterContext& context,
+                               const StreamInfo::StreamInfo&) const {
   auto trace_id = context.activeSpan().getTraceId();
   if (trace_id.empty()) {
-    return SubstitutionFormatUtils::unspecifiedValue();
-  }
-  return ValueUtil::stringValue(trace_id);
-}
-
-absl::optional<std::string>
-TraceIDFormatter::formatWithContext(const HttpFormatterContext& context,
-                                    const StreamInfo::StreamInfo&) const {
-  auto trace_id = context.activeSpan().getTraceId();
-  if (trace_id.empty()) {
-    return absl::nullopt;
+    return absl::monostate{};
   }
   return trace_id;
 }
@@ -202,19 +129,18 @@ GrpcStatusFormatter::GrpcStatusFormatter(const std::string& main_header,
                                          absl::optional<size_t> max_length, Format format)
     : HeaderFormatter(main_header, alternative_header, max_length), format_(format) {}
 
-absl::optional<std::string>
-GrpcStatusFormatter::formatWithContext(const HttpFormatterContext& context,
-                                       const StreamInfo::StreamInfo& info) const {
+Value GrpcStatusFormatter::format(const HttpFormatterContext& context,
+                                  const StreamInfo::StreamInfo& info) const {
   if (Runtime::runtimeFeatureEnabled(
           "envoy.reloadable_features.validate_grpc_header_before_log_grpc_status")) {
     if (!Grpc::Common::isGrpcRequestHeaders(context.requestHeaders())) {
-      return absl::nullopt;
+      return absl::monostate{};
     }
   }
   const auto grpc_status = Grpc::Common::getGrpcStatus(context.responseTrailers(),
                                                        context.responseHeaders(), info, true);
   if (!grpc_status.has_value()) {
-    return absl::nullopt;
+    return absl::monostate{};
   }
   switch (format_) {
   case CamelString: {
@@ -233,45 +159,7 @@ GrpcStatusFormatter::formatWithContext(const HttpFormatterContext& context,
     return grpc_status_message;
   }
   case Number: {
-    return std::to_string(grpc_status.value());
-  }
-  }
-  PANIC_DUE_TO_CORRUPT_ENUM;
-}
-
-ProtobufWkt::Value
-GrpcStatusFormatter::formatValueWithContext(const HttpFormatterContext& context,
-                                            const StreamInfo::StreamInfo& info) const {
-  if (Runtime::runtimeFeatureEnabled(
-          "envoy.reloadable_features.validate_grpc_header_before_log_grpc_status")) {
-    if (!Grpc::Common::isGrpcRequestHeaders(context.requestHeaders())) {
-      return SubstitutionFormatUtils::unspecifiedValue();
-    }
-  }
-  const auto grpc_status = Grpc::Common::getGrpcStatus(context.responseTrailers(),
-                                                       context.responseHeaders(), info, true);
-  if (!grpc_status.has_value()) {
-    return SubstitutionFormatUtils::unspecifiedValue();
-  }
-
-  switch (format_) {
-  case CamelString: {
-    const auto grpc_status_message = Grpc::Utility::grpcStatusToString(grpc_status.value());
-    if (grpc_status_message == EMPTY_STRING || grpc_status_message == "InvalidCode") {
-      return ValueUtil::stringValue(std::to_string(grpc_status.value()));
-    }
-    return ValueUtil::stringValue(grpc_status_message);
-  }
-  case SnakeString: {
-    const auto grpc_status_message =
-        absl::StatusCodeToString(static_cast<absl::StatusCode>(grpc_status.value()));
-    if (grpc_status_message == EMPTY_STRING) {
-      return ValueUtil::stringValue(std::to_string(grpc_status.value()));
-    }
-    return ValueUtil::stringValue(grpc_status_message);
-  }
-  case Number: {
-    return ValueUtil::numberValue(grpc_status.value());
+    return grpc_status.value();
   }
   }
   PANIC_DUE_TO_CORRUPT_ENUM;
@@ -282,14 +170,9 @@ StreamInfoRequestHeaderFormatter::StreamInfoRequestHeaderFormatter(
     absl::optional<size_t> max_length)
     : HeaderFormatter(main_header, alternative_header, max_length) {}
 
-absl::optional<std::string> StreamInfoRequestHeaderFormatter::formatWithContext(
-    const HttpFormatterContext&, const StreamInfo::StreamInfo& stream_info) const {
+Value StreamInfoRequestHeaderFormatter::format(const HttpFormatterContext&,
+                                               const StreamInfo::StreamInfo& stream_info) const {
   return HeaderFormatter::format(*stream_info.getRequestHeaders());
-}
-
-ProtobufWkt::Value StreamInfoRequestHeaderFormatter::formatValueWithContext(
-    const HttpFormatterContext&, const StreamInfo::StreamInfo& stream_info) const {
-  return HeaderFormatter::formatValue(*stream_info.getRequestHeaders());
 }
 
 const BuiltInHttpCommandParser::FormatterProviderLookupTbl&

@@ -9,9 +9,23 @@
 #include "envoy/registry/registry.h"
 #include "envoy/server/factory_context.h"
 #include "envoy/stream_info/stream_info.h"
+#include "absl/types/variant.h"
 
 namespace Envoy {
 namespace Formatter {
+
+// This Value type is used to represent a single value extracted from the formatter context and
+// stream info.
+// This takes 40 bytes on most platforms. So it fine to use it on the stack with copy semantics.
+using Value = absl::variant<absl::monostate,   // Empty value.
+                            std::string,       // String with ownership.
+                            absl::string_view, // String view without ownership.
+                            double,            // Double number.
+                            uint64_t,          // Unsigned integer.
+                            int64_t,           // Signed integer.
+                            bool,              // Boolean.
+                            ProtobufWkt::Value // Complex types like map or list.
+                            >;
 
 /**
  * Template interface for multiple protocols/modules formatters.
@@ -44,23 +58,10 @@ public:
    * Format the value with the given context and stream info.
    * @param context supplies the formatter context.
    * @param stream_info supplies the stream info.
-   * @return absl::optional<std::string> optional string containing a single value extracted from
-   *         the given context and stream info.
+   * @return Value containing a single value extracted from the given context and stream info.
    */
-  virtual absl::optional<std::string>
-  formatWithContext(const FormatterContext& context,
-                    const StreamInfo::StreamInfo& stream_info) const PURE;
-
-  /**
-   * Format the value with the given context and stream info.
-   * @param context supplies the formatter context.
-   * @param stream_info supplies the stream info.
-   * @return ProtobufWkt::Value containing a single value extracted from the given
-   *         context and stream info.
-   */
-  virtual ProtobufWkt::Value
-  formatValueWithContext(const FormatterContext& context,
-                         const StreamInfo::StreamInfo& stream_info) const PURE;
+  virtual Value format(const FormatterContext& context,
+                       const StreamInfo::StreamInfo& stream_info) const PURE;
 };
 
 template <class FormatterContext>
@@ -172,17 +173,9 @@ public:
   /**
    * Format the value with the given stream info.
    * @param stream_info supplies the stream info.
-   * @return absl::optional<std::string> optional string containing a single value extracted from
-   *         the given stream info.
+   * @return Value containing a single value extracted from the given stream info.
    */
-  virtual absl::optional<std::string> format(const StreamInfo::StreamInfo& stream_info) const PURE;
-
-  /**
-   * Format the value with the given stream info.
-   * @param stream_info supplies the stream info.
-   * @return ProtobufWkt::Value containing a single value extracted from the given stream info.
-   */
-  virtual ProtobufWkt::Value formatValue(const StreamInfo::StreamInfo& stream_info) const PURE;
+  virtual Value format(const StreamInfo::StreamInfo& stream_info) const PURE;
 };
 
 using StreamInfoFormatterProvider = FormatterProviderBase<StreamInfoOnlyFormatterContext>;

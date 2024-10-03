@@ -79,15 +79,9 @@ public:
       : formatter_(std::move(formatter)) {}
 
   // FormatterProvider
-  absl::optional<std::string>
-  formatWithContext(const FormatterContext&,
-                    const StreamInfo::StreamInfo& stream_info) const override {
+  Value formatWithContext(const FormatterContext&,
+                          const StreamInfo::StreamInfo& stream_info) const override {
     return formatter_->format(stream_info);
-  }
-  ProtobufWkt::Value
-  formatValueWithContext(const FormatterContext&,
-                         const StreamInfo::StreamInfo& stream_info) const override {
-    return formatter_->formatValue(stream_info);
   }
 
 protected:
@@ -205,6 +199,42 @@ private:
 };
 
 inline constexpr absl::string_view DefaultUnspecifiedValueStringView = "-";
+
+struct ValueToStringVisitor {
+  void operator()(const ProtobufWkt::Value& value) {
+    if (value.has_string_value()) {
+      output += value.string_value();
+    } else if (value.has_number_value()) {
+      output += absl::StrFormat("%g", value.number_value());
+    } else if (value.has_bool_value()) {
+      output += value.bool_value() ? "true" : "false";
+    } else if (value.has_struct_value()) {
+      Json::StringOutput json_output;
+      Json::BufferStreamer streamer(json_output);
+      streamer.streamValue(value.struct_value());
+      output += json_output.toString();
+    } else if (value.has_list_value()) {
+      Json::StringOutput json_output;
+      Json::BufferStreamer streamer(json_output);
+      streamer.streamValue(value.list_value());
+      output += json_output.toString();
+    } else if (value.has_null_value()) {
+      output += "null";
+    } else {
+      output += DefaultUnspecifiedValueStringView;
+    }
+  }
+  void operator()(absl::monostate) {
+    output.append(empty_value_string);
+  }
+  void operator()(double number) {
+    output.append(fmt::to_string(number));
+  }
+
+
+  std::string& output;
+  absl::string_view empty_value_string;
+};
 
 /**
  * Composite formatter implementation.
@@ -499,7 +529,9 @@ private:
 using JsonFormatterImpl = JsonFormatterImplBase<HttpFormatterContext>;
 
 // Helper classes for StructFormatter::StructFormatMapVisitor.
-template <class... Ts> struct StructFormatMapVisitorHelper : Ts... { using Ts::operator()...; };
+template <class... Ts> struct StructFormatMapVisitorHelper : Ts... {
+  using Ts::operator()...;
+};
 template <class... Ts> StructFormatMapVisitorHelper(Ts...) -> StructFormatMapVisitorHelper<Ts...>;
 
 /**
