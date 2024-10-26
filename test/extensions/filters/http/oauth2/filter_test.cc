@@ -395,6 +395,7 @@ TEST_F(OAuth2Test, DefaultAuthScope) {
   // explicitly tell the validator to fail the validation.
   EXPECT_CALL(*validator_, setParams(_, _));
   EXPECT_CALL(*validator_, isValid()).WillOnce(Return(false));
+  EXPECT_CALL(*validator_, canUpdateTokenByRefreshToken()).WillOnce(Return(false));
 
   EXPECT_CALL(decoder_callbacks_, encodeHeaders_(HeaderMapEqualRef(&response_headers), true));
 
@@ -435,6 +436,7 @@ TEST_F(OAuth2Test, PreservesQueryParametersInAuthorizationEndpoint) {
   // Explicitly tell the validator to fail the validation.
   EXPECT_CALL(*validator_, setParams(_, _));
   EXPECT_CALL(*validator_, isValid()).WillOnce(Return(false));
+  EXPECT_CALL(*validator_, canUpdateTokenByRefreshToken()).WillOnce(Return(false));
 
   // Set SystemTime to a fixed point so we get consistent nonce between test runs.
   test_time_.setSystemTime(SystemTime(std::chrono::seconds(123456789)));
@@ -493,6 +495,7 @@ TEST_F(OAuth2Test, PreservesQueryParametersInAuthorizationEndpointWithUrlEncodin
   // Explicitly tell the validator to fail the validation.
   EXPECT_CALL(*validator_, setParams(_, _));
   EXPECT_CALL(*validator_, isValid()).WillOnce(Return(false));
+  EXPECT_CALL(*validator_, canUpdateTokenByRefreshToken()).WillOnce(Return(false));
 
   // Set SystemTime to a fixed point so we get consistent nonce between test runs.
   test_time_.setSystemTime(SystemTime(std::chrono::seconds(123456789)));
