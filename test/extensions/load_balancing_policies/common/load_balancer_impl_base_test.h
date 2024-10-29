@@ -82,9 +82,7 @@ protected:
   }
 
   LoadBalancerTestBase()
-      : stat_names_(stats_store_.symbolTable()), stats_(stat_names_, *stats_store_.rootScope()) {
-    least_request_lb_config_.mutable_choice_count()->set_value(2);
-  }
+      : stat_names_(stats_store_.symbolTable()), stats_(stat_names_, *stats_store_.rootScope()) {}
 
   Stats::IsolatedStoreImpl stats_store_;
   ClusterLbStatNames stat_names_;
@@ -96,8 +94,6 @@ protected:
   MockHostSet& failover_host_set_ = *priority_set_.getMockHostSet(1);
   std::shared_ptr<MockClusterInfo> info_{new NiceMock<MockClusterInfo>()};
   envoy::config::cluster::v3::Cluster::CommonLbConfig common_config_;
-  envoy::config::cluster::v3::Cluster::LeastRequestLbConfig least_request_lb_config_;
-  envoy::config::cluster::v3::Cluster::RoundRobinLbConfig round_robin_lb_config_;
 };
 
 } // namespace Upstream

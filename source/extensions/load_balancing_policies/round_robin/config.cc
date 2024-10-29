@@ -9,37 +9,38 @@ namespace Extensions {
 namespace LoadBalancingPolices {
 namespace RoundRobin {
 
-LegacyRoundRobinLbConfig::LegacyRoundRobinLbConfig(const ClusterProto& cluster) {
-  if (cluster.has_round_robin_lb_config()) {
-    lb_config_ = cluster.round_robin_lb_config();
-  }
-}
-
 TypedRoundRobinLbConfig::TypedRoundRobinLbConfig(const RoundRobinLbProto& lb_config)
     : lb_config_(lb_config) {}
+
+TypedRoundRobinLbConfig::TypedRoundRobinLbConfig(const ClusterProto& cluster_config) {
+  auto locality_lb_config = Upstream::LoadBalancerConfigHelper::localityLbConfigFromCommonLbConfig(
+      cluster_config.common_lb_config());
+  if (locality_lb_config.has_value()) {
+    *lb_config_.mutable_locality_lb_config() = std::move(*locality_lb_config);
+  }
+
+  auto slow_start_config = Upstream::LoadBalancerConfigHelper::slowStartConfigFromLegacyProto(
+      cluster_config.round_robin_lb_config());
+  if (slow_start_config.has_value()) {
+    *lb_config_.mutable_slow_start_config() = std::move(*slow_start_config);
+  }
+}
 
 Upstream::LoadBalancerPtr RoundRobinCreator::operator()(
     Upstream::LoadBalancerParams params, OptRef<const Upstream::LoadBalancerConfig> lb_config,
     const Upstream::ClusterInfo& cluster_info, const Upstream::PrioritySet&,
     Runtime::Loader& runtime, Random::RandomGenerator& random, TimeSource& time_source) {
 
-  auto active_or_legacy =
-      Common::ActiveOrLegacy<TypedRoundRobinLbConfig, LegacyRoundRobinLbConfig>::get(
-          lb_config.ptr());
+  ASSERT(lb_config.has_value());
+  const TypedRoundRobinLbConfig* typed_lb_config =
+      dynamic_cast<const TypedRoundRobinLbConfig*>(lb_config.ptr());
+  ASSERT(typed_lb_config != nullptr);
 
-  if (active_or_legacy.hasActive()) {
-    return std::make_unique<Upstream::RoundRobinLoadBalancer>(
-        params.priority_set, params.local_priority_set, cluster_info.lbStats(), runtime, random,
-        PROTOBUF_PERCENT_TO_ROUNDED_INTEGER_OR_DEFAULT(cluster_info.lbConfig(),
-                                                       healthy_panic_threshold, 100, 50),
-        active_or_legacy.active()->lb_config_, time_source);
-  } else {
-    return std::make_unique<Upstream::RoundRobinLoadBalancer>(
-        params.priority_set, params.local_priority_set, cluster_info.lbStats(), runtime, random,
-        cluster_info.lbConfig(),
-        active_or_legacy.hasLegacy() ? active_or_legacy.legacy()->lbConfig() : absl::nullopt,
-        time_source);
-  }
+  return std::make_unique<Upstream::RoundRobinLoadBalancer>(
+      params.priority_set, params.local_priority_set, cluster_info.lbStats(), runtime, random,
+      PROTOBUF_PERCENT_TO_ROUNDED_INTEGER_OR_DEFAULT(cluster_info.lbConfig(),
+                                                     healthy_panic_threshold, 100, 50),
+      typed_lb_config->lbConfig(), time_source);
 }
 
 /**

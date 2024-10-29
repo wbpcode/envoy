@@ -18,31 +18,17 @@ using ClusterProto = envoy::config::cluster::v3::Cluster;
 using LegacyLeastRequestLbProto = ClusterProto::LeastRequestLbConfig;
 
 /**
- * Load balancer config that used to wrap the legacy least request config.
- */
-class LegacyLeastRequestLbConfig : public Upstream::LoadBalancerConfig {
-public:
-  LegacyLeastRequestLbConfig(const ClusterProto& cluster);
-
-  OptRef<const LegacyLeastRequestLbProto> lbConfig() const {
-    if (lb_config_.has_value()) {
-      return lb_config_.value();
-    }
-    return {};
-  };
-
-private:
-  absl::optional<LegacyLeastRequestLbProto> lb_config_;
-};
-
-/**
  * Load balancer config that used to wrap the least request config.
  */
 class TypedLeastRequestLbConfig : public Upstream::LoadBalancerConfig {
 public:
   TypedLeastRequestLbConfig(const LeastRequestLbProto& lb_config);
+  TypedLeastRequestLbConfig(const ClusterProto& cluster_config);
 
-  const LeastRequestLbProto lb_config_;
+  const LeastRequestLbProto& lbConfig() const { return lb_config_; }
+
+private:
+  LeastRequestLbProto lb_config_;
 };
 
 struct LeastRequestCreator : public Logger::Loggable<Logger::Id::upstream> {
@@ -64,7 +50,7 @@ public:
     ASSERT(active_or_legacy.hasLegacy() || active_or_legacy.hasActive());
 
     return active_or_legacy.hasLegacy()
-               ? Upstream::LoadBalancerConfigPtr{new LegacyLeastRequestLbConfig(
+               ? Upstream::LoadBalancerConfigPtr{new TypedLeastRequestLbConfig(
                      *active_or_legacy.legacy())}
                : Upstream::LoadBalancerConfigPtr{
                      new TypedLeastRequestLbConfig(*active_or_legacy.active())};

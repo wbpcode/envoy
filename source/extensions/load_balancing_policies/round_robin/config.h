@@ -17,31 +17,17 @@ using ClusterProto = envoy::config::cluster::v3::Cluster;
 using LegacyRoundRobinLbProto = ClusterProto::RoundRobinLbConfig;
 
 /**
- * Load balancer config that used to wrap the legacy proto config.
- */
-class LegacyRoundRobinLbConfig : public Upstream::LoadBalancerConfig {
-public:
-  LegacyRoundRobinLbConfig(const ClusterProto& cluster);
-
-  OptRef<const LegacyRoundRobinLbProto> lbConfig() const {
-    if (lb_config_.has_value()) {
-      return lb_config_.value();
-    }
-    return {};
-  };
-
-private:
-  absl::optional<LegacyRoundRobinLbProto> lb_config_;
-};
-
-/**
  * Load balancer config that used to wrap the proto config.
  */
 class TypedRoundRobinLbConfig : public Upstream::LoadBalancerConfig {
 public:
   TypedRoundRobinLbConfig(const RoundRobinLbProto& lb_config);
+  TypedRoundRobinLbConfig(const ClusterProto& cluster_config);
 
-  const RoundRobinLbProto lb_config_;
+  const RoundRobinLbProto& lbConfig() const { return lb_config_; }
+
+private:
+  RoundRobinLbProto lb_config_;
 };
 
 struct RoundRobinCreator : public Logger::Loggable<Logger::Id::upstream> {
@@ -63,7 +49,7 @@ public:
     ASSERT(active_or_legacy.hasLegacy() || active_or_legacy.hasActive());
 
     return active_or_legacy.hasLegacy()
-               ? Upstream::LoadBalancerConfigPtr{new LegacyRoundRobinLbConfig(
+               ? Upstream::LoadBalancerConfigPtr{new TypedRoundRobinLbConfig(
                      *active_or_legacy.legacy())}
                : Upstream::LoadBalancerConfigPtr{
                      new TypedRoundRobinLbConfig(*active_or_legacy.active())};

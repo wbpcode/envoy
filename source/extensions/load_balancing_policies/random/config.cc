@@ -11,24 +11,27 @@ namespace Random {
 
 TypedRandomLbConfig::TypedRandomLbConfig(const RandomLbProto& lb_config) : lb_config_(lb_config) {}
 
+TypedRandomLbConfig::TypedRandomLbConfig(const ClusterProto& cluster_config) {
+  auto locality_lb_config = Upstream::LoadBalancerConfigHelper::localityLbConfigFromCommonLbConfig(
+      cluster_config.common_lb_config());
+  if (locality_lb_config.has_value()) {
+    *lb_config_.mutable_locality_lb_config() = std::move(*locality_lb_config);
+  }
+}
+
 Upstream::LoadBalancerPtr RandomCreator::operator()(
     Upstream::LoadBalancerParams params, OptRef<const Upstream::LoadBalancerConfig> lb_config,
     const Upstream::ClusterInfo& cluster_info, const Upstream::PrioritySet&,
     Runtime::Loader& runtime, Envoy::Random::RandomGenerator& random, TimeSource&) {
 
   const auto typed_lb_config = dynamic_cast<const TypedRandomLbConfig*>(lb_config.ptr());
+  ASSERT(typed_lb_config != nullptr);
 
-  if (typed_lb_config != nullptr) {
-    return std::make_unique<Upstream::RandomLoadBalancer>(
-        params.priority_set, params.local_priority_set, cluster_info.lbStats(), runtime, random,
-        PROTOBUF_PERCENT_TO_ROUNDED_INTEGER_OR_DEFAULT(cluster_info.lbConfig(),
-                                                       healthy_panic_threshold, 100, 50),
-        typed_lb_config->lb_config_);
-  } else {
-    return std::make_unique<Upstream::RandomLoadBalancer>(
-        params.priority_set, params.local_priority_set, cluster_info.lbStats(), runtime, random,
-        cluster_info.lbConfig());
-  }
+  return std::make_unique<Upstream::RandomLoadBalancer>(
+      params.priority_set, params.local_priority_set, cluster_info.lbStats(), runtime, random,
+      PROTOBUF_PERCENT_TO_ROUNDED_INTEGER_OR_DEFAULT(cluster_info.lbConfig(),
+                                                     healthy_panic_threshold, 100, 50),
+      typed_lb_config->lbConfig());
 }
 
 /**

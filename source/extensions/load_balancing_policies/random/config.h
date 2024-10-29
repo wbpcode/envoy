@@ -13,14 +13,7 @@ namespace LoadBalancingPolices {
 namespace Random {
 
 using RandomLbProto = envoy::extensions::load_balancing_policies::random::v3::Random;
-
-/**
- * Empty load balancer config that used to represent the config for the random load balancer.
- */
-class EmptyRandomLbConfig : public Upstream::LoadBalancerConfig {
-public:
-  EmptyRandomLbConfig() = default;
-};
+using ClusterProto = envoy::config::cluster::v3::Cluster;
 
 /**
  * Load balancer config that used to wrap the random config.
@@ -28,8 +21,12 @@ public:
 class TypedRandomLbConfig : public Upstream::LoadBalancerConfig {
 public:
   TypedRandomLbConfig(const RandomLbProto& lb_config);
+  TypedRandomLbConfig(const ClusterProto& cluster_config);
 
-  const RandomLbProto lb_config_;
+  const RandomLbProto& lbConfig() const { return lb_config_; }
+
+private:
+  RandomLbProto lb_config_;
 };
 
 struct RandomCreator : public Logger::Loggable<Logger::Id::upstream> {
@@ -45,11 +42,13 @@ public:
 
   Upstream::LoadBalancerConfigPtr loadConfig(Server::Configuration::ServerFactoryContext&,
                                              const Protobuf::Message& config) override {
-    auto typed_config = dynamic_cast<const RandomLbProto*>(&config);
-    if (typed_config == nullptr) {
-      return std::make_unique<EmptyRandomLbConfig>();
-    }
-    return std::make_unique<TypedRandomLbConfig>(*typed_config);
+    auto active_or_legacy = Common::ActiveOrLegacy<RandomLbProto, ClusterProto>::get(&config);
+    ASSERT(active_or_legacy.hasLegacy() || active_or_legacy.hasActive());
+
+    return active_or_legacy.hasLegacy() ? Upstream::LoadBalancerConfigPtr{new TypedRandomLbConfig(
+                                              *active_or_legacy.legacy())}
+                                        : Upstream::LoadBalancerConfigPtr{
+                                              new TypedRandomLbConfig(*active_or_legacy.active())};
   }
 };
 

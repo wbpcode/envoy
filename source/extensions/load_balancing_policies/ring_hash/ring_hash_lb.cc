@@ -15,68 +15,57 @@
 namespace Envoy {
 namespace Upstream {
 
+static const uint64_t DefaultMinRingSize = 1024;
+static const uint64_t DefaultMaxRingSize = 1024 * 1024 * 8;
+
 LegacyRingHashLbConfig::LegacyRingHashLbConfig(const ClusterProto& cluster) {
   if (cluster.has_ring_hash_lb_config()) {
     lb_config_ = cluster.ring_hash_lb_config();
   }
 }
 
-TypedRingHashLbConfig::TypedRingHashLbConfig(const RingHashLbProto& lb_config)
-    : lb_config_(lb_config) {}
-
-RingHashLoadBalancer::RingHashLoadBalancer(
-    const PrioritySet& priority_set, ClusterLbStats& stats, Stats::Scope& scope,
-    Runtime::Loader& runtime, Random::RandomGenerator& random,
-    OptRef<const envoy::config::cluster::v3::Cluster::RingHashLbConfig> config,
-    const envoy::config::cluster::v3::Cluster::CommonLbConfig& common_config)
-    : ThreadAwareLoadBalancerBase(priority_set, stats, runtime, random,
-                                  PROTOBUF_PERCENT_TO_ROUNDED_INTEGER_OR_DEFAULT(
-                                      common_config, healthy_panic_threshold, 100, 50),
-                                  common_config.has_locality_weighted_lb_config()),
-      scope_(scope.createScope("ring_hash_lb.")), stats_(generateStats(*scope_)),
-      min_ring_size_(config.has_value() ? PROTOBUF_GET_WRAPPED_OR_DEFAULT(
-                                              config.ref(), minimum_ring_size, DefaultMinRingSize)
-                                        : DefaultMinRingSize),
-      max_ring_size_(config.has_value() ? PROTOBUF_GET_WRAPPED_OR_DEFAULT(
-                                              config.ref(), maximum_ring_size, DefaultMaxRingSize)
-                                        : DefaultMaxRingSize),
-      hash_function_(config.has_value()
-                         ? config->hash_function()
-                         : HashFunction::Cluster_RingHashLbConfig_HashFunction_XX_HASH),
-      use_hostname_for_hashing_(
-          common_config.has_consistent_hashing_lb_config()
-              ? common_config.consistent_hashing_lb_config().use_hostname_for_hashing()
-              : false),
-      hash_balance_factor_(PROTOBUF_GET_WRAPPED_OR_DEFAULT(
-          common_config.consistent_hashing_lb_config(), hash_balance_factor, 0)) {
-  // It's important to do any config validation here, rather than deferring to Ring's ctor,
-  // because any exceptions thrown here will be caught and handled properly.
-  if (min_ring_size_ > max_ring_size_) {
-    throw EnvoyException(fmt::format("ring hash: minimum_ring_size ({}) > maximum_ring_size ({})",
-                                     min_ring_size_, max_ring_size_));
-  }
+TypedRingHashLbConfig::TypedRingHashLbConfig(const RingHashLbProto& lb_config) {
+  max_ring_size_ =
+      PROTOBUF_GET_WRAPPED_OR_DEFAULT(lb_config, minimum_ring_size, DefaultMinRingSize);
+  min_ring_size_ =
+      PROTOBUF_GET_WRAPPED_OR_DEFAULT(lb_config, maximum_ring_size, DefaultMaxRingSize);
+  hash_function_ = static_cast<HashFunction>(lb_config.hash_function());
+  use_hostname_for_hashing_ =
+      lb_config.has_consistent_hashing_lb_config()
+          ? lb_config.consistent_hashing_lb_config().use_hostname_for_hashing()
+          : lb_config.use_hostname_for_hashing();
+  hash_balance_factor_ = lb_config.has_consistent_hashing_lb_config()
+                             ? PROTOBUF_GET_WRAPPED_OR_DEFAULT(
+                                   lb_config.consistent_hashing_lb_config(), hash_balance_factor, 0)
+                             : PROTOBUF_GET_WRAPPED_OR_DEFAULT(lb_config, hash_balance_factor, 0);
+  enable_locality_weithed_ = lb_config.has_locality_weighted_lb_config();
 }
 
-RingHashLoadBalancer::RingHashLoadBalancer(
-    const PrioritySet& priority_set, ClusterLbStats& stats, Stats::Scope& scope,
-    Runtime::Loader& runtime, Random::RandomGenerator& random, uint32_t healthy_panic_threshold,
-    const envoy::extensions::load_balancing_policies::ring_hash::v3::RingHash& config)
+TypedRingHashLbConfig::TypedRingHashLbConfig(const ClusterProto& cluster_config) {
+  max_ring_size_ = PROTOBUF_GET_WRAPPED_OR_DEFAULT(cluster_config.ring_hash_lb_config(),
+                                                   minimum_ring_size, DefaultMinRingSize);
+  min_ring_size_ = PROTOBUF_GET_WRAPPED_OR_DEFAULT(cluster_config.ring_hash_lb_config(),
+                                                   maximum_ring_size, DefaultMaxRingSize);
+  hash_function_ = cluster_config.ring_hash_lb_config().hash_function();
+  use_hostname_for_hashing_ =
+      cluster_config.common_lb_config().consistent_hashing_lb_config().use_hostname_for_hashing();
+  hash_balance_factor_ = PROTOBUF_GET_WRAPPED_OR_DEFAULT(
+      cluster_config.common_lb_config().consistent_hashing_lb_config(), hash_balance_factor, 0);
+  enable_locality_weithed_ = cluster_config.common_lb_config().has_locality_weighted_lb_config();
+}
+
+RingHashLoadBalancer::RingHashLoadBalancer(const PrioritySet& priority_set, ClusterLbStats& stats,
+                                           Stats::Scope& scope, Runtime::Loader& runtime,
+                                           Random::RandomGenerator& random,
+                                           uint32_t healthy_panic_threshold,
+                                           const TypedRingHashLbConfig& config)
     : ThreadAwareLoadBalancerBase(priority_set, stats, runtime, random, healthy_panic_threshold,
-                                  config.has_locality_weighted_lb_config()),
+                                  config.enableLocalityWeighted()),
       scope_(scope.createScope("ring_hash_lb.")), stats_(generateStats(*scope_)),
-      min_ring_size_(
-          PROTOBUF_GET_WRAPPED_OR_DEFAULT(config, minimum_ring_size, DefaultMinRingSize)),
-      max_ring_size_(
-          PROTOBUF_GET_WRAPPED_OR_DEFAULT(config, maximum_ring_size, DefaultMaxRingSize)),
-      hash_function_(static_cast<HashFunction>(config.hash_function())),
-      use_hostname_for_hashing_(
-          config.has_consistent_hashing_lb_config()
-              ? config.consistent_hashing_lb_config().use_hostname_for_hashing()
-              : config.use_hostname_for_hashing()),
-      hash_balance_factor_(config.has_consistent_hashing_lb_config()
-                               ? PROTOBUF_GET_WRAPPED_OR_DEFAULT(
-                                     config.consistent_hashing_lb_config(), hash_balance_factor, 0)
-                               : PROTOBUF_GET_WRAPPED_OR_DEFAULT(config, hash_balance_factor, 0)) {
+      min_ring_size_(config.minRingSize()), max_ring_size_(config.maxRingSize()),
+      hash_function_(config.hashFunction()),
+      use_hostname_for_hashing_(config.useHostnameForHashing()),
+      hash_balance_factor_(config.hashBalanceFactor()) {
   // It's important to do any config validation here, rather than deferring to Ring's ctor,
   // because any exceptions thrown here will be caught and handled properly.
   if (min_ring_size_ > max_ring_size_) {

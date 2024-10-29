@@ -19,6 +19,7 @@ namespace Upstream {
 using RingHashLbProto = envoy::extensions::load_balancing_policies::ring_hash::v3::RingHash;
 using ClusterProto = envoy::config::cluster::v3::Cluster;
 using LegacyRingHashLbProto = ClusterProto::RingHashLbConfig;
+using HashFunction = envoy::config::cluster::v3::Cluster::RingHashLbConfig::HashFunction;
 
 /**
  * Load balancer config that used to wrap legacy ring hash config.
@@ -44,8 +45,22 @@ private:
 class TypedRingHashLbConfig : public Upstream::LoadBalancerConfig {
 public:
   TypedRingHashLbConfig(const RingHashLbProto& lb_config);
+  TypedRingHashLbConfig(const ClusterProto& cluster_config);
 
-  const RingHashLbProto lb_config_;
+  uint64_t minRingSize() const { return min_ring_size_; }
+  uint64_t maxRingSize() const { return max_ring_size_; }
+  HashFunction hashFunction() const { return hash_function_; }
+  bool useHostnameForHashing() const { return use_hostname_for_hashing_; }
+  uint32_t hashBalanceFactor() const { return hash_balance_factor_; }
+  bool enableLocalityWeighted() const { return enable_locality_weithed_; }
+
+private:
+  uint64_t min_ring_size_{};
+  uint64_t max_ring_size_{};
+  HashFunction hash_function_;
+  bool use_hostname_for_hashing_{};
+  uint32_t hash_balance_factor_{};
+  bool enable_locality_weithed_{};
 };
 
 /**
@@ -76,19 +91,11 @@ class RingHashLoadBalancer : public ThreadAwareLoadBalancerBase {
 public:
   RingHashLoadBalancer(const PrioritySet& priority_set, ClusterLbStats& stats, Stats::Scope& scope,
                        Runtime::Loader& runtime, Random::RandomGenerator& random,
-                       OptRef<const envoy::config::cluster::v3::Cluster::RingHashLbConfig> config,
-                       const envoy::config::cluster::v3::Cluster::CommonLbConfig& common_config);
-
-  RingHashLoadBalancer(
-      const PrioritySet& priority_set, ClusterLbStats& stats, Stats::Scope& scope,
-      Runtime::Loader& runtime, Random::RandomGenerator& random, uint32_t healthy_panic_threshold,
-      const envoy::extensions::load_balancing_policies::ring_hash::v3::RingHash& config);
+                       uint32_t healthy_panic_threshold, const TypedRingHashLbConfig& config);
 
   const RingHashLoadBalancerStats& stats() const { return stats_; }
 
 private:
-  using HashFunction = envoy::config::cluster::v3::Cluster::RingHashLbConfig::HashFunction;
-
   struct RingEntry {
     uint64_t hash_;
     HostConstSharedPtr host_;
@@ -128,8 +135,6 @@ private:
   Stats::ScopeSharedPtr scope_;
   RingHashLoadBalancerStats stats_;
 
-  static const uint64_t DefaultMinRingSize = 1024;
-  static const uint64_t DefaultMaxRingSize = 1024 * 1024 * 8;
   const uint64_t min_ring_size_;
   const uint64_t max_ring_size_;
   const HashFunction hash_function_;

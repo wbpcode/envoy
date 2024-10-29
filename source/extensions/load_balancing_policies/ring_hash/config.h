@@ -36,7 +36,7 @@ public:
     ASSERT(active_or_legacy.hasLegacy() || active_or_legacy.hasActive());
 
     return active_or_legacy.hasLegacy()
-               ? Upstream::LoadBalancerConfigPtr{new Upstream::LegacyRingHashLbConfig(
+               ? Upstream::LoadBalancerConfigPtr{new Upstream::TypedRingHashLbConfig(
                      *active_or_legacy.legacy())}
                : Upstream::LoadBalancerConfigPtr{
                      new Upstream::TypedRingHashLbConfig(*active_or_legacy.active())};

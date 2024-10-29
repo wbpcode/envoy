@@ -5,6 +5,7 @@ package test.common.upstream;
 
 import "validate/validate.proto";
 import "envoy/config/cluster/v3/cluster.proto";
+import "envoy/extensions/load_balancing_policies/least_request/least_request.proto";
 import "test/extensions/load_balancing_policies/common/zone_aware_load_balancer_fuzz.proto";
 
 message LeastRequestLoadBalancerTestCase {
