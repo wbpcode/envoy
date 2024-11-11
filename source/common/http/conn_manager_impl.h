@@ -190,8 +190,12 @@ private:
       return filter_manager_.sendLocalReply(code, body, modify_headers, grpc_status, details);
     }
     std::list<AccessLog::InstanceSharedPtr> accessLogHandlers() override {
-      std::list<AccessLog::InstanceSharedPtr> combined_log_handlers(
-          filter_manager_.accessLogHandlers());
+      std::list<AccessLog::InstanceSharedPtr> combined_log_handlers;
+
+      auto filter_log_handlers = filter_manager_.accessLogHandlers();
+      combined_log_handlers.insert(combined_log_handlers.end(), filter_log_handlers.begin(),
+                                   filter_log_handlers.end());
+
       std::list<AccessLog::InstanceSharedPtr> config_log_handlers_(
           connection_manager_.config_->accessLogs());
       if (!Runtime::runtimeFeatureEnabled(
