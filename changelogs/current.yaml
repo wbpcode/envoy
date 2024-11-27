@@ -39,7 +39,10 @@ bug_fixes:
     Use-after-free in c-ares can crash Envoy via compromised or malfunctioning DNS.
 
     advisory: https://github.com/envoyproxy/envoy/security/advisories/GHSA-fg9g-pvc4-776f.
-
+- area: OAuth2
+  change: |
+    Fixed an issue where ID token and refresh token did not adhere to the :ref:`cookie_domain
+    <envoy_v3_api_field_extensions.filters.http.oauth2.v3.OAuth2Credentials.cookie_domain>` field.
 
 new_features:
 - area: wasm
