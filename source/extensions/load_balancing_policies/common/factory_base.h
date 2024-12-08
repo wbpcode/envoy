@@ -12,49 +12,35 @@ namespace Extensions {
 namespace LoadBalancingPolices {
 namespace Common {
 
-template <class ProtoType, class Impl>
+class LbFactoryBase : public Upstream::LoadBalancerFactory {
+public:
+  LbFactoryBase(Upstream::Cluster& cluster, Server::Configuration::ServerFactoryContext& context)
+      : runtime_(context.runtime()), random_(context.api().randomGenerator()),
+        time_source_(context.timeSource()), info_(cluster.info()) {}
+
+  bool recreateOnHostChange() const override { return false; }
+
+protected:
+  Runtime::Loader& runtime_;
+  Random::RandomGenerator& random_;
+  TimeSource& time_source_;
+  Upstream::ClusterInfoConstSharedPtr info_;
+};
+
+template <class ProtoType, class LbFactoryImpl>
 class FactoryBase : public Upstream::TypedLoadBalancerFactoryBase<ProtoType> {
 public:
   FactoryBase(const std::string& name) : Upstream::TypedLoadBalancerFactoryBase<ProtoType>(name) {}
 
-  Upstream::ThreadAwareLoadBalancerPtr create(OptRef<const Upstream::LoadBalancerConfig> lb_config,
-                                              const Upstream::ClusterInfo& cluster_info,
-                                              const Upstream::PrioritySet& priority_set,
-                                              Runtime::Loader& runtime,
-                                              Envoy::Random::RandomGenerator& random,
-                                              TimeSource& time_source) override {
-
-    return std::make_unique<ThreadAwareLb>(std::make_shared<LbFactory>(
-        lb_config, cluster_info, priority_set, runtime, random, time_source));
+  absl::StatusOr<Upstream::ThreadAwareLoadBalancerPtr>
+  create(const Envoy::Upstream::ClusterProto& cluster_proto, ProtobufTypes::MessagePtr config,
+         Upstream::Cluster& cluster,
+         Server::Configuration::ServerFactoryContext& context) override {
+    return std::make_unique<ThreadAwareLb>(
+        std::make_shared<LbFactoryImpl>(cluster_proto, std::move(config), cluster, context));
   }
 
 private:
-  class LbFactory : public Upstream::LoadBalancerFactory {
-  public:
-    LbFactory(OptRef<const Upstream::LoadBalancerConfig> lb_config,
-              const Upstream::ClusterInfo& cluster_info, const Upstream::PrioritySet& priority_set,
-              Runtime::Loader& runtime, Envoy::Random::RandomGenerator& random,
-              TimeSource& time_source)
-        : lb_config_(lb_config), cluster_info_(cluster_info), priority_set_(priority_set),
-          runtime_(runtime), random_(random), time_source_(time_source) {}
-
-    Upstream::LoadBalancerPtr create(Upstream::LoadBalancerParams params) override {
-      return Impl()(params, lb_config_, cluster_info_, priority_set_, runtime_, random_,
-                    time_source_);
-    }
-
-    bool recreateOnHostChange() const override { return false; }
-
-  public:
-    OptRef<const Upstream::LoadBalancerConfig> lb_config_;
-
-    const Upstream::ClusterInfo& cluster_info_;
-    const Upstream::PrioritySet& priority_set_;
-    Runtime::Loader& runtime_;
-    Envoy::Random::RandomGenerator& random_;
-    TimeSource& time_source_;
-  };
-
   class ThreadAwareLb : public Upstream::ThreadAwareLoadBalancer {
   public:
     ThreadAwareLb(Upstream::LoadBalancerFactorySharedPtr factory) : factory_(std::move(factory)) {}

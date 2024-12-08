@@ -9,29 +9,36 @@ namespace Extensions {
 namespace LoadBalancingPolices {
 namespace Maglev {
 
-Upstream::ThreadAwareLoadBalancerPtr
-Factory::create(OptRef<const Upstream::LoadBalancerConfig> lb_config,
-                const Upstream::ClusterInfo& cluster_info,
-                const Upstream::PrioritySet& priority_set, Runtime::Loader& runtime,
-                Random::RandomGenerator& random, TimeSource&) {
+absl::StatusOr<Upstream::ThreadAwareLoadBalancerPtr>
+Factory::create(const Envoy::Upstream::ClusterProto& cluster_proto,
+                ProtobufTypes::MessagePtr config, Upstream::Cluster& cluster,
+                Server::Configuration::ServerFactoryContext& context) {
+  std::unique_ptr<Upstream::MaglevLbProto> lb_config;
+  if (config != nullptr) {
+    if (dynamic_cast<Upstream::MaglevLbProto*>(config.get()) != nullptr) {
+      lb_config.reset(dynamic_cast<Upstream::MaglevLbProto*>(config.release()));
+    }
+  }
 
-  auto active_or_legacy =
-      Common::ActiveOrLegacy<Upstream::TypedMaglevLbConfig, Upstream::LegacyMaglevLbConfig>::get(
-          lb_config.ptr());
+  auto cluster_info = cluster.info();
 
   // Assume legacy config.
-  if (!active_or_legacy.hasActive()) {
+  if (lb_config == nullptr) {
     return std::make_unique<Upstream::MaglevLoadBalancer>(
-        priority_set, cluster_info.lbStats(), cluster_info.statsScope(), runtime, random,
-        active_or_legacy.hasLegacy() ? active_or_legacy.legacy()->lbConfig() : absl::nullopt,
-        cluster_info.lbConfig());
+        cluster.prioritySet(), cluster_info->lbStats(), cluster_info->statsScope(),
+        context.runtime(), context.api().randomGenerator(),
+        cluster_proto.has_maglev_lb_config()
+            ? OptRef<const Upstream::LegacyMaglevLbProto>(cluster_proto.maglev_lb_config())
+            : absl::nullopt,
+        cluster_info->lbConfig());
   }
 
   return std::make_unique<Upstream::MaglevLoadBalancer>(
-      priority_set, cluster_info.lbStats(), cluster_info.statsScope(), runtime, random,
+      cluster.prioritySet(), cluster_info->lbStats(), cluster_info->statsScope(), context.runtime(),
+      context.api().randomGenerator(),
       static_cast<uint32_t>(PROTOBUF_PERCENT_TO_ROUNDED_INTEGER_OR_DEFAULT(
-          cluster_info.lbConfig(), healthy_panic_threshold, 100, 50)),
-      active_or_legacy.active()->lb_config_);
+          cluster_info->lbConfig(), healthy_panic_threshold, 100, 50)),
+      *lb_config);
 }
 
 /**

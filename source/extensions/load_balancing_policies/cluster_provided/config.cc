@@ -5,14 +5,13 @@ namespace Extensions {
 namespace LoadBalancingPolices {
 namespace ClusterProvided {
 
-Upstream::ThreadAwareLoadBalancerPtr Factory::create(OptRef<const Upstream::LoadBalancerConfig>,
-                                                     const Upstream::ClusterInfo&,
-                                                     const Upstream::PrioritySet&, Runtime::Loader&,
-                                                     Random::RandomGenerator&, TimeSource&) {
-  // Cluster provided load balancer has empty implementation. Because it is a special case to
-  // tell the cluster to use the load balancer provided by the cluster.
+// TODO(wbpcode): remove this cluster provided load balancer because it make no sense
+// except as a placeholder for clusters that have their own load balancer.
+absl::StatusOr<Upstream::ThreadAwareLoadBalancerPtr>
+Factory::create(const Envoy::Upstream::ClusterProto&, ProtobufTypes::MessagePtr, Upstream::Cluster&,
+                Server::Configuration::ServerFactoryContext&) {
   return nullptr;
-};
+}
 
 /**
  * Static registration for the Factory. @see RegisterFactory.

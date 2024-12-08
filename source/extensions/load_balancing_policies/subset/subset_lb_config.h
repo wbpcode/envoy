@@ -213,9 +213,8 @@ public:
                            const SubsetLbConfigProto& subset_config);
   SubsetLoadBalancerConfig(Server::Configuration::ServerFactoryContext& factory_context,
                            const ClusterProto& cluster);
-  SubsetLoadBalancerConfig(LoadBalancerSubsetInfoPtr subset_info,
-                           TypedLoadBalancerFactory* child_factory,
-                           LoadBalancerConfigPtr child_config);
+  SubsetLoadBalancerConfig(LoadBalancerSubsetInfoPtr subset_info, std::string child_lb_name,
+                           ThreadAwareLoadBalancerPtr child_lb);
 
   Upstream::ThreadAwareLoadBalancerPtr
   createLoadBalancer(const Upstream::ClusterInfo& cluster_info,
@@ -225,15 +224,17 @@ public:
         makeOptRefFromPtr<const Upstream::LoadBalancerConfig>(child_lb_config_.get()), cluster_info,
         child_priority_set, runtime, random, time_source);
   }
-  std::string childLoadBalancerName() const { return child_lb_factory_->name(); }
+  std::string childLoadBalancerName() const { return child_lb_name_ }
 
   const LoadBalancerSubsetInfo& subsetInfo() const { return *subset_info_; }
 
 private:
   LoadBalancerSubsetInfoPtr subset_info_;
-  Upstream::TypedLoadBalancerFactory* child_lb_factory_{};
-  Upstream::LoadBalancerConfigPtr child_lb_config_;
+  std::string child_lb_name_;
+  ThreadAwareLoadBalancerPtr child_lb_;
 };
+
+using SubsetLoadBalancerConfigSharedPtr = std::shared_ptr<SubsetLoadBalancerConfig>;
 
 } // namespace Upstream
 } // namespace Envoy

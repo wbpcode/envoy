@@ -21,34 +21,6 @@ using ClusterProto = envoy::config::cluster::v3::Cluster;
 using LegacyRingHashLbProto = ClusterProto::RingHashLbConfig;
 
 /**
- * Load balancer config that used to wrap legacy ring hash config.
- */
-class LegacyRingHashLbConfig : public Upstream::LoadBalancerConfig {
-public:
-  LegacyRingHashLbConfig(const ClusterProto& cluster);
-
-  OptRef<const LegacyRingHashLbProto> lbConfig() const {
-    if (lb_config_.has_value()) {
-      return lb_config_.value();
-    }
-    return {};
-  };
-
-private:
-  absl::optional<LegacyRingHashLbProto> lb_config_;
-};
-
-/**
- * Load balancer config that used to wrap typed ring hash config.
- */
-class TypedRingHashLbConfig : public Upstream::LoadBalancerConfig {
-public:
-  TypedRingHashLbConfig(const RingHashLbProto& lb_config);
-
-  const RingHashLbProto lb_config_;
-};
-
-/**
  * All ring hash load balancer stats. @see stats_macros.h
  */
 #define ALL_RING_HASH_LOAD_BALANCER_STATS(GAUGE)                                                   \

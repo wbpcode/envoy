@@ -82,19 +82,13 @@ using UpstreamNetworkFilterConfigProviderManager =
     Filter::FilterConfigProviderManager<Network::FilterFactoryCb,
                                         Server::Configuration::UpstreamFactoryContext>;
 
-class LegacyLbPolicyConfigHelper {
+class LegacyLbPolicyFactoryHelper {
 public:
-  struct Result {
-    TypedLoadBalancerFactory* factory;
-    LoadBalancerConfigPtr config;
-  };
+  static absl::StatusOr<std::reference_wrapper<TypedLoadBalancerFactory>>
+  getLbPolicyFactoryFromLegacyWithoutSubset(const ClusterProto& cluster);
 
-  static absl::StatusOr<Result> getTypedLbConfigFromLegacyProtoWithoutSubset(
-      Server::Configuration::ServerFactoryContext& factory_context, const ClusterProto& cluster);
-
-  static absl::StatusOr<Result>
-  getTypedLbConfigFromLegacyProto(Server::Configuration::ServerFactoryContext& factory_context,
-                                  const ClusterProto& cluster);
+  static absl::StatusOr<std::reference_wrapper<TypedLoadBalancerFactory>>
+  getLbPolicyFactoryFromLegacy(const ClusterProto& cluster);
 };
 
 /**
@@ -107,13 +101,17 @@ public:
     ProtobufTypes::MessagePtr config;
   };
 
-  static absl::StatusOr<Result> getLbPolicyFactoryAndConfig(const ClusterProto& cluster);
+  static absl::StatusOr<Result>
+  getLbPolicyFactoryAndConfig(Server::Configuration::ServerFactoryContext& context,
+                              const ClusterProto& cluster);
 
 private:
   static absl::StatusOr<Result>
-  getLbPolicyFactoryAndConfigFromActive(const envoy::config::cluster::v3::Cluster& config);
+  getLbPolicyFactoryAndConfigFromActive(Server::Configuration::ServerFactoryContext& context,
+                                        const envoy::config::cluster::v3::Cluster& cluster);
   static absl::StatusOr<Result>
-  getLbPolicyFactoryAndConfigFromLegacy(const envoy::config::cluster::v3::Cluster& config);
+  getLbPolicyFactoryAndConfigFromLegacy(Server::Configuration::ServerFactoryContext& context,
+                                        const envoy::config::cluster::v3::Cluster& cluster);
 };
 
 /**

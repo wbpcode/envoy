@@ -1026,8 +1026,8 @@ ClusterManagerImpl::loadCluster(const envoy::config::cluster::v3::Cluster& clust
   if (!new_cluster_pair_or_error.ok()) {
     return absl::InvalidArgumentError(std::string(new_cluster_pair_or_error.status().message()));
   }
-  auto& new_cluster = new_cluster_pair_or_error->first;
-  auto& lb = new_cluster_pair_or_error->second;
+  ClusterSharedPtr new_cluster = std::move(new_cluster_pair_or_error->first);
+  ThreadAwareLoadBalancerPtr lb = std::move(new_cluster_pair_or_error->second);
   Cluster& cluster_reference = *new_cluster;
 
   const auto cluster_info = cluster_reference.info();
@@ -1039,9 +1039,15 @@ ClusterManagerImpl::loadCluster(const envoy::config::cluster::v3::Cluster& clust
     }
   }
 
+  auto lb_factory_and_config =
+      LbPolicyHelper::getLbPolicyFactoryAndConfig(server_.serverFactoryContext(), cluster);
+  if (!lb_factory_and_config.ok()) {
+    return lb_factory_and_config.status();
+  }
+
   // Check if the cluster provided load balancing policy is used. We need handle it as special
   // case.
-  TypedLoadBalancerFactory& typed_lb_factory = cluster_info->loadBalancerFactory();
+  TypedLoadBalancerFactory& typed_lb_factory = lb_factory_and_config->factory;
   const bool cluster_provided_lb =
       typed_lb_factory.name() == "envoy.load_balancing_policies.cluster_provided";
 
@@ -1098,9 +1104,12 @@ ClusterManagerImpl::loadCluster(const envoy::config::cluster::v3::Cluster& clust
   if (cluster_provided_lb) {
     cluster_entry_it->second->thread_aware_lb_ = std::move(lb);
   } else {
-    cluster_entry_it->second->thread_aware_lb_ =
-        typed_lb_factory.create(cluster_info->loadBalancerConfig(), *cluster_info,
-                                cluster_reference.prioritySet(), runtime_, random_, time_source_);
+    auto lb_or_error = typed_lb_factory.create(cluster, std::move(lb_factory_and_config->config),
+                                               cluster_reference, server_.serverFactoryContext());
+    if (!lb_or_error.ok()) {
+      return lb_or_error.status();
+    }
+    cluster_entry_it->second->thread_aware_lb_ = std::move(lb_or_error.value());
   }
 
   updateClusterCounts();

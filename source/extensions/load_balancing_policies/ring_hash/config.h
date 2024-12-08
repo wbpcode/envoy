@@ -21,26 +21,9 @@ class Factory : public Upstream::TypedLoadBalancerFactoryBase<RingHashLbProto> {
 public:
   Factory() : TypedLoadBalancerFactoryBase("envoy.load_balancing_policies.ring_hash") {}
 
-  Upstream::ThreadAwareLoadBalancerPtr create(OptRef<const Upstream::LoadBalancerConfig> lb_config,
-                                              const Upstream::ClusterInfo& cluster_info,
-                                              const Upstream::PrioritySet& priority_set,
-                                              Runtime::Loader& runtime,
-                                              Random::RandomGenerator& random,
-                                              TimeSource& time_source) override;
-
-  Upstream::LoadBalancerConfigPtr loadConfig(Server::Configuration::ServerFactoryContext&,
-                                             const Protobuf::Message& config) override {
-    auto active_or_legacy =
-        Common::ActiveOrLegacy<Upstream::RingHashLbProto, Upstream::ClusterProto>::get(&config);
-
-    ASSERT(active_or_legacy.hasLegacy() || active_or_legacy.hasActive());
-
-    return active_or_legacy.hasLegacy()
-               ? Upstream::LoadBalancerConfigPtr{new Upstream::LegacyRingHashLbConfig(
-                     *active_or_legacy.legacy())}
-               : Upstream::LoadBalancerConfigPtr{
-                     new Upstream::TypedRingHashLbConfig(*active_or_legacy.active())};
-  }
+  absl::StatusOr<Upstream::ThreadAwareLoadBalancerPtr>
+  create(const Envoy::Upstream::ClusterProto& cluster_proto, ProtobufTypes::MessagePtr config,
+         Upstream::Cluster& cluster, Server::Configuration::ServerFactoryContext& context) override;
 };
 
 } // namespace RingHash

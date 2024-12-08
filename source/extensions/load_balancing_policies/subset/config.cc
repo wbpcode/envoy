@@ -12,7 +12,7 @@ namespace Subset {
 using SubsetLbProto = envoy::extensions::load_balancing_policies::subset::v3::Subset;
 using ClusterProto = envoy::config::cluster::v3::Cluster;
 
-class LbFactory : public Upstream::LoadBalancerFactory {
+class LbFactory : public Common::LbFactoryBase {
 public:
   LbFactory(const Upstream::SubsetLoadBalancerConfig& subset_config,
             const Upstream::ClusterInfo& cluster_info, Runtime::Loader& runtime,

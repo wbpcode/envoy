@@ -17,16 +17,9 @@ class SubsetLbFactory
 public:
   SubsetLbFactory() : TypedLoadBalancerFactoryBase("envoy.load_balancing_policies.subset") {}
 
-  Upstream::ThreadAwareLoadBalancerPtr create(OptRef<const Upstream::LoadBalancerConfig> lb_config,
-                                              const Upstream::ClusterInfo& cluster_info,
-                                              const Upstream::PrioritySet& priority_set,
-                                              Runtime::Loader& runtime,
-                                              Random::RandomGenerator& random,
-                                              TimeSource& time_source) override;
-
-  Upstream::LoadBalancerConfigPtr
-  loadConfig(Server::Configuration::ServerFactoryContext& factory_context,
-             const Protobuf::Message& config) override;
+  absl::StatusOr<Upstream::ThreadAwareLoadBalancerPtr>
+  create(const Envoy::Upstream::ClusterProto& cluster_proto, ProtobufTypes::MessagePtr config,
+         Upstream::Cluster& cluster, Server::Configuration::ServerFactoryContext& context) override;
 };
 
 } // namespace Subset

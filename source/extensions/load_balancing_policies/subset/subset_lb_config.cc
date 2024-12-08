@@ -96,11 +96,11 @@ SubsetLoadBalancerConfig::SubsetLoadBalancerConfig(
   child_lb_config_ = std::move(sub_lb_pair->config);
 }
 
-SubsetLoadBalancerConfig::SubsetLoadBalancerConfig(
-    std::unique_ptr<LoadBalancerSubsetInfo> subset_info, TypedLoadBalancerFactory* child_factory,
-    LoadBalancerConfigPtr child_config)
-    : subset_info_(std::move(subset_info)), child_lb_factory_(child_factory),
-      child_lb_config_(std::move(child_config)) {}
+SubsetLoadBalancerConfig::SubsetLoadBalancerConfig(LoadBalancerSubsetInfoPtr subset_info,
+                                                   std::string child_lb_name,
+                                                   ThreadAwareLoadBalancerPtr child_lb)
+    : subset_info_(std::move(subset_info)), child_lb_name_(std::move(child_lb_name)),
+      child_lb_(std::move(child_lb)) {}
 
 } // namespace Upstream
 } // namespace Envoy

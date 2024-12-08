@@ -11,6 +11,7 @@
 #include "envoy/upstream/upstream.h"
 
 #include "xds/data/orca/v3/orca_load_report.pb.h"
+#include "envoy/config/cluster/v3/cluster.pb.h"
 
 namespace Envoy {
 namespace Server {
@@ -24,6 +25,8 @@ class ConnectionLifetimeCallbacks;
 } // namespace ConnectionPool
 } // namespace Http
 namespace Upstream {
+
+using ClusterProto = envoy::config::cluster::v3::Cluster;
 
 /**
  * Context information passed to a load balancer to use when choosing a host. Not all load
@@ -286,30 +289,15 @@ public:
   /**
    * @return ThreadAwareLoadBalancerPtr a new thread-aware load balancer.
    *
-   * @param lb_config supplies the parsed config of the load balancer.
-   * @param cluster_info supplies the cluster info.
-   * @param priority_set supplies the priority set on the main thread.
-   * @param runtime supplies the runtime loader.
-   * @param random supplies the random generator.
-   * @param time_source supplies the time source.
+   * @param cluster_proto supplies the proto configuration of the cluster.
+   * @param config supplies the configuration for the load balancer. This may be null
+   *               if the legacy load balancer configuration is used.
+   * @param cluster supplies the cluster for which the load balancer is being created.
+   * @param context server factory context.
    */
-  virtual ThreadAwareLoadBalancerPtr
-  create(OptRef<const LoadBalancerConfig> lb_config, const ClusterInfo& cluster_info,
-         const PrioritySet& priority_set, Runtime::Loader& runtime, Random::RandomGenerator& random,
-         TimeSource& time_source) PURE;
-
-  /**
-   * This method is used to validate and create load balancer config from typed proto config.
-   *
-   * @return LoadBalancerConfigPtr a new load balancer config.
-   *
-   * @param factory_context supplies the load balancer factory context.
-   * @param config supplies the typed proto config of the load balancer. A dynamic_cast could
-   *        be performed on the config to the expected proto type.
-   */
-  virtual LoadBalancerConfigPtr
-  loadConfig(Server::Configuration::ServerFactoryContext& factory_context,
-             const Protobuf::Message& config) PURE;
+  virtual absl::StatusOr<ThreadAwareLoadBalancerPtr>
+  create(const ClusterProto& cluster_proto, ProtobufTypes::MessagePtr config, Cluster& cluster,
+         Server::Configuration::ServerFactoryContext& context) PURE;
 
   std::string category() const override { return "envoy.load_balancing_policies"; }
 };
