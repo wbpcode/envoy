@@ -1119,6 +1119,33 @@ LegacyLbPolicyConfigHelper::getTypedLbConfigFromLegacyProto(
   return getTypedLbConfigFromLegacyProtoWithoutSubset(factory_context, cluster);
 }
 
+absl::StatusOr<LbPolicyHelper::Result> getLbPolicyFactoryAndConfig(const ClusterProto& cluster) {
+  if (config.has_load_balancing_policy() ||
+      config.lb_policy() == envoy::config::cluster::v3::Cluster::LOAD_BALANCING_POLICY_CONFIG) {
+    // If load_balancing_policy is set we will use it directly, ignoring lb_policy.
+
+    SET_AND_RETURN_IF_NOT_OK(configureLbPolicies(config, server_context), creation_status);
+  } else {
+    // If load_balancing_policy is not set, we will try to convert legacy lb_policy
+    // to load_balancing_policy and use it.
+    auto lb_pair =
+        LegacyLbPolicyConfigHelper::getTypedLbConfigFromLegacyProto(server_context, config);
+    SET_AND_RETURN_IF_NOT_OK(lb_pair.status(), creation_status);
+    load_balancer_factory_ = lb_pair->factory;
+    ASSERT(load_balancer_factory_ != nullptr, "null load balancer factory");
+    load_balancer_config_ = std::move(lb_pair->config);
+  }
+
+  if (config.lb_subset_config().locality_weight_aware() &&
+      !config.common_lb_config().has_locality_weighted_lb_config()) {
+    creation_status =
+        absl::InvalidArgumentError(fmt::format("Locality weight aware subset LB requires that a "
+                                               "locality_weighted_lb_config be set in {}",
+                                               name_));
+    return;
+  }
+}
+
 using ProtocolOptionsHashMap =
     absl::flat_hash_map<std::string, ProtocolOptionsConfigConstSharedPtr>;
 
@@ -1286,31 +1313,6 @@ ClusterInfoImpl::ClusterInfoImpl(
     return;
   }
 
-  if (config.has_load_balancing_policy() ||
-      config.lb_policy() == envoy::config::cluster::v3::Cluster::LOAD_BALANCING_POLICY_CONFIG) {
-    // If load_balancing_policy is set we will use it directly, ignoring lb_policy.
-
-    SET_AND_RETURN_IF_NOT_OK(configureLbPolicies(config, server_context), creation_status);
-  } else {
-    // If load_balancing_policy is not set, we will try to convert legacy lb_policy
-    // to load_balancing_policy and use it.
-    auto lb_pair =
-        LegacyLbPolicyConfigHelper::getTypedLbConfigFromLegacyProto(server_context, config);
-    SET_AND_RETURN_IF_NOT_OK(lb_pair.status(), creation_status);
-    load_balancer_factory_ = lb_pair->factory;
-    ASSERT(load_balancer_factory_ != nullptr, "null load balancer factory");
-    load_balancer_config_ = std::move(lb_pair->config);
-  }
-
-  if (config.lb_subset_config().locality_weight_aware() &&
-      !config.common_lb_config().has_locality_weighted_lb_config()) {
-    creation_status =
-        absl::InvalidArgumentError(fmt::format("Locality weight aware subset LB requires that a "
-                                               "locality_weighted_lb_config be set in {}",
-                                               name_));
-    return;
-  }
-
   // Use default (1h) or configured `idle_timeout`, unless it's set to 0, indicating that no
   // timeout should be used.
   absl::optional<std::chrono::milliseconds> idle_timeout(std::chrono::hours(1));
@@ -1438,9 +1440,8 @@ ClusterInfoImpl::ClusterInfoImpl(
 }
 
 // Configures the load balancer based on config.load_balancing_policy
-absl::Status
-ClusterInfoImpl::configureLbPolicies(const envoy::config::cluster::v3::Cluster& config,
-                                     Server::Configuration::ServerFactoryContext& context) {
+absl::StatusOr<LbPolicyHelper::Result> LbPolicyHelper::getLbPolicyFactoryAndConfigFromActive(
+    const envoy::config::cluster::v3::Cluster& config) {
   // Check if load_balancing_policy is set first.
   if (!config.has_load_balancing_policy()) {
     return absl::InvalidArgumentError("cluster: field load_balancing_policy need to be set");
@@ -1477,18 +1478,15 @@ ClusterInfoImpl::configureLbPolicies(const envoy::config::cluster::v3::Cluster& 
       load_balancer_factory_ = factory;
       load_balancer_config_ = factory->loadConfig(context, *proto_message);
 
-      break;
+      return {*factory, std::move(proto_message)};
     }
     missing_policies.push_back(policy.typed_extension_config().name());
   }
 
-  if (load_balancer_factory_ == nullptr) {
     return absl::InvalidArgumentError(
         fmt::format("cluster: didn't find a registered load balancer factory "
                     "implementation for cluster: '{}' with names from [{}]",
                     name_, absl::StrJoin(missing_policies, ", ")));
-  }
-  return absl::OkStatus();
 }
 
 ProtocolOptionsConfigConstSharedPtr

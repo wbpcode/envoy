@@ -98,6 +98,25 @@ public:
 };
 
 /**
+ * Helper class for getting load balancer factory and config from cluster proto.
+ */
+class LbPolicyHelper {
+public:
+  struct Result {
+    std::reference_wrapper<TypedLoadBalancerFactory> factory;
+    ProtobufTypes::MessagePtr config;
+  };
+
+  static absl::StatusOr<Result> getLbPolicyFactoryAndConfig(const ClusterProto& cluster);
+
+private:
+  static absl::StatusOr<Result>
+  getLbPolicyFactoryAndConfigFromActive(const envoy::config::cluster::v3::Cluster& config);
+  static absl::StatusOr<Result>
+  getLbPolicyFactoryAndConfigFromLegacy(const envoy::config::cluster::v3::Cluster& config);
+};
+
+/**
  * Null implementation of HealthCheckHostMonitor.
  */
 class HealthCheckHostMonitorNullImpl : public HealthCheckHostMonitor {
@@ -855,13 +874,6 @@ public:
 
   // Upstream::ClusterInfo
   bool addedViaApi() const override { return added_via_api_; }
-  OptRef<const LoadBalancerConfig> loadBalancerConfig() const override {
-    return makeOptRefFromPtr<const LoadBalancerConfig>(load_balancer_config_.get());
-  }
-  TypedLoadBalancerFactory& loadBalancerFactory() const override {
-    ASSERT(load_balancer_factory_ != nullptr, "null load balancer factory");
-    return *load_balancer_factory_;
-  }
   const envoy::config::cluster::v3::Cluster::CommonLbConfig& lbConfig() const override {
     return *common_lb_config_;
   }
@@ -1131,8 +1143,6 @@ private:
   std::unique_ptr<envoy::config::core::v3::TypedExtensionConfig> upstream_config_;
   std::unique_ptr<const envoy::config::core::v3::Metadata> metadata_;
   std::unique_ptr<ClusterTypedMetadata> typed_metadata_;
-  LoadBalancerConfigPtr load_balancer_config_;
-  TypedLoadBalancerFactory* load_balancer_factory_ = nullptr;
   const std::shared_ptr<const envoy::config::cluster::v3::Cluster::CommonLbConfig>
       common_lb_config_;
   std::unique_ptr<const envoy::config::cluster::v3::Cluster::CustomClusterType> cluster_type_;
