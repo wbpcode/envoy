@@ -71,7 +71,7 @@ TEST_F(RateLimitGrpcClientTest, Basic) {
   {
     envoy::service::ratelimit::v3::RateLimitRequest request;
     Http::TestRequestHeaderMapImpl headers;
-    GrpcClientImpl::createRequest(request, "foo", {{{{"foo", "bar"}}}}, 0);
+    GrpcClientImpl::createRequest(request, "foo", {{{{{"foo", "bar"}}}}}, 0);
     EXPECT_CALL(*async_client_, sendRaw(_, _, Grpc::ProtoBufferEq(request), Ref(client_), _, _))
         .WillOnce(
             Invoke([this](absl::string_view service_full_name, absl::string_view method_name,
@@ -83,7 +83,7 @@ TEST_F(RateLimitGrpcClientTest, Basic) {
               return &async_request_;
             }));
 
-    client_.limit(request_callbacks_, "foo", {{{{"foo", "bar"}}}}, Tracing::NullSpan::instance(),
+    client_.limit(request_callbacks_, "foo", {{{{{"foo", "bar"}}}}}, Tracing::NullSpan::instance(),
                   stream_info_);
 
     client_.onCreateInitialMetadata(headers);
@@ -99,11 +99,11 @@ TEST_F(RateLimitGrpcClientTest, Basic) {
   {
     envoy::service::ratelimit::v3::RateLimitRequest request;
     Http::TestRequestHeaderMapImpl headers;
-    GrpcClientImpl::createRequest(request, "foo", {{{{"foo", "bar"}, {"bar", "baz"}}}}, 0);
+    GrpcClientImpl::createRequest(request, "foo", {{{{{"foo", "bar"}, {"bar", "baz"}}}}}, 0);
     EXPECT_CALL(*async_client_, sendRaw(_, _, Grpc::ProtoBufferEq(request), _, _, _))
         .WillOnce(Return(&async_request_));
 
-    client_.limit(request_callbacks_, "foo", {{{{"foo", "bar"}, {"bar", "baz"}}}},
+    client_.limit(request_callbacks_, "foo", {{{{{"foo", "bar"}, {"bar", "baz"}}}}},
                   Tracing::NullSpan::instance(), stream_info_);
 
     client_.onCreateInitialMetadata(headers);
@@ -119,12 +119,12 @@ TEST_F(RateLimitGrpcClientTest, Basic) {
     envoy::service::ratelimit::v3::RateLimitRequest request;
     GrpcClientImpl::createRequest(
         request, "foo",
-        {{{{"foo", "bar"}, {"bar", "baz"}}}, {{{"foo2", "bar2"}, {"bar2", "baz2"}}}}, 0);
+        {{{{{"foo", "bar"}, {"bar", "baz"}}}}, {{{{"foo2", "bar2"}, {"bar2", "baz2"}}}}}, 0);
     EXPECT_CALL(*async_client_, sendRaw(_, _, Grpc::ProtoBufferEq(request), _, _, _))
         .WillOnce(Return(&async_request_));
 
     client_.limit(request_callbacks_, "foo",
-                  {{{{"foo", "bar"}, {"bar", "baz"}}}, {{{"foo2", "bar2"}, {"bar2", "baz2"}}}},
+                  {{{{{"foo", "bar"}, {"bar", "baz"}}}}, {{{{"foo2", "bar2"}, {"bar2", "baz2"}}}}},
                   Tracing::NullSpan::instance(), stream_info_);
 
     response = std::make_unique<envoy::service::ratelimit::v3::RateLimitResponse>();
@@ -137,13 +137,13 @@ TEST_F(RateLimitGrpcClientTest, Basic) {
     Http::TestRequestHeaderMapImpl headers;
     GrpcClientImpl::createRequest(
         request, "foo",
-        {{{{"foo", "bar"}, {"bar", "baz"}}, {{42, envoy::type::v3::RateLimitUnit::MINUTE}}}}, 0);
+        {{{{{"foo", "bar"}, {"bar", "baz"}}}, {{42, envoy::type::v3::RateLimitUnit::MINUTE}}}}, 0);
     EXPECT_CALL(*async_client_, sendRaw(_, _, Grpc::ProtoBufferEq(request), _, _, _))
         .WillOnce(Return(&async_request_));
 
     client_.limit(
         request_callbacks_, "foo",
-        {{{{"foo", "bar"}, {"bar", "baz"}}, {{42, envoy::type::v3::RateLimitUnit::MINUTE}}}},
+        {{{{{"foo", "bar"}, {"bar", "baz"}}}, {{42, envoy::type::v3::RateLimitUnit::MINUTE}}}},
         Tracing::NullSpan::instance(), stream_info_);
 
     client_.onCreateInitialMetadata(headers);
@@ -161,7 +161,7 @@ TEST_F(RateLimitGrpcClientTest, Cancel) {
 
   EXPECT_CALL(*async_client_, sendRaw(_, _, _, _, _, _)).WillOnce(Return(&async_request_));
 
-  client_.limit(request_callbacks_, "foo", {{{{"foo", "bar"}}}}, Tracing::NullSpan::instance(),
+  client_.limit(request_callbacks_, "foo", {{{{{"foo", "bar"}}}}}, Tracing::NullSpan::instance(),
                 stream_info_);
 
   EXPECT_CALL(async_request_, cancel());
@@ -174,7 +174,7 @@ TEST_F(RateLimitGrpcClientTest, RequestWithHitsAddend) {
   envoy::service::ratelimit::v3::RateLimitRequest request;
   Http::TestRequestHeaderMapImpl headers;
   uint32_t hits_addend = 5;
-  GrpcClientImpl::createRequest(request, "foo", {{{{"foo", "bar"}}}}, hits_addend);
+  GrpcClientImpl::createRequest(request, "foo", {{{{{"foo", "bar"}}}}}, hits_addend);
   EXPECT_CALL(*async_client_, sendRaw(_, _, Grpc::ProtoBufferEq(request), Ref(client_), _, _))
       .WillOnce(
           Invoke([this](absl::string_view service_full_name, absl::string_view method_name,
@@ -186,7 +186,7 @@ TEST_F(RateLimitGrpcClientTest, RequestWithHitsAddend) {
             return &async_request_;
           }));
 
-  client_.limit(request_callbacks_, "foo", {{{{"foo", "bar"}}}}, Tracing::NullSpan::instance(),
+  client_.limit(request_callbacks_, "foo", {{{{{"foo", "bar"}}}}}, Tracing::NullSpan::instance(),
                 stream_info_, hits_addend);
 
   client_.onCreateInitialMetadata(headers);

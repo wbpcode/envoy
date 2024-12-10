@@ -44,29 +44,21 @@ struct DescriptorEntry {
 /**
  * A single rate limit request descriptor. See ratelimit.proto.
  */
-struct Descriptor {
-  std::vector<DescriptorEntry> entries_;
-  absl::optional<RateLimitOverride> limit_ = absl::nullopt;
-};
-
-/**
- * A single rate limit request descriptor. See ratelimit.proto.
- */
-struct LocalDescriptor {
+struct DescriptorBase {
   std::vector<DescriptorEntry> entries_;
 
-  friend bool operator==(const LocalDescriptor& a, const LocalDescriptor& b) {
+  friend bool operator==(const DescriptorBase& a, const DescriptorBase& b) {
     return a.entries_ == b.entries_;
   }
   struct Hash {
     using is_transparent = void; // NOLINT(readability-identifier-naming)
-    size_t operator()(const LocalDescriptor& d) const {
+    size_t operator()(const DescriptorBase& d) const {
       return absl::Hash<std::vector<DescriptorEntry>>()(d.entries_);
     }
   };
   struct Equal {
     using is_transparent = void; // NOLINT(readability-identifier-naming)
-    size_t operator()(const LocalDescriptor& a, const LocalDescriptor& b) const {
+    size_t operator()(const DescriptorBase& a, const DescriptorBase& b) const {
       return a.entries_ == b.entries_;
     }
   };
@@ -78,10 +70,21 @@ struct LocalDescriptor {
   }
 
   /**
-   * Local descriptor map.
+   * Descriptor map.
    */
-  template <class V> using Map = absl::flat_hash_map<LocalDescriptor, V, Hash, Equal>;
+  template <class V> using Map = absl::flat_hash_map<DescriptorBase, V, Hash, Equal>;
 };
+
+/**
+ * A single rate limit request descriptor. See ratelimit.proto.
+ * This is generated from the request based on the configured rate limit actions.
+ */
+struct Descriptor : public DescriptorBase {
+  absl::optional<RateLimitOverride> limit_ = absl::nullopt;
+  absl::optional<uint32_t> hits_addend_ = absl::nullopt;
+};
+
+using LocalDescriptor = DescriptorBase;
 
 /*
  * Base interface for generic rate limit descriptor producer.
