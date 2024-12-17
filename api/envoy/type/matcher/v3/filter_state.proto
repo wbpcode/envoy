@@ -7,10 +7,10 @@ import "envoy/type/matcher/v3/string.proto";
 import "udpa/annotations/status.proto";
 import "validate/validate.proto";
 
-option java_package = "io.envoyproxy.envoy.type.matcher.v3";
+option java_package = "io.envoyproxy.envoy.type.matcher.v3.filter_state";
 option java_outer_classname = "FilterStateProto";
 option java_multiple_files = true;
-option go_package = "github.com/envoyproxy/go-control-plane/envoy/type/matcher/v3;matcherv3";
+option go_package = "github.com/envoyproxy/go-control-plane/envoy/type/matcher/v3/filter_state;matcherv3_filter_state";
 option (udpa.annotations.file_status).package_version_status = ACTIVE;
 
 // [#protodoc-title: Filter state matcher]

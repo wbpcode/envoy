@@ -313,6 +313,7 @@ proto_library(
         "//envoy/service/status/v3:pkg",
         "//envoy/service/tap/v3:pkg",
         "//envoy/type/http/v3:pkg",
+        "//envoy/type/matcher/v3:pkg_filter_state",
         "//envoy/type/matcher/v3:pkg",
         "//envoy/type/metadata/v3:pkg",
         "//envoy/type/tracing/v3:pkg",

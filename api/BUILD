@@ -63,6 +63,7 @@ proto_library(
         "//envoy/service/tap/v2alpha:pkg",
         "//envoy/type:pkg",
         "//envoy/type/matcher:pkg",
+        "//envoy/type/matcher/v3:pkg_filter_state",
         "//envoy/type/metadata/v2:pkg",
         "//envoy/type/tracing/v2:pkg",
     ],
