@@ -17,6 +17,7 @@ using FormatterProviderPtr = std::unique_ptr<FormatterProvider>;
 using CommandParser = CommandParserBase<HttpFormatterContext>;
 using CommandParserPtr = std::unique_ptr<CommandParser>;
 using CommandParserFactory = CommandParserFactoryBase<HttpFormatterContext>;
+using BuiltInCommandParserFactory = BuiltInCommandParserFactoryBase<HttpFormatterContext>;
 
 } // namespace Formatter
 } // namespace Envoy

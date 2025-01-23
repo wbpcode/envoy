@@ -110,6 +110,17 @@ envoy_cc_library(
 )
 
 envoy_cc_library(
+    name = "high_order_formatter_extension_lib",
+    srcs = ["high_order_formatter.cc"],
+    hdrs = ["high_order_formatter.h"],
+    rbe_pool = "6gig",
+    deps = [
+        ":substitution_formatter_lib",
+    ],
+    alwayslink = 1,  # has factory registration
+)
+
+envoy_cc_library(
     name = "formatter_extension_lib",
     deps = [
         ":http_speicific_formatter_extension_lib",
