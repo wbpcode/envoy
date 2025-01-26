@@ -218,8 +218,7 @@ private:
   static const FormatterProviderLookupTbl& getKnownFormatters();
 };
 
-using BuiltInHttpCommandParserFactory = BuiltInCommandParserFactoryBase<HttpFormatterContext>;
-class DefaultBuiltInHttpCommandParserFactory : public BuiltInHttpCommandParserFactory {
+class DefaultBuiltInHttpCommandParserFactory : public BuiltInCommandParserFactory {
 public:
   std::string name() const override;
   CommandParserPtr createCommandParser() const override;

@@ -396,7 +396,7 @@ CommandParserPtr DefaultBuiltInHttpCommandParserFactory::createCommandParser() c
   return std::make_unique<BuiltInHttpCommandParser>();
 }
 
-REGISTER_FACTORY(DefaultBuiltInHttpCommandParserFactory, BuiltInHttpCommandParserFactory);
+REGISTER_FACTORY(DefaultBuiltInHttpCommandParserFactory, BuiltInCommandParserFactory);
 
 } // namespace Formatter
 } // namespace Envoy
