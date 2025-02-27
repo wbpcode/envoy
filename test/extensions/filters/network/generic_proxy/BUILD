@@ -49,6 +49,7 @@ envoy_cc_test(
     rbe_pool = "6gig",
     deps = [
         ":fake_codec_lib",
+        "//source/common/access_log:access_log_lib",
         "//source/common/buffer:buffer_lib",
         "//source/common/formatter:formatter_extension_lib",
         "//source/common/formatter:substitution_format_string_lib",
