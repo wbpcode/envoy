@@ -21,6 +21,12 @@ namespace HttpFilters {
 namespace RateLimitFilter {
 
 namespace {
+
+constexpr absl::string_view XEnvoyRateLimitedHeaderValue = "true";
+constexpr absl::string_view XEnvoyRateLimitedHeaderAllowValue = "true;allow";
+constexpr absl::string_view XEnvoyRateLimitedHeaderError = "error";
+constexpr absl::string_view XEnvoyRateLimitedHeaderAllowError = "error;allow";
+
 constexpr absl::string_view HitsAddendFilterStateKey = "envoy.ratelimit.hits_addend";
 
 class HitsAddendObjectFactory : public StreamInfo::FilterState::ObjectFactory {
@@ -236,13 +242,6 @@ void Filter::complete(Filters::Common::RateLimit::LimitStatus status,
                                            empty_stat_name,
                                            false};
     httpContext().codeStats().chargeResponseStat(info, false);
-    if (config_->enableXEnvoyRateLimitedHeader()) {
-      if (response_headers_to_add_ == nullptr) {
-        response_headers_to_add_ = Http::ResponseHeaderMapImpl::create();
-      }
-      response_headers_to_add_->setReferenceEnvoyRateLimited(
-          Http::Headers::get().EnvoyRateLimitedValues.True);
-    }
     break;
   }
 
@@ -257,19 +256,26 @@ void Filter::complete(Filters::Common::RateLimit::LimitStatus status,
     descriptor_statuses = nullptr;
   }
 
-  if (status == Filters::Common::RateLimit::LimitStatus::OverLimit && config_->enforced()) {
-    state_ = State::Responded;
-    callbacks_->streamInfo().setResponseFlag(StreamInfo::CoreResponseFlag::RateLimited);
-    callbacks_->sendLocalReply(
-        config_->rateLimitedStatus(), response_body,
-        [this](Http::HeaderMap& headers) {
-          populateResponseHeaders(headers, /*from_local_reply=*/true);
-          config_->responseHeadersParser().evaluateHeaders(
-              headers, {request_headers_, dynamic_cast<const Http::ResponseHeaderMap*>(&headers)},
-              callbacks_->streamInfo());
-        },
-        config_->rateLimitedGrpcStatus(), RcDetails::get().RateLimited);
+  if (status == Filters::Common::RateLimit::LimitStatus::OverLimit) {
+    const bool enforced = config_->enforced();
+    setEnvoyRateLimitedHeader(status, enforced);
+
+    if (enforced) {
+      state_ = State::Responded;
+      callbacks_->streamInfo().setResponseFlag(StreamInfo::CoreResponseFlag::RateLimited);
+      callbacks_->sendLocalReply(
+          config_->rateLimitedStatus(), response_body,
+          [this](Http::HeaderMap& headers) {
+            populateResponseHeaders(headers, /*from_local_reply=*/true);
+            config_->responseHeadersParser().evaluateHeaders(
+                headers, {request_headers_, dynamic_cast<const Http::ResponseHeaderMap*>(&headers)},
+                callbacks_->streamInfo());
+          },
+          config_->rateLimitedGrpcStatus(), RcDetails::get().RateLimited);
+    }
   } else if (status == Filters::Common::RateLimit::LimitStatus::Error) {
+    setEnvoyRateLimitedHeader(status, !config_->failureModeAllow());
+
     if (config_->failureModeAllow()) {
       cluster_->statsScope().counterFromStatName(stat_names.failure_mode_allowed_).inc();
       if (!initiating_call_) {
@@ -381,6 +387,26 @@ bool FilterConfig::enforced() const {
     return filter_enforced_->enabled();
   }
   return runtime_.snapshot().featureEnabled("ratelimit.http_filter_enforcing", 100);
+}
+
+void Filter::setEnvoyRateLimitedHeader(Filters::Common::RateLimit::LimitStatus status,
+                                       bool respond) {
+  if (!config_->enableXEnvoyRateLimitedHeader() ||
+      status == Filters::Common::RateLimit::LimitStatus::OK) {
+    return;
+  }
+
+  if (response_headers_to_add_ == nullptr) {
+    response_headers_to_add_ = Http::ResponseHeaderMapImpl::create();
+  }
+
+  if (status == Filters::Common::RateLimit::LimitStatus::OverLimit) {
+    response_headers_to_add_->setReferenceEnvoyRateLimited(
+        respond ? XEnvoyRateLimitedHeaderValue : XEnvoyRateLimitedHeaderAllowValue);
+  } else {
+    response_headers_to_add_->setReferenceEnvoyRateLimited(
+        respond ? XEnvoyRateLimitedHeaderError : XEnvoyRateLimitedHeaderAllowError);
+  }
 }
 
 } // namespace RateLimitFilter

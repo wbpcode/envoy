@@ -241,6 +241,8 @@ private:
 
   Http::Context& httpContext() { return config_->httpContext(); }
 
+  void setEnvoyRateLimitedHeader(Filters::Common::RateLimit::LimitStatus status, bool respond);
+
   enum class State { NotStarted, Calling, Complete, Responded };
 
   FilterConfigSharedPtr config_;

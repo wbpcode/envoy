@@ -385,9 +385,11 @@ RetryStateImpl::wouldRetryFromHeaders(const Http::ResponseHeaderMap& response_he
                                       bool& disable_early_data) {
   // A response that contains the x-envoy-ratelimited header comes from an upstream envoy.
   // We retry these only when the envoy-ratelimited policy is in effect.
-  if (response_headers.EnvoyRateLimited() != nullptr) {
-    return (retry_on_ & RetryPolicy::RETRY_ON_ENVOY_RATE_LIMITED) ? RetryDecision::RetryWithBackoff
-                                                                  : RetryDecision::NoRetry;
+  if (retry_on_ & RetryPolicy::RETRY_ON_ENVOY_RATE_LIMITED) {
+    return response_headers.getEnvoyRateLimitedValue() ==
+                   Http::Headers::get().EnvoyRateLimitedValues.True
+               ? RetryDecision::RetryWithBackoff
+               : RetryDecision::NoRetry;
   }
 
   uint64_t response_status = Http::Utility::getResponseStatus(response_headers);
