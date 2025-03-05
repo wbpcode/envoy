@@ -1102,7 +1102,7 @@ TEST_F(HttpRateLimitFilterTest, LimitResponseRuntimeDisabledFromFilterConfig) {
   EXPECT_CALL(
       factory_context_.runtime_loader_.snapshot_,
       featureEnabled(absl::string_view("test_enforced"),
-                     testing::Matcher<const envoy::type::v3::FractionalPercent&>(Percent(30))))
+                     testing::Matcher<const envoy::type::v3::FractionalPercent&>(Percent(50))))
       .WillOnce(testing::Return(false));
 
   // Explicit configuration in the filter config should override the default runtime key.

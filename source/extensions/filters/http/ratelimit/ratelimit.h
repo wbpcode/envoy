@@ -61,6 +61,11 @@ public:
         http_context_(http_context), stat_names_(scope.symbolTable(), config.stat_prefix()),
         rate_limited_status_(toErrorCode(config.rate_limited_status().code())),
         status_on_error_(toRatelimitServerErrorCode(config.status_on_error().code())),
+        filter_enabled_(
+            config.has_filter_enabled()
+                ? absl::optional<Envoy::Runtime::FractionalPercent>(
+                      Envoy::Runtime::FractionalPercent(config.filter_enabled(), runtime_))
+                : absl::nullopt),
         filter_enforced_(
             config.has_filter_enforced()
                 ? absl::optional<Envoy::Runtime::FractionalPercent>(
