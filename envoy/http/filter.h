@@ -554,7 +554,7 @@ public:
    * Allows modifying the decoding buffer. May only be called before any data has been continued
    * past the calling filter.
    */
-  virtual void modifyDecodingBuffer(std::function<void(Buffer::Instance&)> callback) PURE;
+  virtual void modifyDecodingBuffer(std::function<void(OptRef<Buffer::Instance>)> callback) PURE;
 
   /**
    * Add buffered body data. This method is used in advanced cases where returning
@@ -983,7 +983,7 @@ public:
    * Allows modifying the encoding buffer. May only be called before any data has been continued
    * past the calling filter.
    */
-  virtual void modifyEncodingBuffer(std::function<void(Buffer::Instance&)> callback) PURE;
+  virtual void modifyEncodingBuffer(std::function<void(OptRef<Buffer::Instance>)> callback) PURE;
 
   /**
    * Add buffered body data. This method is used in advanced cases where returning
