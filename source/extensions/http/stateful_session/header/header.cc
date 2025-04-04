@@ -63,7 +63,7 @@ HeaderBasedSessionStateFactory::parseAddress(Envoy::Http::RequestHeaderMap& head
     }
     if (origin.empty()) {
       // Do nothing if the 'origin' part is not found or invalid.
-      ENVOY_LOG(info, "Header {} not found valid 'origin' part", name_);
+      ENVOY_LOG(info, "Header {} does not contain valid 'origin' part", name_);
       return absl::nullopt;
     }
 
