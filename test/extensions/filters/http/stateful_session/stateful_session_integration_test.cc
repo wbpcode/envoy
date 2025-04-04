@@ -312,7 +312,8 @@ TEST_F(StatefulSessionIntegrationTest,
     EXPECT_TRUE(upstream_request_->complete());
     EXPECT_TRUE(response->complete());
 
-    // No response header to be added.
+    // No response header to be added because we will only packages the exist session header
+    // in the response. If the session header is not exist, we will not add the session header.
     EXPECT_TRUE(response->headers().get(Http::LowerCaseString("session-header")).empty());
 
     cleanupUpstreamAndDownstream();
