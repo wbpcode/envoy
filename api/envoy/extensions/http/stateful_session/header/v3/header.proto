@@ -46,8 +46,9 @@ message HeaderBasedSessionState {
     // address. This is the default mode.
     OVERRIDE = 0;
 
-    // Iff the response header (assume the header value is ``xxxxxx``) is present then the selected
-    // upstream host address will be encoded into the response header with following format:
+    // Iff the response header (assume the header ``name`` is set to ``session-header`` and header
+    // value is ``xxxxxx``) is present then the upstream host address and existing header value will
+    // be encoded in following format to update the existing header value:
     //
     // .. code-block:: none
     //
@@ -58,7 +59,7 @@ message HeaderBasedSessionState {
     //
     // If this mode is used then we will assume that the header in the request will also be in the
     // same format and contains the ``origin`` part. This extension will parse the upstream host
-    // address and rewrite the header in the request to the ``origin`` part.
+    // address and update the header in the request to the ``origin`` part.
     //
     // This mode is useful when the server have provide a session id or similar information in the
     // response header and the client is expected to send it back in the request.
