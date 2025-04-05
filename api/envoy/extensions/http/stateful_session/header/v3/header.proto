@@ -36,14 +36,18 @@ option (udpa.annotations.file_status).package_version_status = ACTIVE;
 //
 // [#extension: envoy.http.stateful_session.header]
 message HeaderBasedSessionState {
+  // The name that will be used to obtain header value from downstream HTTP request and generate
+  // new response header for downstream.
+  string name = 1 [(validate.rules).string = {min_len: 1}];
+
   enum Mode {
     // If the upstream host address is different from the request header value (or if the request
     // header is not present), the extension will set the response header value to upstream host
     // address. This is the default mode.
     OVERRIDE = 0;
 
-    // Iff the response header is present then the selected upstream host address will be encoded into
-    // the response header with following format:
+    // Iff the response header (assume the header value is ``xxxxxx``) is present then the selected
+    // upstream host address will be encoded into the response header with following format:
     //
     // .. code-block:: none
     //
@@ -60,10 +64,6 @@ message HeaderBasedSessionState {
     // response header and the client is expected to send it back in the request.
     PACKAGES = 1;
   }
-
-  // The name that will be used to obtain header value from downstream HTTP request and generate
-  // new response header for downstream.
-  string name = 1 [(validate.rules).string = {min_len: 1}];
 
   Mode mode = 2 [(validate.rules).enum = {defined_only: true}];
 }
