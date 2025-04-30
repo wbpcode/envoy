@@ -20,6 +20,13 @@ behavior_changes:
   change: |
     Implement the Signed Double-Submit Cookie pattern, as recommended by OWASP, by using the HMAC secret to sign and verify
     the nonce.
+- area: oauth2
+  change: |
+    Reset CSRF token when token validation fails during redirection.
+    If the CSRF token cookie is present during the redirection to the authorization server, it will be validated.
+    Previously, if this validation failed, the oauth flow would fail. Now the CSRF token will simply be reset. This fixes
+    the case where an hmac secret change causes a redirect flow, but the CSRF token cookie hasn't yet expired
+    causing a CSRF token validation failure.
 
 bug_fixes:
 - area: dependency
