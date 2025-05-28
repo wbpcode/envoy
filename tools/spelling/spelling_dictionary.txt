@@ -1058,7 +1058,7 @@ oneof
 oneway
 oob
 opcode
-opencensus
+openid
 openssl
 opentracing
 optimizations
@@ -1289,6 +1289,7 @@ sigactions
 sigaltstack
 siginfo
 signalstack
+signout
 sigv
 sigv4
 sigv4a
