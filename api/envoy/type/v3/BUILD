@@ -5,8 +5,27 @@ load("@envoy_api//bazel:api_build_system.bzl", "api_proto_package")
 licenses(["notice"])  # Apache 2
 
 api_proto_package(
+    srcs = [
+        "http.proto",
+        "http_status.proto",
+        "percent.proto",
+        "range.proto",
+        "ratelimit_strategy.proto",
+        "ratelimit_unit.proto",
+        "semantic_version.proto",
+        "token_bucket.proto",
+    ],
     deps = [
         "@com_github_cncf_xds//udpa/annotations:pkg",
         "@com_github_cncf_xds//xds/annotations/v3:pkg",
     ],
+)
+
+api_proto_package(
+    name = "hash_policy",
+    go_import_path_suffix = "/hash_policy",
+    srcs = [
+        "hash_policy.proto",
+    ],
+    deps = ["@com_github_cncf_xds//udpa/annotations:pkg"],
 )

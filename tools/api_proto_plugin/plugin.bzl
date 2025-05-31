@@ -78,6 +78,7 @@ def api_proto_plugin_impl(target, ctx, output_group, mnemonic, output_suffixes, 
     args.add_all(import_paths, format_each = "-I%s")
     args.add(ctx.executable._api_proto_plugin, format = "--plugin=protoc-gen-api_proto_plugin=%s")
     args.add(output_path, format = "--api_proto_plugin_out=%s")
+    args.add(ctx.label.name, format = "--api_proto_plugin_opt=build_target=%s")
     if hasattr(ctx.attr, "_type_db"):
         inputs.append(ctx.attr._type_db.files)
         if len(ctx.attr._type_db.files.to_list()) != 1:

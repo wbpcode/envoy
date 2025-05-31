@@ -9,7 +9,7 @@ api_proto_package(
         "//envoy/annotations:pkg",
         "//envoy/config/accesslog/v3:pkg",
         "//envoy/config/core/v3:pkg",
-        "//envoy/type/v3:pkg",
+        "//envoy/type/v3:hash_policy",
         "@com_github_cncf_xds//udpa/annotations:pkg",
     ],
 )

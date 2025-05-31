@@ -142,11 +142,11 @@ def api_proto_package(
         srcs = [],
         deps = [],
         has_services = False,
-        visibility = ["//visibility:public"]):
+        visibility = ["//visibility:public"],
+        go_import_path_suffix = ""):
     if srcs == []:
         srcs = native.glob(["*.proto"])
 
-    name = "pkg"
     api_cc_py_proto_library(
         name = name,
         visibility = visibility,
@@ -182,7 +182,7 @@ def api_proto_package(
     go_proto_library(
         name = name + _GO_PROTO_SUFFIX,
         compilers = compilers,
-        importpath = _GO_IMPORTPATH_PREFIX + native.package_name(),
+        importpath = _GO_IMPORTPATH_PREFIX + native.package_name() + go_import_path_suffix,
         proto = name,
         visibility = ["//visibility:public"],
         deps = {dep: True for dep in deps}.keys(),

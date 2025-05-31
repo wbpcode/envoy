@@ -395,6 +395,7 @@ proto_library(
         "//envoy/type/tracing/v3:pkg",
         "//envoy/type/v3:pkg",
         "//envoy/watchdog/v3:pkg",
+        "//envoy/type/v3:hash_policy",
     ],
 )
 

@@ -59,7 +59,7 @@ pkg_files(
 pkg_files(
     name = "protoprinted_files_stripped",
     srcs = [":protoprinted_files"],
-    strip_prefix = "pkg",
+    strip_prefix = strip_prefix.from_pkg(),
 )
 
 pkg_tar(
