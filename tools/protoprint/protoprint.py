@@ -39,6 +39,7 @@ NEXT_FREE_FIELD_MIN = 5
 
 ENVOY_DEPRECATED_UNAVIALABLE_NAME = 'DEPRECATED_AND_UNAVAILABLE_DO_NOT_USE'
 
+DEFAULT_BUILD_TARGET = 'pkg'
 
 class ProtoPrintError(Exception):
     """Base error class for the protoprint module."""
@@ -165,11 +166,12 @@ def format_type_context_comments(type_context, annotation_xforms=None):
     return leading, trailing
 
 
-def format_header_from_file(
+def format_header_from_file(build_target,
         source_code_info, file_proto, empty_file, requires_deprecation_annotation):
     """Format proto header.
 
     Args:
+        build_target: build target name that this .proto file belongs to.
         source_code_info: SourceCodeInfo object.
         file_proto: FileDescriptorProto for file.
         empty_file: are there no message/enum/service defs in file?
@@ -217,13 +219,21 @@ def format_header_from_file(
 
     # Workaround packages in generated go code conflicting by transforming:
     # foo/bar/v2 to use barv2 as the package in the generated code
+    #
+    # And if the package contains build targets with non default target name,
+    # the build target name will be appended to the go package name.
+
+    go_package_suffix = ""
+    if build_target != DEFAULT_BUILD_TARGET:
+       go_package_suffix = f'/{build_target}'
+
     golang_package_name = ""
-    golang_package_base = file_proto.package.replace(".", "/")
+    golang_package_base = file_proto.package.replace(".", "/") + go_package_suffix
     if file_proto.name.startswith('contrib/'):
         golang_package_base = 'contrib/' + golang_package_base
     if file_proto.package.split(".")[-1] in ("v2", "v3"):
         name = "".join(file_proto.package.split(".")[-2:])
-        golang_package_name = ";" + name
+        golang_package_name = ";" + name + go_package_suffix.replace("/", "")
     options.go_package = "".join(
         ["github.com/envoyproxy/go-control-plane/", golang_package_base, golang_package_name])
 
@@ -584,6 +594,11 @@ class ProtoFormatVisitor(visitor.Visitor):
     _requires_deprecation_annotation_import = False
 
     def __init__(self, params):
+        # This build_target is the target name of proto library. One package may contains
+        # one or more build targets and one build target may contains one or more proto
+        # file.
+        self._build_target = params['build_target']
+
         if params['type_db_path']:
             utils.load_type_db(params['type_db_path'])
 
@@ -731,7 +746,7 @@ class ProtoFormatVisitor(visitor.Visitor):
 
     def visit_file(self, file_proto, type_context, services, msgs, enums):
         empty_file = len(services) == 0 and len(enums) == 0 and len(msgs) == 0
-        header = format_header_from_file(
+        header = format_header_from_file(self._build_target,
             type_context.source_code_info, file_proto, empty_file,
             self._requires_deprecation_annotation_import)
         formatted_services = format_block('\n'.join(services))
