@@ -449,5 +449,146 @@ std::string JsonFormatterImpl::formatWithContext(const Context& context,
   return log_line;
 }
 
+absl::StatusOr<AnotherJsonFormatterImpl::ListElement>
+parseFormatElement(const ProtobufWkt::ListValue& value,
+                   const AnotherJsonFormatterImpl::CommandParsers& commands);
+absl::StatusOr<AnotherJsonFormatterImpl::FormatElement>
+parseFormatElement(const ProtobufWkt::Value& value,
+                   const AnotherJsonFormatterImpl::CommandParsers& commands);
+
+absl::StatusOr<AnotherJsonFormatterImpl::DictElement>
+parseFormatElement(const ProtobufWkt::Struct& value,
+                   const AnotherJsonFormatterImpl::CommandParsers& commands) {
+
+  std::vector<
+      std::pair<absl::string_view, Protobuf::Map<std::string, ProtobufWkt::Value>::const_iterator>>
+      sorted_fields;
+  sorted_fields.reserve(value.fields().size());
+
+  for (auto it = value.fields().begin(); it != value.fields().end(); ++it) {
+    sorted_fields.push_back({it->first, it});
+  }
+
+  // Sort the keys to make the output deterministic.
+  std::sort(sorted_fields.begin(), sorted_fields.end(),
+            [](const auto& a, const auto& b) { return a.first < b.first; });
+
+  AnotherJsonFormatterImpl::DictElement dict;
+
+  for (const auto [key, iter] : sorted_fields) {
+    auto element_or = parseFormatElement(iter->second, commands);
+    if (!element_or.ok()) {
+      return element_or.status();
+    }
+    dict.emplace_back(std::string(key), std::move(element_or.value()));
+  }
+
+  return dict;
+}
+
+absl::StatusOr<AnotherJsonFormatterImpl::ListElement>
+parseFormatElement(const ProtobufWkt::ListValue& value,
+                   const AnotherJsonFormatterImpl::CommandParsers& commands) {
+  AnotherJsonFormatterImpl::ListElement list;
+  for (const auto& item : value.values()) {
+    auto element_or = parseFormatElement(item, commands);
+    if (!element_or.ok()) {
+      return element_or.status();
+    }
+    list.emplace_back(std::move(element_or.value()));
+  }
+  return list;
+}
+
+absl::StatusOr<AnotherJsonFormatterImpl::FormatElement>
+parseFormatElement(const ProtobufWkt::Value& value,
+                   const AnotherJsonFormatterImpl::CommandParsers& commands) {
+
+  AnotherJsonFormatterImpl::FormatElement element;
+
+  switch (value.kind_case()) {
+  case ProtobufWkt::Value::KindCase::kNumberValue:
+    element.value.emplace<double>(value.number_value());
+  case ProtobufWkt::Value::KindCase::kStringValue: {
+    if (!absl::StrContains(value.string_value(), '%')) {
+      element.value.emplace<std::string>(value.string_value());
+    } else {
+      auto formatters_or = SubstitutionFormatParser::parse(value.string_value(), commands);
+      if (!formatters_or.ok()) {
+        return formatters_or.status();
+      }
+      element.value.emplace<AnotherJsonFormatterImpl::Formatters>(std::move(formatters_or.value()));
+    }
+    break;
+  }
+  case ProtobufWkt::Value::KindCase::kBoolValue:
+    element.value.emplace<bool>(value.bool_value());
+    break;
+  case ProtobufWkt::Value::KindCase::kStructValue: {
+    auto dict_or = parseFormatElement(value.struct_value(), commands);
+    if (!dict_or.ok()) {
+      return dict_or.status();
+    }
+    element.value.emplace<AnotherJsonFormatterImpl::DictElement>(std::move(dict_or.value()));
+    break;
+  }
+  case ProtobufWkt::Value::KindCase::kListValue: {
+    auto list_or = parseFormatElement(value.list_value(), commands);
+    if (!list_or.ok()) {
+      return list_or.status();
+    }
+    element.value.emplace<AnotherJsonFormatterImpl::ListElement>(std::move(list_or.value()));
+    break;
+  }
+  default:
+    element.value.emplace<absl::monostate>();
+    break;
+  }
+
+  return element;
+}
+
+void serialize(const AnotherJsonFormatterImpl::ListElement& list, JsonStringSerializer& serializer);
+void serialize(const AnotherJsonFormatterImpl::FormatElement& ele,
+               JsonStringSerializer& serializer);
+
+void serialize(const AnotherJsonFormatterImpl::DictElement& dict,
+               JsonStringSerializer& serializer) {
+  serializer.addMapBeginDelimiter();
+  for (const auto& [key, value] : dict) {
+    switch (value.value.index()) {
+    case 0:
+      break;
+    case 1:
+    case 2:
+      serializer.addString(key);
+      serializer.addKeyValueDelimiter();
+      serialize(value, serializer);
+      break;
+    case 3:
+      break;
+    case 4:
+    case 5:
+    case 6:
+      serializer.addString(key);
+      serializer.addKeyValueDelimiter();
+      serialize(value, serializer);
+      break;
+    }
+  }
+  serializer.addMapEndDelimiter();
+}
+
+AnotherJsonFormatterImpl::AnotherJsonFormatterImpl(const ProtobufWkt::Struct& struct_format,
+                                                   bool omit_empty_values,
+                                                   const CommandParsers& commands)
+    : omit_empty_values_(omit_empty_values),
+      parsed_elements_(THROW_OR_RETURN_VALUE(parseFormatElement(struct_format, commands),
+                                             AnotherJsonFormatterImpl::DictElement)) {}
+
+std::string AnotherJsonFormatterImpl::formatWithContext(const Context& context,
+                                                        const StreamInfo::StreamInfo& info) const {
+}
+
 } // namespace Formatter
 } // namespace Envoy

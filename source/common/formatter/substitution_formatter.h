@@ -56,8 +56,7 @@ public:
   // FormatterProvider
   absl::optional<std::string> formatWithContext(const Context&,
                                                 const StreamInfo::StreamInfo&) const override {
-    std::string str = absl::StrFormat("%g", num_.number_value());
-    return str;
+    return absl::StrFormat("%g", num_.number_value());
   }
   ProtobufWkt::Value formatValueWithContext(const Context&,
                                             const StreamInfo::StreamInfo&) const override {
@@ -125,6 +124,33 @@ private:
   const bool omit_empty_values_;
   using ParsedFormatElement = absl::variant<std::string, Formatters>;
   std::vector<ParsedFormatElement> parsed_elements_;
+};
+
+class AnotherJsonFormatterImpl : public Formatter {
+public:
+  using CommandParsers = std::vector<CommandParserPtr>;
+  using Formatter = FormatterProviderPtr;
+  using Formatters = std::vector<Formatter>;
+
+  struct FormatElement;
+  using DictElement = std::vector<std::pair<std::string, FormatElement>>;
+  using ListElement = std::vector<FormatElement>;
+  using ElementValue = absl::variant<absl::monostate, DictElement, ListElement, Formatters,
+                                     std::string, double, bool>;
+  struct FormatElement {
+    ElementValue value;
+  };
+
+  AnotherJsonFormatterImpl(const ProtobufWkt::Struct& struct_format, bool omit_empty_values,
+                           const CommandParsers& commands = {});
+
+  // Formatter
+  std::string formatWithContext(const Context& context,
+                                const StreamInfo::StreamInfo& info) const override;
+
+private:
+  const bool omit_empty_values_{};
+  const DictElement parsed_elements_;
 };
 
 } // namespace Formatter
