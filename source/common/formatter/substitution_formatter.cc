@@ -548,35 +548,98 @@ parseFormatElement(const ProtobufWkt::Value& value,
   return element;
 }
 
-void serialize(const AnotherJsonFormatterImpl::ListElement& list, JsonStringSerializer& serializer);
-void serialize(const AnotherJsonFormatterImpl::FormatElement& ele,
-               JsonStringSerializer& serializer);
+void serialize(const AnotherJsonFormatterImpl::ListElement& list, JsonStringSerializer& serializer,
+               const Context& context, const StreamInfo::StreamInfo& info, bool omit_empty_values);
+void serialize(const AnotherJsonFormatterImpl::FormatElement& ele, JsonStringSerializer& serializer,
+               const Context& context, const StreamInfo::StreamInfo& info, bool omit_empty_values);
 
-void serialize(const AnotherJsonFormatterImpl::DictElement& dict,
-               JsonStringSerializer& serializer) {
+void serialize(const AnotherJsonFormatterImpl::DictElement& dict, JsonStringSerializer& serializer,
+               const Context& context, const StreamInfo::StreamInfo& info, bool omit_empty_values) {
   serializer.addMapBeginDelimiter();
   for (const auto& [key, value] : dict) {
-    switch (value.value.index()) {
-    case 0:
-      break;
-    case 1:
-    case 2:
+    if (!omit_empty_values) {
       serializer.addString(key);
       serializer.addKeyValueDelimiter();
-      serialize(value, serializer);
-      break;
-    case 3:
-      break;
-    case 4:
-    case 5:
-    case 6:
+      serialize(value, serializer, context, info, omit_empty_values);
+      continue;
+    }
+
+    if (absl::holds_alternative<absl::monostate>(value.value)) {
+      continue;
+    } else if (absl::holds_alternative<AnotherJsonFormatterImpl::Formatters>(value.value)) {
+      const auto& formatters = absl::get<AnotherJsonFormatterImpl::Formatters>(value.value);
+      if (formatters.size() == 1) {
+        const auto value = formatters[0]->formatValueWithContext(context, info);
+        if (!value.has_null_value()) {
+          serializer.addString(key);
+          serializer.addKeyValueDelimiter();
+          std::string log;
+          Json::Utility::appendValueToString(value, log);
+          serializer.addRawString(log);
+        }
+      } else {
+        serializer.addString(key);
+        serializer.addKeyValueDelimiter();
+        stringValueToLogLine(formatters, context, info, serializer, omit_empty_values);
+      }
+    } else {
       serializer.addString(key);
       serializer.addKeyValueDelimiter();
-      serialize(value, serializer);
-      break;
+      serialize(value, serializer, context, info, omit_empty_values);
     }
   }
   serializer.addMapEndDelimiter();
+}
+
+void serialize(const AnotherJsonFormatterImpl::ListElement& list, JsonStringSerializer& serializer,
+               const Context& context, const StreamInfo::StreamInfo& info, bool omit_empty_values) {
+  serializer.addArrayBeginDelimiter();
+  bool add_delimiter = false;
+  for (const auto& item : list) {
+    if (add_delimiter) {
+      serializer.addElementsDelimiter();
+    }
+    add_delimiter = true;
+    serialize(item, serializer, context, info, omit_empty_values);
+  }
+  serializer.addArrayEndDelimiter();
+}
+
+void serialize(const AnotherJsonFormatterImpl::FormatElement& ele, JsonStringSerializer& serializer,
+               const Context& context, const StreamInfo::StreamInfo& info, bool omit_empty_values) {
+  switch (ele.value.index()) {
+  case 0:
+    serializer.addNull();
+    break;
+  case 4:
+    serializer.addString(absl::get<std::string>(ele.value));
+  case 5:
+    serializer.addNumber(absl::get<double>(ele.value));
+    break;
+  case 6:
+    serializer.addBool(absl::get<bool>(ele.value));
+    break;
+  case 1:
+    serialize(absl::get<AnotherJsonFormatterImpl::DictElement>(ele.value), serializer, context,
+              info, omit_empty_values);
+    break;
+  case 2:
+    serialize(absl::get<AnotherJsonFormatterImpl::ListElement>(ele.value), serializer, context,
+              info, omit_empty_values);
+    break;
+  case 3: {
+    const auto& formatters = absl::get<AnotherJsonFormatterImpl::Formatters>(ele.value);
+    if (formatters.size() == 1) {
+      const auto value = formatters[0]->formatValueWithContext(context, info);
+      std::string log;
+      Json::Utility::appendValueToString(value, log);
+      serializer.addRawString(log);
+    } else {
+      stringValueToLogLine(formatters, context, info, serializer, omit_empty_values);
+    }
+    break;
+  }
+  }
 }
 
 AnotherJsonFormatterImpl::AnotherJsonFormatterImpl(const ProtobufWkt::Struct& struct_format,
@@ -587,8 +650,7 @@ AnotherJsonFormatterImpl::AnotherJsonFormatterImpl(const ProtobufWkt::Struct& st
                                              AnotherJsonFormatterImpl::DictElement)) {}
 
 std::string AnotherJsonFormatterImpl::formatWithContext(const Context& context,
-                                                        const StreamInfo::StreamInfo& info) const {
-}
+                                                        const StreamInfo::StreamInfo& info) const {}
 
 } // namespace Formatter
 } // namespace Envoy
