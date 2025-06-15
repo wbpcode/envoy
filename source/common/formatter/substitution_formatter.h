@@ -111,8 +111,14 @@ private:
 class JsonFormatterImpl : public Formatter {
 public:
   using CommandParsers = std::vector<CommandParserPtr>;
-  using Formatter = FormatterProviderPtr;
-  using Formatters = std::vector<Formatter>;
+  using Formatters = std::vector<FormatterProviderPtr>;
+
+  enum class ElementType {
+    Delim,  // Single delimiter that contains double quotes, for example: "{" or ",".
+    Key,    // Single sanitized key that contains double quotes, for example: "key".
+    Value,  // Single sanitized value or substitution formatter.
+    Pieces, // Joined multiple Pieces.
+  };
 
   JsonFormatterImpl(const ProtobufWkt::Struct& struct_format, bool omit_empty_values,
                     const CommandParsers& commands = {});
@@ -122,8 +128,25 @@ public:
                                 const StreamInfo::StreamInfo& info) const override;
 
 private:
+  struct ParsedFormatElement {
+    ElementType type_{};
+    std::string string_;
+    Formatters format_;
+  };
+
+  void formatOmitEmtpy(const Context& context, const StreamInfo::StreamInfo& info,
+                       std::string& log_line, std::string& sanitize) const;
+  void formatKeepEmpty(const Context& context, const StreamInfo::StreamInfo& info,
+                       std::string& log_line, std::string& sanitize) const;
+
+  bool formatKeyValuePair(const ParsedFormatElement& key, const ParsedFormatElement& val,
+                          const Context& context, const StreamInfo::StreamInfo& info,
+                          std::string& log_line, std::string& sanitize) const;
+  void formatSubstitution(const Formatters& formatters, const Context& context,
+                          const StreamInfo::StreamInfo& info, std::string& log_line,
+                          std::string& sanitize) const;
+
   const bool omit_empty_values_;
-  using ParsedFormatElement = absl::variant<std::string, Formatters>;
   std::vector<ParsedFormatElement> parsed_elements_;
 };
 

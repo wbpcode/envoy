@@ -55,64 +55,12 @@ const re2::RE2& commandWithArgsRegex() {
 }
 
 // Helper class to write value to output buffer in JSON style.
-// NOTE: This helper class has duplicated logic with the Json::BufferStreamer class but
-// provides lower level of APIs to operate on the output buffer (like control the
-// delimiters). This is designed for special scenario of substitution formatter and
-// is not intended to be used by other parts of the code.
 class JsonStringSerializer {
 public:
-  using OutputBufferType = Json::StringOutput;
-  explicit JsonStringSerializer(std::string& output_buffer) : output_buffer_(output_buffer) {}
-
-  // Methods that be used to add JSON delimiter to output buffer.
-  void addMapBeginDelimiter() { output_buffer_.add(Json::Constants::MapBegin); }
-  void addMapEndDelimiter() { output_buffer_.add(Json::Constants::MapEnd); }
-  void addArrayBeginDelimiter() { output_buffer_.add(Json::Constants::ArrayBegin); }
-  void addArrayEndDelimiter() { output_buffer_.add(Json::Constants::ArrayEnd); }
-  void addElementsDelimiter() { output_buffer_.add(Json::Constants::Comma); }
-  void addKeyValueDelimiter() { output_buffer_.add(Json::Constants::Colon); }
-
-  // Methods that be used to add JSON key or value to output buffer.
-  void addString(absl::string_view value) { addSanitized(R"(")", value, R"(")"); }
-  /**
-   * Serializes a number.
-   */
-  void addNumber(double d) {
-    if (std::isnan(d)) {
-      output_buffer_.add(Json::Constants::Null);
-    } else {
-      Buffer::Util::serializeDouble(d, output_buffer_);
-    }
-  }
-  /**
-   * Serializes a integer number.
-   * NOTE: All numbers in JSON is float. When loading output of this serializer, the parser's
-   * implementation decides if the full precision of big integer could be preserved or not.
-   * See discussion here https://stackoverflow.com/questions/13502398/json-integers-limit-on-size
-   * and spec https://www.rfc-editor.org/rfc/rfc7159#section-6 for more details.
-   */
-  void addNumber(uint64_t i) { output_buffer_.add(absl::StrCat(i)); }
-  void addNumber(int64_t i) { output_buffer_.add(absl::StrCat(i)); }
-  void addBool(bool b) { output_buffer_.add(b ? Json::Constants::True : Json::Constants::False); }
-  void addNull() { output_buffer_.add(Json::Constants::Null); }
-
-  // Low-level methods that be used to provide a low-level control to buffer.
-  void addSanitized(absl::string_view prefix, absl::string_view value, absl::string_view suffix) {
-    output_buffer_.add(prefix, Json::sanitize(sanitize_buffer_, value), suffix);
-  }
-  void addRawString(absl::string_view value) { output_buffer_.add(value); }
-
-protected:
-  std::string sanitize_buffer_;
-  OutputBufferType output_buffer_;
-};
-
-// Helper class to parse the Json format configuration. The class will be used to parse
-// the JSON format configuration and convert it to a list of raw JSON pieces and
-// substitution format template strings. See comments below for more details.
-class JsonFormatBuilder {
-public:
+  using ElementType = JsonFormatterImpl::ElementType;
   struct FormatElement {
+    ElementType type_;
+
     // Pre-sanitized JSON piece or a format template string that contains
     // substitution commands.
     std::string value_;
@@ -123,18 +71,75 @@ public:
   };
   using FormatElements = std::vector<FormatElement>;
 
+  JsonStringSerializer() { elements_.reserve(64); }
+
+  void addMapBeginDelimiter() { elements_.emplace_back(ElementType::Delim, "{"); }
+  void addMapEndDelimiter() { elements_.emplace_back(ElementType::Delim, "}"); }
+  void addArrayBeginDelimiter() { elements_.emplace_back(ElementType::Delim, "["); }
+  void addArrayEndDelimiter() { elements_.emplace_back(ElementType::Delim, "]"); }
+  void addElementsDelimiter() { elements_.emplace_back(ElementType::Delim, ","); }
+
+  // Serializes a key.
+  void addKey(absl::string_view key) {
+    std::string sanitized_key = sanitize(R"(")", key, R"(":)");
+    elements_.emplace_back(ElementType::Key, std::move(sanitized_key));
+  }
+
+  // Serializes a value.
+  void addString(absl::string_view value) {
+    // If the value contains '%' then it may be substitution formatter and
+    // we should not sanitize it and only store the raw string first.
+    // Then the raw string will be parsed by the JsonFormatterImpl.
+    if (absl::StrContains(value, '%')) {
+      elements_.emplace_back(ElementType::Value, std::string(value), true);
+      return;
+    }
+
+    std::string sanitized_value = sanitize(R"(")", value, R"(")");
+    elements_.emplace_back(ElementType::Value, std::move(sanitized_value));
+  }
+  void addNumber(double d) {
+    std::string value;
+    if (std::isnan(d)) {
+      value = std::string(Json::Constants::Null);
+    } else {
+      value = fmt::to_string(d);
+    }
+    elements_.emplace_back(ElementType::Value, std::move(value));
+  }
+  void addBool(bool b) {
+    elements_.emplace_back(ElementType::Value,
+                           std::string(b ? Json::Constants::True : Json::Constants::False));
+  }
+  void addNull() { elements_.emplace_back(ElementType::Value, std::string(Json::Constants::Null)); }
+
+  // Low-level methods that be used to provide a low-level control to buffer.
+  std::string sanitize(absl::string_view prefix, absl::string_view value,
+                       absl::string_view suffix) {
+    return absl::StrCat(prefix, Json::sanitize(sanitize_buffer_, value), suffix);
+  }
+
+  std::string sanitize_buffer_;
+  FormatElements elements_;
+};
+
+// Helper class to parse the Json format configuration. The class will be used to parse
+// the JSON format configuration and convert it to a list of raw JSON pieces and
+// substitution format template strings. See comments below for more details.
+class JsonFormatBuilder {
+public:
   /**
    * Constructor of JsonFormatBuilder.
    */
   JsonFormatBuilder() = default;
 
   /**
-   * Convert a proto struct format configuration to an array of raw JSON pieces and
+   * Convert a proto struct format configuration to an array of raw JSON elements and
    * substitution format template strings.
    *
-   * The keys, raw values, delimiters will be serialized as JSON string pieces (raw
+   * The keys, raw values, delimiters will be serialized as JSON string elements (raw
    * JSON strings) directly when loading the configuration.
-   * The substitution format template strings will be kept as template string pieces and
+   * The substitution format template strings will be kept as template string elements and
    * will be parsed to formatter providers by the JsonFormatter.
    *
    * NOTE: This class is used to parse the configuration of the proto struct format
@@ -143,31 +148,40 @@ public:
    * For example given the following proto struct format configuration:
    *
    *   json_format:
-   *     name: "value"
-   *     template: "%START_TIME%"
+   *     key: "value"
+   *     format: "%START_TIME%"
    *     number: 2
-   *     bool: true
-   *     list:
-   *       - "list_raw_value"
-   *       - false
-   *       - "%EMIT_TIME%"
    *     nested:
-   *       nested_name: "nested_value"
+   *       nested_key: "nested_value"
    *
-   * It will be parsed to the following pieces:
+   * It will be parsed to the following elements array:
    *
-   *   - '{"name":"value","template":'                                      # Raw JSON piece.
-   *   - '%START_TIME%'                                                     # Format template piece.
-   *   - ',"number":2,"bool":true,"list":["list_raw_value",false,'          # Raw JSON piece.
-   *   - '%EMIT_TIME%'                                                      # Format template piece.
-   *   - '],"nested":{"nested_name":"nested_value"}}'                       # Raw JSON piece.
-   *
-   * Finally, join the raw JSON pieces and output of substitution formatters in order
-   * to construct the final JSON output.
+   *   - {                   # Dedimiter.
+   *   - "key":              # Key.
+   *   - "value"             # Value.
+   *   - ,                   # Delimiter.
+   *   - "format":           # Key.
+   *   - %START_TIME%        # Value with substitution formatter.
+   *   - ,                   # Delimiter.
+   *   - "number":           # Key.
+   *   - 2                   # Value.
+   *   - "nested":           # Key.
+   *   - {                   # Delimiter.
+   *   - "nested_key":       # Key.
+   *   - "nested_value"      # Value.
+   *   - }                   # Delimiter.
+   *   - }                   # Delimiter.
    *
    * @param struct_format the proto struct format configuration.
    */
-  FormatElements fromStruct(const ProtobufWkt::Struct& struct_format);
+  JsonStringSerializer::FormatElements fromStruct(const ProtobufWkt::Struct& struct_format) {
+    // This call will iterate through the map tree and serialize the key/values as JSON.
+    // If a string value that contains a substitution commands is found, the current
+    // JSON piece and the substitution command will be pushed into the output list.
+    // After that, the iteration will continue until the whole tree is traversed.
+    formatValueToFormatElements(struct_format.fields());
+    return std::move(serializer_.elements_);
+  }
 
 private:
   using ProtoDict = Protobuf::Map<std::string, ProtobufWkt::Value>;
@@ -177,24 +191,7 @@ private:
   void formatValueToFormatElements(const ProtobufWkt::Value& value);
   void formatValueToFormatElements(const ProtoList& list_value);
 
-  std::string buffer_;                       // JSON writer buffer.
-  JsonStringSerializer serializer_{buffer_}; // JSON serializer.
-  FormatElements elements_;                  // Parsed elements.
-};
-
-JsonFormatBuilder::FormatElements
-JsonFormatBuilder::fromStruct(const ProtobufWkt::Struct& struct_format) {
-  elements_.clear();
-
-  // This call will iterate through the map tree and serialize the key/values as JSON.
-  // If a string value that contains a substitution commands is found, the current
-  // JSON piece and the substitution command will be pushed into the output list.
-  // After that, the iteration will continue until the whole tree is traversed.
-  formatValueToFormatElements(struct_format.fields());
-  elements_.push_back(FormatElement{std::move(buffer_), false});
-  buffer_.clear();
-
-  return std::move(elements_);
+  JsonStringSerializer serializer_; // JSON serializer.
 };
 
 void JsonFormatBuilder::formatValueToFormatElements(const ProtobufWkt::Value& value) {
@@ -206,23 +203,9 @@ void JsonFormatBuilder::formatValueToFormatElements(const ProtobufWkt::Value& va
   case ProtobufWkt::Value::kNumberValue:
     serializer_.addNumber(value.number_value());
     break;
-  case ProtobufWkt::Value::kStringValue: {
-    absl::string_view string_format = value.string_value();
-    if (!absl::StrContains(string_format, '%')) {
-      serializer_.addString(string_format);
-      break;
-    }
-
-    // The string contains a formatter, we need to push the current exist JSON piece
-    // into the output list first.
-    elements_.push_back(FormatElement{std::move(buffer_), false});
-    buffer_.clear();
-
-    // Now a formatter is coming, we need to push the current raw string into
-    // the output list.
-    elements_.push_back(FormatElement{std::string(string_format), true});
+  case ProtobufWkt::Value::kStringValue:
+    serializer_.addString(value.string_value());
     break;
-  }
   case ProtobufWkt::Value::kBoolValue:
     serializer_.addBool(value.bool_value());
     break;
@@ -265,8 +248,7 @@ void JsonFormatBuilder::formatValueToFormatElements(const ProtoDict& dict_value)
       serializer_.addElementsDelimiter(); // Delimiter to separate map elements.
     }
     // Add the key.
-    serializer_.addString(sorted_fields[i].first);
-    serializer_.addKeyValueDelimiter(); // Delimiter to separate key and value.
+    serializer_.addKey(sorted_fields[i].first);
     formatValueToFormatElements(sorted_fields[i].second->second);
   }
   serializer_.addMapEndDelimiter(); // Delimiter to end map.
@@ -382,35 +364,182 @@ std::string FormatterImpl::formatWithContext(const Context& context,
   return log_line;
 }
 
-void stringValueToLogLine(const JsonFormatterImpl::Formatters& formatters, const Context& context,
-                          const StreamInfo::StreamInfo& info, JsonStringSerializer& serializer,
-                          bool omit_empty_values) {
+JsonFormatterImpl::JsonFormatterImpl(const ProtobufWkt::Struct& struct_format,
+                                     bool omit_empty_values, const CommandParsers& commands)
+    : omit_empty_values_(omit_empty_values) {
 
-  serializer.addRawString(Json::Constants::DoubleQuote); // Start the JSON string.
-  for (const JsonFormatterImpl::Formatter& formatter : formatters) {
+  std::vector<ParsedFormatElement> parsed_elements;
+
+  for (auto& element : JsonFormatBuilder().fromStruct(struct_format)) {
+    if (element.is_template_) {
+      ASSERT(element.type_ == ElementType::Value);
+      Formatters formatters = THROW_OR_RETURN_VALUE(
+          SubstitutionFormatParser::parse(element.value_, commands), Formatters);
+      parsed_elements.emplace_back(ElementType::Value, std::string{}, std::move(formatters));
+      ASSERT(!parsed_elements.back().format_.empty());
+    } else {
+      parsed_elements.emplace_back(element.type_, std::move(element.value_));
+      ASSERT(!parsed_elements.back().string_.empty());
+    }
+  }
+
+  if (omit_empty_values) {
+    parsed_elements_ = std::move(parsed_elements);
+
+    for (const auto& e : parsed_elements_) {
+      std::cout << e.string_ << std::endl;
+    }
+
+    return;
+  }
+
+  // If omit empty values is not set to true and we can concat all continuous keys/values/
+  // delimiters to single one element to speed up the logging at runtime.
+  for (ParsedFormatElement& element : parsed_elements) {
+    if (!element.format_.empty()) {
+      parsed_elements_.emplace_back(std::move(element));
+      continue;
+    }
+
+    if (parsed_elements_.empty() || parsed_elements_.back().type_ != ElementType::Pieces) {
+      parsed_elements_.emplace_back(std::move(element));
+      parsed_elements_.back().type_ = ElementType::Pieces;
+      continue;
+    }
+
+    parsed_elements_.back().string_ += element.string_;
+  }
+
+  for (const auto& e : parsed_elements_) {
+    std::cout << e.string_ << std::endl;
+  }
+}
+
+void JsonFormatterImpl::formatSubstitution(const Formatters& formatters, const Context& context,
+                                           const StreamInfo::StreamInfo& info,
+                                           std::string& log_line, std::string& sanitize) const {
+  ASSERT(!formatters.empty());
+
+  // 1. Handle the caseh where single formatter provider is provided.
+
+  if (formatters.size() == 1) {
+    Json::Utility::appendValueToString(formatters[0]->formatValueWithContext(context, info),
+                                       log_line);
+    return;
+  }
+
+  // 2. Handle the case where multiple formatter providers are provided.
+
+  log_line.push_back('"');
+
+  for (const FormatterProviderPtr& formatter : formatters) {
     const absl::optional<std::string> value = formatter->formatWithContext(context, info);
     if (!value.has_value()) {
       // Add the empty value. This needn't be sanitized.
-      serializer.addRawString(omit_empty_values ? EMPTY_STRING : DefaultUnspecifiedValueStringView);
+      log_line.append(omit_empty_values_ ? EMPTY_STRING : DefaultUnspecifiedValueStringView);
       continue;
     }
     // Sanitize the string value and add it to the buffer. The string value will not be quoted
     // since we handle the quoting by ourselves at the outer level.
-    serializer.addSanitized({}, value.value(), {});
+    log_line.append(Json::sanitize(sanitize, value.value()));
   }
-  serializer.addRawString(Json::Constants::DoubleQuote); // End the JSON string.
+
+  log_line.push_back('"'); // End the JSON string.
 }
 
-JsonFormatterImpl::JsonFormatterImpl(const ProtobufWkt::Struct& struct_format,
-                                     bool omit_empty_values, const CommandParsers& commands)
-    : omit_empty_values_(omit_empty_values) {
-  for (JsonFormatBuilder::FormatElement& element : JsonFormatBuilder().fromStruct(struct_format)) {
-    if (element.is_template_) {
-      parsed_elements_.emplace_back(
-          THROW_OR_RETURN_VALUE(SubstitutionFormatParser::parse(element.value_, commands),
-                                std::vector<FormatterProviderPtr>));
+bool JsonFormatterImpl::formatKeyValuePair(const ParsedFormatElement& key,
+                                           const ParsedFormatElement& val, const Context& context,
+                                           const StreamInfo::StreamInfo& info,
+                                           std::string& log_line, std::string& sanitize) const {
+
+  // Note: this only happens when the omit_empty_values is set to true because at other
+  // cases, keys/values/delimiters maybe concated and we cannot handle them in a pair.
+  ASSERT(val.type_ == ElementType::Value);
+
+  if (!val.string_.empty()) {
+    if (val.string_ == Json::Constants::Null) {
+      // Skip the pair which has null value.
+      return true;
+    }
+    log_line.append(key.string_).append(val.string_);
+    return false;
+  }
+
+  if (val.format_.size() != 1) {
+    formatSubstitution(val.format_, context, info, log_line.append(key.string_), sanitize);
+    return false;
+  }
+
+  const auto value = val.format_[0]->formatValueWithContext(context, info);
+  if (value.kind_case() == ProtobufWkt::Value::KIND_NOT_SET ||
+      value.kind_case() == ProtobufWkt::Value::kNullValue) {
+    // Skip the pair which has null value.
+    return true;
+  }
+
+  Json::Utility::appendValueToString(value, log_line.append(key.string_));
+  return false;
+}
+
+void JsonFormatterImpl::formatOmitEmtpy(const Context& context, const StreamInfo::StreamInfo& info,
+                                        std::string& log_line, std::string& sanitize) const {
+  ASSERT(omit_empty_values_);
+
+  for (size_t i = 0; i < parsed_elements_.size(); i++) {
+    const auto& curr = parsed_elements_[i];
+
+    if (curr.type_ == ElementType::Key) {
+      // The key will never be the last element and will be followed by at least a value
+      // and a delimiter.
+      if (const auto& value = parsed_elements_[i + 1]; value.type_ == ElementType::Value) {
+        // Handle the simple key/value pair.
+
+        i++; // The value will be consumed anyway.
+        if (formatKeyValuePair(curr, value, context, info, log_line, sanitize)) {
+          const auto& delim = parsed_elements_[i + 1];
+          ASSERT(delim.type_ == ElementType::Delim);
+          if (delim.string_ == ",") {
+            i++; // Because the pair is skipped then also skip the comma delimiter.
+          }
+        }
+      } else {
+        // The next elment is delimeter means the value of the key is map or list. For
+        // this type, we will not handle it in pair but one by one.
+
+        log_line.append(curr.string_);
+      }
     } else {
-      parsed_elements_.emplace_back(std::move(element.value_));
+      if (!curr.string_.empty()) {
+        // Handle the string element. This should be value that not be part of simple
+        // key/value pair or delimiter.
+        ASSERT(curr.type_ == ElementType::Value || curr.type_ == ElementType::Delim);
+        log_line.append(curr.string_);
+      } else {
+        // Handle the format element.  This should be value that not be part of simple
+        // key/value pair.
+        ASSERT(curr.type_ == ElementType::Value);
+        ASSERT(!curr.format_.empty());
+        formatSubstitution(curr.format_, context, info, log_line, sanitize);
+      }
+    }
+  }
+}
+
+void JsonFormatterImpl::formatKeepEmpty(const Context& context, const StreamInfo::StreamInfo& info,
+                                        std::string& log_line, std::string& sanitize) const {
+  ASSERT(!omit_empty_values_);
+
+  for (const ParsedFormatElement& element : parsed_elements_) {
+    if (!element.string_.empty()) {
+      // 1. Handle the string element.
+      ASSERT(element.type_ == ElementType::Pieces);
+      log_line.append(element.string_);
+    } else {
+      // 2. Handle the format element. Note: all non format value will be merged to pieces and
+      // here will only handle the format value.
+      ASSERT(element.type_ == ElementType::Value);
+      ASSERT(!element.format_.empty());
+      formatSubstitution(element.format_, context, info, log_line, sanitize);
     }
   }
 }
@@ -419,31 +548,10 @@ std::string JsonFormatterImpl::formatWithContext(const Context& context,
                                                  const StreamInfo::StreamInfo& info) const {
   std::string log_line;
   log_line.reserve(2048);
-  JsonStringSerializer serializer(log_line); // Helper to serialize the value to log line.
+  std::string sanitize;
 
-  for (const ParsedFormatElement& element : parsed_elements_) {
-    // 1. Handle the raw string element.
-    if (absl::holds_alternative<std::string>(element)) {
-      // The raw string element will be added to the buffer directly.
-      // It is sanitized when loading the configuration.
-      serializer.addRawString(absl::get<std::string>(element));
-      continue;
-    }
-
-    ASSERT(absl::holds_alternative<Formatters>(element));
-    const Formatters& formatters = absl::get<Formatters>(element);
-    ASSERT(!formatters.empty());
-
-    if (formatters.size() != 1) {
-      // 2. Handle the formatter element with multiple or zero providers.
-      stringValueToLogLine(formatters, context, info, serializer, omit_empty_values_);
-    } else {
-      // 3. Handle the formatter element with a single provider and value
-      //    type needs to be kept.
-      auto value = formatters[0]->formatValueWithContext(context, info);
-      Json::Utility::appendValueToString(value, log_line);
-    }
-  }
+  omit_empty_values_ ? formatOmitEmtpy(context, info, log_line, sanitize)
+                     : formatKeepEmpty(context, info, log_line, sanitize);
 
   log_line.push_back('\n');
   return log_line;
