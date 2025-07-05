@@ -27,6 +27,10 @@ behavior_changes:
     Previously, if this validation failed, the oauth flow would fail. Now the CSRF token will simply be reset. This fixes
     the case where an hmac secret change causes a redirect flow, but the CSRF token cookie hasn't yet expired
     causing a CSRF token validation failure.
+- area: oauth2
+  change: |
+    The access token, id token and refresh token in the cookies are now encrypted using the HMAC secret. This behavior can
+    be reverted by setting the runtime guard ``envoy.reloadable_features.oauth2_encrypt_tokens`` to ``false``.
 
 bug_fixes:
 - area: dependency

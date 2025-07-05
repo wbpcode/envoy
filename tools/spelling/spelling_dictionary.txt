@@ -88,6 +88,7 @@ ETB
 ETX
 FS
 FIXME
+decrypted
 gperf
 HEXDIG
 HEXDIGIT
