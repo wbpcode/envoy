@@ -31,6 +31,11 @@ behavior_changes:
   change: |
     The access token, id token and refresh token in the cookies are now encrypted using the HMAC secret. This behavior can
     be reverted by setting the runtime guard ``envoy.reloadable_features.oauth2_encrypt_tokens`` to ``false``.
+- area: oauth2
+  change: |
+      Starting from this release, these cookies: oauth_hmac,oauth_expires,refresh_token,oauth_nonce,code_verifier will
+      not be forwarded to the upstream. This behavior can be reverted by setting the runtime guard
+      ``envoy.reloadable_features.oauth2_cleanup_cookies`` to ``false``.
 
 bug_fixes:
 - area: dependency
