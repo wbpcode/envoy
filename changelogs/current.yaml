@@ -67,6 +67,9 @@ bug_fixes:
   change: |
     Fixed an issue where ID token and refresh token did not adhere to the :ref:`cookie_domain
     <envoy_v3_api_field_extensions.filters.http.oauth2.v3.OAuth2Credentials.cookie_domain>` field.
+- area: oauth2
+  change: |
+    Removed runtime guard ``envoy.reloadable_features.oauth2_use_refresh_token`` and legacy code paths.
 
 new_features:
 - area: wasm
