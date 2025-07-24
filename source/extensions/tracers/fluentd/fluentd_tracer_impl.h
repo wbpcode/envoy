@@ -45,11 +45,11 @@ public:
   const std::string& tracestate() const { return tracestate_; }
 
 private:
-  const std::string version_;
-  const std::string trace_id_;
-  const std::string parent_id_;
-  const bool sampled_{false};
-  const std::string tracestate_;
+  std::string version_;
+  std::string trace_id_;
+  std::string parent_id_;
+  bool sampled_{false};
+  std::string tracestate_;
 };
 
 // Trace context definitions
