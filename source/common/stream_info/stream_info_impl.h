@@ -46,7 +46,7 @@ struct UpstreamInfoImpl : public UpstreamInfo {
     upstream_ssl_info_ = ssl_connection_info;
   }
 
-  Ssl::ConnectionInfoConstSharedPtr upstreamSslConnection() const override {
+  const Ssl::ConnectionInfoConstSharedPtr& upstreamSslConnection() const override {
     return upstream_ssl_info_;
   }
   UpstreamTiming& upstreamTiming() override { return upstream_timing_; }
@@ -81,7 +81,9 @@ struct UpstreamInfoImpl : public UpstreamInfo {
     upstream_filter_state_ = filter_state;
   }
 
-  Upstream::HostDescriptionConstSharedPtr upstreamHost() const override { return upstream_host_; }
+  const Upstream::HostDescriptionConstSharedPtr& upstreamHost() const override {
+    return upstream_host_;
+  }
 
   void dumpState(std::ostream& os, int indent_level = 0) const override {
     const char* spaces = spacesForLevel(indent_level);
@@ -179,18 +181,8 @@ struct StreamInfoImpl : public StreamInfo {
     final_time_ = time_source_.monotonicTime();
   }
 
-  DownstreamTiming& downstreamTiming() override {
-    if (!downstream_timing_.has_value()) {
-      downstream_timing_ = DownstreamTiming();
-    }
-    return downstream_timing_.value();
-  }
-  OptRef<const DownstreamTiming> downstreamTiming() const override {
-    if (!downstream_timing_.has_value()) {
-      return {};
-    }
-    return {*downstream_timing_};
-  }
+  DownstreamTiming& downstreamTiming() override { return downstream_timing_; }
+  const DownstreamTiming& downstreamTiming() const override { return downstream_timing_; }
 
   void addCustomFlag(absl::string_view flag) override {
     ASSERT(!ResponseFlagUtils::responseFlagsMap().contains(flag));
@@ -301,7 +293,7 @@ struct StreamInfoImpl : public StreamInfo {
 
   const Router::VirtualHostConstSharedPtr& virtualHost() const override { return vhost_; }
 
-  Router::RouteConstSharedPtr route() const override { return route_; }
+  const Router::RouteConstSharedPtr& route() const override { return route_; }
 
   envoy::config::core::v3::Metadata& dynamicMetadata() override { return metadata_; };
   const envoy::config::core::v3::Metadata& dynamicMetadata() const override { return metadata_; };
@@ -350,7 +342,7 @@ struct StreamInfoImpl : public StreamInfo {
     upstream_cluster_info_ = upstream_cluster_info;
   }
 
-  absl::optional<Upstream::ClusterInfoConstSharedPtr> upstreamClusterInfo() const override {
+  const Upstream::ClusterInfoConstSharedPtr& upstreamClusterInfo() const override {
     return upstream_cluster_info_;
   }
 
@@ -485,6 +477,7 @@ public:
   std::string custom_flags_;
   Router::RouteConstSharedPtr route_;
   Router::VirtualHostConstSharedPtr vhost_;
+  Upstream::ClusterInfoConstSharedPtr upstream_cluster_info_;
   envoy::config::core::v3::Metadata metadata_;
   FilterStateSharedPtr filter_state_;
 
@@ -504,8 +497,7 @@ private:
   const Network::ConnectionInfoProviderSharedPtr downstream_connection_info_provider_;
   const Http::RequestHeaderMap* request_headers_{};
   StreamIdProviderSharedPtr stream_id_provider_;
-  absl::optional<DownstreamTiming> downstream_timing_;
-  absl::optional<Upstream::ClusterInfoConstSharedPtr> upstream_cluster_info_;
+  DownstreamTiming downstream_timing_;
   // Default construct the object because upstream stream is not constructed in some cases.
   BytesMeterSharedPtr upstream_bytes_meter_{std::make_shared<BytesMeter>()};
   BytesMeterSharedPtr downstream_bytes_meter_;

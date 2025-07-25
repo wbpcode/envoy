@@ -38,10 +38,10 @@ Http::FilterHeadersStatus Filter::encodeHeaders(Http::ResponseHeaderMap& headers
     return Http::FilterHeadersStatus::Continue;
   }
   Http::HttpServerPropertiesCacheSharedPtr cache;
-  auto info = encoder_callbacks_->streamInfo().upstreamClusterInfo();
-  if (info && (*info)->alternateProtocolsCacheOptions()) {
+  const auto& info = encoder_callbacks_->streamInfo().upstreamClusterInfo();
+  if (info && info->alternateProtocolsCacheOptions().has_value()) {
     cache = config_->alternateProtocolCacheManager().getCache(
-        *((*info)->alternateProtocolsCacheOptions()), dispatcher_);
+        *info->alternateProtocolsCacheOptions(), dispatcher_);
   }
   if (!cache) {
     return Http::FilterHeadersStatus::Continue;

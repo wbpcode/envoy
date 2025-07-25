@@ -922,16 +922,18 @@ TEST(Context, XDSAttributes) {
   NiceMock<StreamInfo::MockStreamInfo> info;
   std::shared_ptr<NiceMock<Upstream::MockClusterInfo>> cluster_info(
       new NiceMock<Upstream::MockClusterInfo>());
-  EXPECT_CALL(info, upstreamClusterInfo()).WillRepeatedly(Return(cluster_info));
+  std::shared_ptr<NiceMock<Router::MockRoute>> route{new NiceMock<Router::MockRoute>()};
   std::shared_ptr<NiceMock<Envoy::Upstream::MockHostDescription>> upstream_host(
       new NiceMock<Envoy::Upstream::MockHostDescription>());
+
   auto host_metadata = std::make_shared<const envoy::config::core::v3::Metadata>();
   auto locality_metadata = std::make_shared<const envoy::config::core::v3::Metadata>();
   EXPECT_CALL(*upstream_host, metadata()).WillRepeatedly(Return(host_metadata));
   EXPECT_CALL(*upstream_host, localityMetadata()).WillRepeatedly(Return(locality_metadata));
+
+  info.upstream_cluster_info_ = cluster_info;
+  info.route_ = route;
   info.upstreamInfo()->setUpstreamHost(upstream_host);
-  std::shared_ptr<NiceMock<Router::MockRoute>> route{new NiceMock<Router::MockRoute>()};
-  EXPECT_CALL(info, route()).WillRepeatedly(Return(route));
   info.virtual_host_ = route->virtual_host_;
 
   const std::string chain_name = "fake_filter_chain_name";
@@ -1034,11 +1036,9 @@ TEST(Context, XDSAttributes) {
 TEST(Context, XDSAttributesEdgeCases) {
   NiceMock<LocalInfo::MockLocalInfo> local_info;
   NiceMock<StreamInfo::MockStreamInfo> info;
-  std::shared_ptr<NiceMock<Upstream::MockClusterInfo>> cluster_info(
-      new NiceMock<Upstream::MockClusterInfo>());
-  EXPECT_CALL(info, upstreamClusterInfo()).WillRepeatedly(Return(nullptr));
   std::shared_ptr<NiceMock<Router::MockRoute>> route{new NiceMock<Router::MockRoute>()};
-  EXPECT_CALL(info, route()).WillRepeatedly(Return(route));
+  info.route_ = route;
+
   info.downstream_connection_info_provider_->setListenerInfo(nullptr);
 
   Protobuf::Arena arena;

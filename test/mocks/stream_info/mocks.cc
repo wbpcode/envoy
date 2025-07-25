@@ -116,12 +116,8 @@ MockStreamInfo::MockStreamInfo()
         std::chrono::duration_cast<std::chrono::nanoseconds>(ts_.systemTime() - start_time_)
             .count());
   }));
-  ON_CALL(*this, downstreamTiming()).WillByDefault(Invoke([this]() -> DownstreamTiming& {
-    return downstream_timing_;
-  }));
-  ON_CALL(Const(*this), downstreamTiming())
-      .WillByDefault(
-          Invoke([this]() -> OptRef<const DownstreamTiming> { return downstream_timing_; }));
+  ON_CALL(*this, downstreamTiming()).WillByDefault(ReturnRef(downstream_timing_));
+  ON_CALL(Const(*this), downstreamTiming()).WillByDefault(ReturnRef(downstream_timing_));
   ON_CALL(*this, upstreamInfo()).WillByDefault(Invoke([this]() { return upstream_info_; }));
   ON_CALL(testing::Const(*this), upstreamInfo())
       .WillByDefault(Invoke([this]() -> OptRef<const UpstreamInfo> {
@@ -217,6 +213,7 @@ MockStreamInfo::MockStreamInfo()
     return absl::string_view(stream_flags_);
   }));
   ON_CALL(*this, virtualHost()).WillByDefault(ReturnPointee(&virtual_host_));
+  ON_CALL(*this, route()).WillByDefault(ReturnPointee(&route_));
 }
 
 MockStreamInfo::~MockStreamInfo() = default;

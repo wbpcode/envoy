@@ -1892,7 +1892,8 @@ TEST_P(WasmHttpFilterTest, Property) {
   EXPECT_CALL(encoder_callbacks_, connection())
       .WillRepeatedly(Return(OptRef<const Network::Connection>{connection}));
   std::shared_ptr<Router::MockRoute> route{new NiceMock<Router::MockRoute>()};
-  EXPECT_CALL(request_stream_info_, route()).WillRepeatedly(Return(route));
+  request_stream_info_.route_ = route;
+  EXPECT_CALL(request_stream_info_, route()).Times(testing::AtLeast(1));
   std::shared_ptr<NiceMock<Envoy::Upstream::MockHostDescription>> host_description(
       new NiceMock<Envoy::Upstream::MockHostDescription>());
   auto metadata = std::make_shared<envoy::config::core::v3::Metadata>(
@@ -1933,7 +1934,8 @@ TEST_P(WasmHttpFilterTest, ClusterMetadata) {
   EXPECT_CALL(*cluster, metadata()).WillRepeatedly(ReturnRef(*cluster_metadata));
   EXPECT_CALL(request_stream_info_, requestComplete)
       .WillRepeatedly(Return(std::chrono::milliseconds(30)));
-  EXPECT_CALL(request_stream_info_, upstreamClusterInfo()).WillRepeatedly(Return(cluster));
+  request_stream_info_.upstream_cluster_info_ = cluster;
+  EXPECT_CALL(request_stream_info_, upstreamClusterInfo()).Times(testing::AtLeast(1));
   EXPECT_CALL(filter(),
               log_(spdlog::level::warn, Eq(absl::string_view("cluster metadata: cluster"))));
   filter().log({&request_headers}, request_stream_info_);

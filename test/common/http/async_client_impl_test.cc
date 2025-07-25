@@ -102,9 +102,7 @@ public:
 class AsyncClientImplTracingTest : public AsyncClientImplTest {
 public:
   AsyncClientImplTracingTest() {
-    ON_CALL(stream_info_, upstreamClusterInfo())
-        .WillByDefault(Return(absl::make_optional<Upstream::ClusterInfoConstSharedPtr>(
-            cm_.thread_local_cluster_.cluster_.info_)));
+    stream_info_.upstream_cluster_info_ = cm_.thread_local_cluster_.cluster_.info_;
   }
 
   Tracing::MockSpan parent_span_;
@@ -2240,7 +2238,7 @@ TEST_F(AsyncClientImplTest, ParentStreamInfo) {
 
 TEST_F(AsyncClientImplTest, MetadataMatchCriteriaWithNullRoute) {
   NiceMock<StreamInfo::MockStreamInfo> parent_stream_info;
-  EXPECT_CALL(parent_stream_info, route()).WillRepeatedly(Return(nullptr));
+  EXPECT_CALL(parent_stream_info, route()).Times(testing::AtLeast(1));
 
   auto options = AsyncClient::StreamOptions();
   options.parent_context.stream_info = &parent_stream_info;
@@ -2259,7 +2257,8 @@ TEST_F(AsyncClientImplTest, MetadataMatchCriteriaWithNullRoute) {
 TEST_F(AsyncClientImplTest, MetadataMatchCriteriaWithNullRouteEntry) {
   NiceMock<StreamInfo::MockStreamInfo> parent_stream_info;
   const auto route = std::make_shared<NiceMock<Router::MockRoute>>();
-  EXPECT_CALL(parent_stream_info, route()).WillRepeatedly(Return(route));
+  parent_stream_info.route_ = route;
+  EXPECT_CALL(parent_stream_info, route()).Times(testing::AtLeast(1));
 
   EXPECT_CALL(*route, routeEntry()).WillRepeatedly(Return(nullptr));
 
@@ -2280,7 +2279,8 @@ TEST_F(AsyncClientImplTest, MetadataMatchCriteriaWithNullRouteEntry) {
 TEST_F(AsyncClientImplTest, MetadataMatchCriteriaWithValidRouteEntry) {
   NiceMock<StreamInfo::MockStreamInfo> parent_stream_info;
   const auto route = std::make_shared<NiceMock<Router::MockRoute>>();
-  EXPECT_CALL(parent_stream_info, route()).WillRepeatedly(Return(route));
+  parent_stream_info.route_ = route;
+  EXPECT_CALL(parent_stream_info, route()).Times(testing::AtLeast(1));
 
   NiceMock<Router::MockRouteEntry> route_entry;
   const auto metadata_criteria =

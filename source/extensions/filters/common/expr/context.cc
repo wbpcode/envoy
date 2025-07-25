@@ -420,9 +420,9 @@ const XDSLookupValues& XDSLookupValues::get() {
              if (wrapper.info_ == nullptr) {
                return {};
              }
-             const auto cluster_info = wrapper.info_->upstreamClusterInfo();
-             if (cluster_info && cluster_info.value()) {
-               return CelValue::CreateString(&cluster_info.value()->name());
+             const auto& cluster_info = wrapper.info_->upstreamClusterInfo();
+             if (cluster_info != nullptr) {
+               return CelValue::CreateString(&cluster_info->name());
              }
              return {};
            }},
@@ -431,10 +431,9 @@ const XDSLookupValues& XDSLookupValues::get() {
              if (wrapper.info_ == nullptr) {
                return {};
              }
-             const auto cluster_info = wrapper.info_->upstreamClusterInfo();
-             if (cluster_info && cluster_info.value()) {
-               return CelProtoWrapper::CreateMessage(&cluster_info.value()->metadata(),
-                                                     &wrapper.arena_);
+             const auto& cluster_info = wrapper.info_->upstreamClusterInfo();
+             if (cluster_info != nullptr) {
+               return CelProtoWrapper::CreateMessage(&cluster_info->metadata(), &wrapper.arena_);
              }
              return {};
            }},

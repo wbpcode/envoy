@@ -1235,8 +1235,7 @@ public:
    * and stream resets on premature upstream response.
    */
   bool hasLastDownstreamByteReceived() const {
-    return streamInfo().downstreamTiming() &&
-           streamInfo().downstreamTiming()->lastDownstreamRxByteReceived().has_value();
+    return streamInfo().downstreamTiming().lastDownstreamRxByteReceived().has_value();
   }
 
   bool shouldLoadShed() override {

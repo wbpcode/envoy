@@ -45,9 +45,7 @@ protected:
   HttpConnManFinalizerImplTest() {
     Upstream::HostDescriptionConstSharedPtr shared_host(host_);
     stream_info.upstreamInfo()->setUpstreamHost(shared_host);
-    ON_CALL(stream_info, upstreamClusterInfo())
-        .WillByDefault(
-            Return(absl::make_optional<Upstream::ClusterInfoConstSharedPtr>(cluster_info_)));
+    stream_info.upstream_cluster_info_ = cluster_info_;
   }
   struct CustomTagCase {
     std::string custom_tag;
@@ -178,9 +176,11 @@ TEST_F(HttpConnManFinalizerImplTest, NullRequestHeadersAndNullRouteEntry) {
   EXPECT_CALL(stream_info, responseCode()).WillRepeatedly(ReturnPointee(&response_code));
   // No upstream info.
   stream_info.upstreamInfo()->setUpstreamHost(nullptr);
-  EXPECT_CALL(stream_info, route()).WillRepeatedly(Return(nullptr));
+  stream_info.route_ = nullptr;
+  stream_info.upstream_cluster_info_ = nullptr;
+  EXPECT_CALL(stream_info, route()).Times(testing::AtLeast(1));
   // No cluster info.
-  EXPECT_CALL(stream_info, upstreamClusterInfo()).WillOnce(Return(absl::nullopt));
+  EXPECT_CALL(stream_info, upstreamClusterInfo()).Times(1);
 
   EXPECT_CALL(span, setTag(Eq(Tracing::Tags::get().HttpStatusCode), Eq("0")));
   EXPECT_CALL(span, setTag(Eq(Tracing::Tags::get().Error), Eq(Tracing::Tags::get().True)));
@@ -283,7 +283,8 @@ TEST_F(HttpConnManFinalizerImplTest, UpstreamClusterTagSetAlthoughNoUpstreamInfo
 
 TEST_F(HttpConnManFinalizerImplTest, NoUpstreamClusterTagSetWhenNoClusterInfo) {
   // No cluster info.
-  EXPECT_CALL(stream_info, upstreamClusterInfo()).WillOnce(Return(absl::nullopt));
+  stream_info.upstream_cluster_info_ = nullptr;
+  EXPECT_CALL(stream_info, upstreamClusterInfo()).Times(1);
 
   EXPECT_CALL(stream_info, bytesReceived()).WillOnce(Return(10));
   EXPECT_CALL(stream_info, bytesSent()).WillOnce(Return(11));
@@ -385,7 +386,8 @@ ree:
   TestUtility::loadFromYaml(yaml, fake_struct);
   (*stream_info.metadata_.mutable_filter_metadata())["m.req"].MergeFrom(fake_struct);
   std::shared_ptr<Router::MockRoute> route{new NiceMock<Router::MockRoute>()};
-  EXPECT_CALL(stream_info, route()).WillRepeatedly(Return(route));
+  stream_info.route_ = route;
+  EXPECT_CALL(stream_info, route()).Times(testing::AtLeast(1));
   (*route->metadata_.mutable_filter_metadata())["m.rot"].MergeFrom(fake_struct);
   std::shared_ptr<envoy::config::core::v3::Metadata> host_metadata =
       std::make_shared<envoy::config::core::v3::Metadata>();

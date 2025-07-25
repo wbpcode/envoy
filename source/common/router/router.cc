@@ -1306,8 +1306,7 @@ void Filter::onStreamMaxDurationReached(UpstreamRequest& upstream_request) {
   // Grab the const ref to call the const method of StreamInfo.
   const auto& stream_info = callbacks_->streamInfo();
   const bool downstream_decode_complete =
-      stream_info.downstreamTiming().has_value() &&
-      stream_info.downstreamTiming().value().get().lastDownstreamRxByteReceived().has_value();
+      stream_info.downstreamTiming().lastDownstreamRxByteReceived().has_value();
 
   // sendLocalReply may instead reset the stream if downstream_response_started_ is true.
   callbacks_->sendLocalReply(

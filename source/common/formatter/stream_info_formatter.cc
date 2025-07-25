@@ -112,11 +112,11 @@ ClusterMetadataFormatter::ClusterMetadataFormatter(absl::string_view filter_name
     : MetadataFormatter(filter_namespace, path, max_length,
                         [](const StreamInfo::StreamInfo& stream_info)
                             -> const envoy::config::core::v3::Metadata* {
-                          auto cluster_info = stream_info.upstreamClusterInfo();
-                          if (!cluster_info.has_value() || cluster_info.value() == nullptr) {
+                          const auto& cluster_info = stream_info.upstreamClusterInfo();
+                          if (cluster_info == nullptr) {
                             return nullptr;
                           }
-                          return &cluster_info.value()->metadata();
+                          return &cluster_info->metadata();
                         }) {}
 
 UpstreamHostMetadataFormatter::UpstreamHostMetadataFormatter(
@@ -311,11 +311,7 @@ const absl::flat_hash_map<absl::string_view, CommonDurationFormatter::TimePointG
          }},
         {LastDownstreamRxByteReceived,
          [](const StreamInfo::StreamInfo& stream_info) -> absl::optional<MonotonicTime> {
-           const auto downstream_timing = stream_info.downstreamTiming();
-           if (downstream_timing.has_value()) {
-             return downstream_timing->lastDownstreamRxByteReceived();
-           }
-           return {};
+           return stream_info.downstreamTiming().lastDownstreamRxByteReceived();
          }},
         {UpstreamConnectStart,
          [](const StreamInfo::StreamInfo& stream_info) -> absl::optional<MonotonicTime> {
@@ -375,19 +371,11 @@ const absl::flat_hash_map<absl::string_view, CommonDurationFormatter::TimePointG
          }},
         {FirstDownstreamTxByteSent,
          [](const StreamInfo::StreamInfo& stream_info) -> absl::optional<MonotonicTime> {
-           const auto downstream_timing = stream_info.downstreamTiming();
-           if (downstream_timing.has_value()) {
-             return downstream_timing->firstDownstreamTxByteSent();
-           }
-           return {};
+           return stream_info.downstreamTiming().firstDownstreamTxByteSent();
          }},
         {LastDownstreamTxByteSent,
          [](const StreamInfo::StreamInfo& stream_info) -> absl::optional<MonotonicTime> {
-           const auto downstream_timing = stream_info.downstreamTiming();
-           if (downstream_timing.has_value()) {
-             return downstream_timing->lastDownstreamTxByteSent();
-           }
-           return {};
+           return stream_info.downstreamTiming().lastDownstreamTxByteSent();
          }},
     };
 
@@ -399,11 +387,7 @@ CommonDurationFormatter::getTimePointGetterByName(absl::string_view name) {
   }
 
   return [key = std::string(name)](const StreamInfo::StreamInfo& info) {
-    const auto downstream_timing = info.downstreamTiming();
-    if (downstream_timing.has_value()) {
-      return downstream_timing->getValue(key);
-    }
-    return absl::optional<MonotonicTime>{};
+    return info.downstreamTiming().getValue(key);
   };
 }
 
@@ -1145,33 +1129,32 @@ const StreamInfoFormatterProviderLookupTable& getKnownStreamInfoFormatterProvide
            {CommandSyntaxChecker::COMMAND_ONLY,
             [](absl::string_view, absl::optional<size_t>) {
               return std::make_unique<StreamInfoStringFormatterProvider>(
-                  [](const StreamInfo::StreamInfo& stream_info) {
+                  [](const StreamInfo::StreamInfo& stream_info) -> absl::optional<std::string> {
                     std::string upstream_cluster_name;
-                    if (stream_info.upstreamClusterInfo().has_value() &&
-                        stream_info.upstreamClusterInfo().value() != nullptr) {
-                      upstream_cluster_name =
-                          stream_info.upstreamClusterInfo().value()->observabilityName();
+                    if (const auto& cluster_info = stream_info.upstreamClusterInfo();
+                        cluster_info != nullptr) {
+                      upstream_cluster_name = cluster_info->observabilityName();
                     }
 
                     return upstream_cluster_name.empty()
                                ? absl::nullopt
-                               : absl::make_optional<std::string>(upstream_cluster_name);
+                               : absl::make_optional<std::string>(std::move(upstream_cluster_name));
                   });
             }}},
           {"UPSTREAM_CLUSTER_RAW",
            {CommandSyntaxChecker::COMMAND_ONLY,
             [](absl::string_view, absl::optional<size_t>) {
               return std::make_unique<StreamInfoStringFormatterProvider>(
-                  [](const StreamInfo::StreamInfo& stream_info) {
+                  [](const StreamInfo::StreamInfo& stream_info) -> absl::optional<std::string> {
                     std::string upstream_cluster_name;
-                    if (stream_info.upstreamClusterInfo().has_value() &&
-                        stream_info.upstreamClusterInfo().value() != nullptr) {
-                      upstream_cluster_name = stream_info.upstreamClusterInfo().value()->name();
+                    if (const auto& cluster_info = stream_info.upstreamClusterInfo();
+                        cluster_info != nullptr) {
+                      upstream_cluster_name = cluster_info->name();
                     }
 
                     return upstream_cluster_name.empty()
                                ? absl::nullopt
-                               : absl::make_optional<std::string>(upstream_cluster_name);
+                               : absl::make_optional<std::string>(std::move(upstream_cluster_name));
                   });
             }}},
           {"UPSTREAM_LOCAL_ADDRESS",

@@ -553,7 +553,7 @@ public:
    * @return the upstream SSL connection. This will be nullptr if the upstream
    * connection does not use SSL.
    */
-  virtual Ssl::ConnectionInfoConstSharedPtr upstreamSslConnection() const PURE;
+  virtual const Ssl::ConnectionInfoConstSharedPtr& upstreamSslConnection() const PURE;
 
   /*
    * @return the upstream timing for this stream
@@ -603,7 +603,7 @@ public:
   /**
    * @return upstream host description.
    */
-  virtual Upstream::HostDescriptionConstSharedPtr upstreamHost() const PURE;
+  virtual const Upstream::HostDescriptionConstSharedPtr& upstreamHost() const PURE;
 
   /**
    * Filter State object to be shared between upstream and downstream filters.
@@ -786,7 +786,7 @@ public:
    * @return the downstream timing information.
    */
   virtual DownstreamTiming& downstreamTiming() PURE;
-  virtual OptRef<const DownstreamTiming> downstreamTiming() const PURE;
+  virtual const DownstreamTiming& downstreamTiming() const PURE;
 
   /**
    * @param bytes_sent denotes the number of bytes to add to total sent bytes.
@@ -840,9 +840,9 @@ public:
   virtual const Network::ConnectionInfoProvider& downstreamAddressProvider() const PURE;
 
   /**
-   * @return const Router::RouteConstSharedPtr Get the route selected for this request.
+   * @return const Router::RouteConstSharedPtr& Get the route selected for this request.
    */
-  virtual Router::RouteConstSharedPtr route() const PURE;
+  virtual const Router::RouteConstSharedPtr& route() const PURE;
 
   /**
    * @return const Router::VirtualHostConstSharedPtr& Get the virtual host selected for this
@@ -899,10 +899,8 @@ public:
 
   /**
    * @return Upstream Connection's ClusterInfo.
-   * This returns an optional to differentiate between unset(absl::nullopt),
-   * no route or cluster does not exist(nullptr), and set to a valid cluster(not nullptr).
    */
-  virtual absl::optional<Upstream::ClusterInfoConstSharedPtr> upstreamClusterInfo() const PURE;
+  virtual const Upstream::ClusterInfoConstSharedPtr& upstreamClusterInfo() const PURE;
 
   /**
    * @param provider The unique id implementation this stream uses.

@@ -93,9 +93,7 @@ protected:
   FinalizerImplTest() {
     Upstream::HostDescriptionConstSharedPtr shared_host(host_);
     stream_info.upstreamInfo()->setUpstreamHost(shared_host);
-    ON_CALL(stream_info, upstreamClusterInfo())
-        .WillByDefault(
-            Return(absl::make_optional<Upstream::ClusterInfoConstSharedPtr>(cluster_info_)));
+    stream_info.upstream_cluster_info_ = cluster_info_;
   }
   struct CustomTagCase {
     std::string custom_tag;
@@ -280,10 +278,7 @@ public:
     tracer_ = std::make_shared<TracerImpl>(std::move(driver_ptr), local_info_);
     Upstream::HostDescriptionConstSharedPtr shared_host(host_);
     stream_info_.upstreamInfo()->setUpstreamHost(shared_host);
-
-    ON_CALL(stream_info_, upstreamClusterInfo())
-        .WillByDefault(
-            Return(absl::make_optional<Upstream::ClusterInfoConstSharedPtr>(cluster_info_)));
+    stream_info_.upstream_cluster_info_ = cluster_info_;
   }
 
   Http::TestRequestHeaderMapImpl request_headers_{
