@@ -947,12 +947,9 @@ Http::FilterHeadersStatus OAuth2Filter::signOutUser(const Http::RequestHeaderMap
   }
 
   const std::vector<absl::string_view> cookie_names{
-      config_->cookieNames().oauth_hmac_,
-      config_->cookieNames().bearer_token_,
-      config_->cookieNames().id_token_,
-      config_->cookieNames().refresh_token_,
-      config_->cookieNames().oauth_nonce_,
-      config_->cookieNames().code_verifier_,
+      config_->cookieNames().oauth_hmac_,  config_->cookieNames().bearer_token_,
+      config_->cookieNames().id_token_,    config_->cookieNames().refresh_token_,
+      config_->cookieNames().oauth_nonce_, config_->cookieNames().code_verifier_,
   };
 
   for (const auto& cookie_name : cookie_names) {

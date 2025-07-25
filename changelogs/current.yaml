@@ -79,6 +79,10 @@ bug_fixes:
     removed for requests matching the ``pass_through_matcher`` configuration. This broke setups with multiple OAuth2
     filter instances using different ``pass_through_matcher`` configurations, because the first matching instance removed
     the OAuth2 cookies--even when a passthrough was intended--impacting subsequent filters that still needed those cookies.
+- area: oauth2
+  change: |
+    Fixed an issue where cookies prefixed with ``__Secure-`` or ``__Host-`` were not receiving a
+    Secure attribute.
 
 new_features:
 - area: wasm
