@@ -456,8 +456,10 @@ TEST(ABIImpl, metadata) {
   envoy::config::core::v3::Metadata metadata;
   EXPECT_CALL(stream_info, dynamicMetadata()).WillRepeatedly(testing::ReturnRef(metadata));
   EXPECT_CALL(callbacks, clusterInfo()).WillRepeatedly(testing::Return(nullptr));
-  EXPECT_CALL(stream_info, route()).WillRepeatedly(testing::Return(nullptr));
-  EXPECT_CALL(stream_info, upstreamInfo()).WillRepeatedly(testing::Return(nullptr));
+  stream_info.route_ = nullptr;
+  stream_info.upstream_info_ = nullptr;
+  EXPECT_CALL(stream_info, route()).Times(testing::AtLeast(1));
+  EXPECT_CALL(stream_info, upstreamInfo()).Times(testing::AtLeast(1));
   EXPECT_CALL(testing::Const(stream_info), dynamicMetadata())
       .WillRepeatedly(testing::ReturnRef(metadata));
   filter.setDecoderFilterCallbacks(callbacks);
@@ -523,7 +525,8 @@ TEST(ABIImpl, metadata) {
   const std::string lbendpoint_value = "lbendpoint_value";
   auto upstream_info = std::make_shared<StreamInfo::MockUpstreamInfo>();
   auto upstream_host = std::make_shared<Upstream::MockHostDescription>();
-  EXPECT_CALL(*upstream_info, upstreamHost).WillRepeatedly(testing::Return(upstream_host));
+  upstream_info->upstream_host_ = upstream_host;
+  EXPECT_CALL(*upstream_info, upstreamHost()).Times(testing::AtLeast(1));
   auto locality_metadata = std::make_shared<envoy::config::core::v3::Metadata>();
   locality_metadata->mutable_filter_metadata()->insert({namespace_str, ProtobufWkt::Struct()});
   ProtobufWkt::Value lbendpoint_value_proto;
