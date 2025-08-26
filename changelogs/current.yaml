@@ -70,6 +70,12 @@ bug_fixes:
 - area: oauth2
   change: |
     Removed runtime guard ``envoy.reloadable_features.oauth2_use_refresh_token`` and legacy code paths.
+- area: oauth2
+  change: |
+    Fixed a bug introduced in PR [#40228](https://github.com/envoyproxy/envoy/pull/40228), where OAuth2 cookies were
+    removed for requests matching the ``pass_through_matcher`` configuration. This broke setups with multiple OAuth2
+    filter instances using different ``pass_through_matcher`` configurations, because the first matching instance removed
+    the OAuth2 cookies--even when a passthrough was intended--impacting subsequent filters that still needed those cookies.
 
 new_features:
 - area: wasm
