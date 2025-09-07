@@ -88,7 +88,8 @@ public:
    * @param provider the AWS Metadata provider
    * @return a MetadataFetcher instance
    */
-  static MetadataFetcherPtr create(Upstream::ClusterManager& cm, absl::string_view cluster_name);
+  static MetadataFetcherPtr create(Server::Configuration::CommonFactoryContext& context,
+                                   absl::string_view cluster_name);
 };
 } // namespace Aws
 } // namespace Common

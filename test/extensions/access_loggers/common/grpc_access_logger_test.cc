@@ -1,3 +1,4 @@
+#include <cstdint>
 #include <memory>
 
 #include "envoy/config/core/v3/grpc_service.pb.h"
@@ -60,15 +61,14 @@ public:
   createGrpcAccessLoggClient(
       bool stream, const Grpc::RawAsyncClientSharedPtr& client,
       const Protobuf::MethodDescriptor& service_method,
-      const envoy::extensions::access_loggers::grpc::v3::CommonGrpcAccessLogConfig& config) {
+      const envoy::extensions::access_loggers::grpc::v3::CommonGrpcAccessLogConfig&) {
     if (stream) {
       return std::make_unique<
-          Common::StreamingGrpcAccessLogClient<Protobuf::Struct, Protobuf::Struct>>(
-          client, service_method, GrpcCommon::optionalRetryPolicy(config));
+          Common::StreamingGrpcAccessLogClient<Protobuf::Struct, Protobuf::Struct>>(client,
+                                                                                    service_method);
     }
     return std::make_unique<Common::UnaryGrpcAccessLogClient<Protobuf::Struct, Protobuf::Struct>>(
-        client, service_method, GrpcCommon::optionalRetryPolicy(config),
-        [this]() -> MockGrpcAccessLoggerImpl& { return *this; });
+        client, service_method, [this]() -> MockGrpcAccessLoggerImpl& { return *this; });
   }
 
   int numInits() const { return num_inits_; }
@@ -273,33 +273,12 @@ TEST_F(StreamingGrpcAccessLogTest, StreamFailure) {
   EXPECT_CALL(*async_client_, startRaw(_, _, _, _))
       .WillOnce(
           Invoke([](absl::string_view, absl::string_view, Grpc::RawAsyncStreamCallbacks& callbacks,
-                    const Http::AsyncClient::StreamOptions& options) {
-            EXPECT_FALSE(options.retry_policy.has_value());
+                    const Http::AsyncClient::StreamOptions&) {
             callbacks.onRemoteClose(Grpc::Status::Internal, "bad");
             return nullptr;
           }));
   logger_->log(mockHttpEntry());
   EXPECT_EQ(1, logger_->numInits());
-}
-
-TEST_F(StreamingGrpcAccessLogTest, StreamFailureAndRetry) {
-  config_.mutable_grpc_stream_retry_policy()->mutable_num_retries()->set_value(2);
-  config_.mutable_grpc_stream_retry_policy()
-      ->mutable_retry_back_off()
-      ->mutable_base_interval()
-      ->set_seconds(1);
-  initLogger(FlushInterval, 1);
-
-  EXPECT_CALL(*async_client_, startRaw(_, _, _, _))
-      .WillOnce(
-          Invoke([](absl::string_view, absl::string_view, Grpc::RawAsyncStreamCallbacks&,
-                    const Http::AsyncClient::StreamOptions& options) -> Grpc::RawAsyncStream* {
-            EXPECT_TRUE(options.retry_policy.has_value());
-            EXPECT_TRUE(options.retry_policy.value().has_num_retries());
-            EXPECT_EQ(PROTOBUF_GET_WRAPPED_REQUIRED(options.retry_policy.value(), num_retries), 2);
-            return nullptr;
-          }));
-  logger_->log(mockHttpEntry());
 }
 
 // Test that log entries are batched.
@@ -427,25 +406,6 @@ TEST_F(UnaryGrpcAccessLogTest, BasicFlow) {
             TestUtility::findCounter(stats_store_, "mock_access_log_prefix.logs_dropped")->value());
 }
 
-TEST_F(UnaryGrpcAccessLogTest, FailureAndRetry) {
-  config_.mutable_grpc_stream_retry_policy()->mutable_num_retries()->set_value(2);
-  config_.mutable_grpc_stream_retry_policy()
-      ->mutable_retry_back_off()
-      ->mutable_base_interval()
-      ->set_seconds(1);
-  initLogger(FlushInterval, 1);
-  EXPECT_CALL(*async_client_, sendRaw(_, _, _, _, _, _))
-      .WillOnce(Invoke([](absl::string_view, absl::string_view, Buffer::InstancePtr&&,
-                          Grpc::RawAsyncRequestCallbacks&, Tracing::Span&,
-                          const Http::AsyncClient::RequestOptions& options) -> Grpc::AsyncRequest* {
-        EXPECT_TRUE(options.retry_policy.has_value());
-        EXPECT_TRUE(options.retry_policy.value().has_num_retries());
-        EXPECT_EQ(PROTOBUF_GET_WRAPPED_REQUIRED(options.retry_policy.value(), num_retries), 2);
-        return nullptr;
-      }));
-  logger_->log(mockHttpEntry());
-}
-
 // Test that log entries are batched.
 TEST_F(UnaryGrpcAccessLogTest, Batching) {
   // The approximate log size for buffering is calculated based on each entry's byte size.
@@ -504,13 +464,11 @@ private:
   MockGrpcAccessLoggerImpl::SharedPtr
   createLogger(const envoy::extensions::access_loggers::grpc::v3::CommonGrpcAccessLogConfig& config,
                Event::Dispatcher& dispatcher) override {
-    auto client = THROW_OR_RETURN_VALUE(
-        async_client_manager_.factoryForGrpcService(config.grpc_service(), scope_, true)
-            .value()
-            ->createUncachedRawAsyncClient(),
-        Grpc::RawAsyncClientPtr);
-    return std::make_shared<MockGrpcAccessLoggerImpl>(std::move(client), config, dispatcher, scope_,
-                                                      "mock_access_log_prefix.",
+    auto client_or_error = Common::createRawAsyncClient(config, async_client_manager_, scope_);
+    THROW_IF_NOT_OK_REF(client_or_error.status());
+
+    return std::make_shared<MockGrpcAccessLoggerImpl>(std::move(client_or_error.value()), config,
+                                                      dispatcher, scope_, "mock_access_log_prefix.",
                                                       mockMethodDescriptor(), true);
   }
 };
@@ -519,16 +477,25 @@ class GrpcAccessLoggerCacheTest : public testing::Test {
 public:
   GrpcAccessLoggerCacheTest() : logger_cache_(async_client_manager_, *scope_.rootScope(), tls_) {}
 
-  void expectClientCreation() {
+  void expectClientCreation(absl::optional<uint32_t> num_retries) {
     factory_ = new Grpc::MockAsyncClientFactory;
     async_client_ = new Grpc::MockAsyncClient;
     EXPECT_CALL(async_client_manager_, factoryForGrpcService(_, _, true))
-        .WillOnce(Invoke([this](const envoy::config::core::v3::GrpcService&, Stats::Scope&, bool) {
-          EXPECT_CALL(*factory_, createUncachedRawAsyncClient()).WillOnce(Invoke([this] {
-            return Grpc::RawAsyncClientPtr{async_client_};
-          }));
-          return Grpc::AsyncClientFactoryPtr{factory_};
-        }));
+        .WillOnce(
+            Invoke([this, num_retries](const envoy::config::core::v3::GrpcService& grpc_service,
+                                       Stats::Scope&, bool) {
+              if (num_retries.has_value()) {
+                EXPECT_TRUE(grpc_service.has_retry_policy());
+                EXPECT_EQ(grpc_service.retry_policy().num_retries().value(), num_retries.value());
+              } else {
+                EXPECT_FALSE(grpc_service.has_retry_policy());
+              }
+
+              EXPECT_CALL(*factory_, createUncachedRawAsyncClient()).WillOnce(Invoke([this] {
+                return Grpc::RawAsyncClientPtr{async_client_};
+              }));
+              return Grpc::AsyncClientFactoryPtr{factory_};
+            }));
   }
 
   NiceMock<ThreadLocal::MockInstance> tls_;
@@ -544,18 +511,21 @@ TEST_F(GrpcAccessLoggerCacheTest, Deduplication) {
   config.set_log_name("log-1");
   config.mutable_grpc_service()->mutable_envoy_grpc()->set_cluster_name("cluster-1");
 
-  expectClientCreation();
+  // Enable retries. The retry policy will be populated to the grpc_service.
+  config.mutable_grpc_stream_retry_policy()->mutable_num_retries()->set_value(2);
+
+  expectClientCreation(2);
   MockGrpcAccessLoggerImpl::SharedPtr logger1 =
       logger_cache_.getOrCreateLogger(config, Common::GrpcAccessLoggerType::HTTP);
   EXPECT_EQ(logger1, logger_cache_.getOrCreateLogger(config, Common::GrpcAccessLoggerType::HTTP));
 
   // Do not deduplicate different types of logger
-  expectClientCreation();
+  expectClientCreation(2);
   EXPECT_NE(logger1, logger_cache_.getOrCreateLogger(config, Common::GrpcAccessLoggerType::TCP));
 
   // Changing log name leads to another logger.
   config.set_log_name("log-2");
-  expectClientCreation();
+  expectClientCreation(2);
   EXPECT_NE(logger1, logger_cache_.getOrCreateLogger(config, Common::GrpcAccessLoggerType::HTTP));
 
   config.set_log_name("log-1");
@@ -563,7 +533,7 @@ TEST_F(GrpcAccessLoggerCacheTest, Deduplication) {
 
   // Changing cluster name leads to another logger.
   config.mutable_grpc_service()->mutable_envoy_grpc()->set_cluster_name("cluster-2");
-  expectClientCreation();
+  expectClientCreation(2);
   EXPECT_NE(logger1, logger_cache_.getOrCreateLogger(config, Common::GrpcAccessLoggerType::HTTP));
 }
 

@@ -17,7 +17,9 @@
 #include "source/common/http/header_utility.h"
 #include "source/common/http/headers.h"
 #include "source/common/http/utility.h"
+#include "source/common/protobuf/message_validator_impl.h"
 #include "source/common/protobuf/utility.h"
+#include "source/common/router/config_impl.h"
 #include "source/common/runtime/runtime_features.h"
 
 #include "absl/strings/escaping.h"
@@ -495,8 +497,12 @@ FilterConfig::FilterConfig(
   }
 
   if (proto_config.has_retry_policy()) {
-    retry_policy_ = Http::Utility::convertCoreToRouteRetryPolicy(
+    auto route_retry_policy = Http::Utility::convertCoreToRouteRetryPolicy(
         proto_config.retry_policy(), "5xx,gateway-error,connect-failure,reset");
+    auto policy_or_error = Router::RetryPolicyImpl::create(
+        route_retry_policy, ProtobufMessage::getNullValidationVisitor(), context);
+    THROW_IF_NOT_OK_REF(policy_or_error.status());
+    retry_policy_ = std::move(policy_or_error.value());
   }
 }
 
@@ -1084,7 +1090,7 @@ std::string OAuth2Filter::getExpiresTimeForIdToken(const std::string& id_token,
 }
 
 // Helper function to build the cookie tail string.
-std::string OAuth2Filter::BuildCookieTail(int cookie_type) const {
+std::string OAuth2Filter::buildCookieTail(int cookie_type) const {
   std::string same_site;
   std::string expires_time = expires_in_;
 
@@ -1219,11 +1225,11 @@ void OAuth2Filter::addResponseCookies(Http::ResponseHeaderMap& headers,
   // Set the cookies in the response headers.
   headers.addReferenceKey(
       Http::Headers::get().SetCookie,
-      absl::StrCat(cookie_names.oauth_hmac_, "=", encoded_token, BuildCookieTail(2))); // OAUTH_HMAC
+      absl::StrCat(cookie_names.oauth_hmac_, "=", encoded_token, buildCookieTail(2))); // OAUTH_HMAC
 
   headers.addReferenceKey(Http::Headers::get().SetCookie,
                           absl::StrCat(cookie_names.oauth_expires_, "=", new_expires_,
-                                       BuildCookieTail(3))); // OAUTH_EXPIRES
+                                       buildCookieTail(3))); // OAUTH_EXPIRES
 
   absl::flat_hash_map<std::string, std::string> request_cookies =
       Http::Utility::parseCookies(*request_headers_);
@@ -1236,7 +1242,7 @@ void OAuth2Filter::addResponseCookies(Http::ResponseHeaderMap& headers,
     headers.addReferenceKey(Http::Headers::get().SetCookie,
                             absl::StrCat(cookie_names.bearer_token_, "=",
                                          encryptToken(access_token_),
-                                         BuildCookieTail(1))); // BEARER_TOKEN
+                                         buildCookieTail(1))); // BEARER_TOKEN
   } else if (request_cookies.contains(cookie_names.bearer_token_)) {
     headers.addReferenceKey(
         Http::Headers::get().SetCookie,
@@ -1247,7 +1253,7 @@ void OAuth2Filter::addResponseCookies(Http::ResponseHeaderMap& headers,
   if (!id_token_.empty()) {
     headers.addReferenceKey(Http::Headers::get().SetCookie,
                             absl::StrCat(cookie_names.id_token_, "=", encryptToken(id_token_),
-                                         BuildCookieTail(4))); // ID_TOKEN
+                                         buildCookieTail(4))); // ID_TOKEN
   } else if (request_cookies.contains(cookie_names.id_token_)) {
     headers.addReferenceKey(
         Http::Headers::get().SetCookie,
@@ -1259,7 +1265,7 @@ void OAuth2Filter::addResponseCookies(Http::ResponseHeaderMap& headers,
     headers.addReferenceKey(Http::Headers::get().SetCookie,
                             absl::StrCat(cookie_names.refresh_token_, "=",
                                          encryptToken(refresh_token_),
-                                         BuildCookieTail(5))); // REFRESH_TOKEN
+                                         buildCookieTail(5))); // REFRESH_TOKEN
   } else if (request_cookies.contains(cookie_names.refresh_token_)) {
     headers.addReferenceKey(
         Http::Headers::get().SetCookie,

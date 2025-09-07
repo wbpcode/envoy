@@ -4,6 +4,7 @@
 
 #include "envoy/config/core/v3/config_source.pb.h"
 #include "envoy/event/dispatcher.h"
+#include "envoy/extensions/access_loggers/grpc/v3/als.pb.h"
 #include "envoy/grpc/async_client_manager.h"
 #include "envoy/singleton/instance.h"
 #include "envoy/stats/scope.h"
@@ -14,7 +15,6 @@
 #include "source/common/http/utility.h"
 #include "source/common/protobuf/utility.h"
 #include "source/common/tracing/null_span_impl.h"
-#include "source/extensions/access_loggers/common/grpc_access_logger_utils.h"
 
 #include "absl/container/flat_hash_map.h"
 #include "absl/types/optional.h"
@@ -32,30 +32,12 @@ public:
 
 protected:
   GrpcAccessLogClient(const Grpc::RawAsyncClientSharedPtr& client,
-                      const Protobuf::MethodDescriptor& service_method,
-                      OptRef<const envoy::config::core::v3::RetryPolicy> retry_policy)
-      : client_(client), service_method_(service_method),
-        opts_(createRequestOptionsForRetry(retry_policy)) {}
+                      const Protobuf::MethodDescriptor& service_method)
+      : client_(client), service_method_(service_method) {}
 
   Grpc::AsyncClient<LogRequest, LogResponse> client_;
   const Protobuf::MethodDescriptor& service_method_;
   const Http::AsyncClient::RequestOptions opts_;
-
-private:
-  Http::AsyncClient::RequestOptions
-  createRequestOptionsForRetry(OptRef<const envoy::config::core::v3::RetryPolicy> retry_policy) {
-    auto opt = Http::AsyncClient::RequestOptions();
-
-    if (!retry_policy) {
-      return opt;
-    }
-
-    const auto grpc_retry_policy =
-        Http::Utility::convertCoreToRouteRetryPolicy(*retry_policy, "connect-failure");
-    opt.setBufferBodyForRetry(true);
-    opt.setRetryPolicy(grpc_retry_policy);
-    return opt;
-  }
 };
 
 template <typename LogRequest, typename LogResponse>
@@ -65,9 +47,8 @@ public:
 
   UnaryGrpcAccessLogClient(const Grpc::RawAsyncClientSharedPtr& client,
                            const Protobuf::MethodDescriptor& service_method,
-                           OptRef<const envoy::config::core::v3::RetryPolicy> retry_policy,
                            AsyncRequestCallbacksFactory callback_factory)
-      : GrpcAccessLogClient<LogRequest, LogResponse>(client, service_method, retry_policy),
+      : GrpcAccessLogClient<LogRequest, LogResponse>(client, service_method),
         callbacks_factory_(callback_factory) {}
 
   bool isConnected() override { return false; }
@@ -88,9 +69,8 @@ template <typename LogRequest, typename LogResponse>
 class StreamingGrpcAccessLogClient : public GrpcAccessLogClient<LogRequest, LogResponse> {
 public:
   StreamingGrpcAccessLogClient(const Grpc::RawAsyncClientSharedPtr& client,
-                               const Protobuf::MethodDescriptor& service_method,
-                               OptRef<const envoy::config::core::v3::RetryPolicy> retry_policy)
-      : GrpcAccessLogClient<LogRequest, LogResponse>(client, service_method, retry_policy) {}
+                               const Protobuf::MethodDescriptor& service_method)
+      : GrpcAccessLogClient<LogRequest, LogResponse>(client, service_method) {}
 
 public:
   struct LocalStream : public Grpc::AsyncStreamCallbacks<LogResponse> {
@@ -141,6 +121,28 @@ public:
 
   std::unique_ptr<LocalStream> stream_;
 };
+
+inline absl::StatusOr<Grpc::RawAsyncClientSharedPtr> createRawAsyncClient(
+    const envoy::extensions::access_loggers::grpc::v3::CommonGrpcAccessLogConfig& config,
+    Grpc::AsyncClientManager& async_client_manager, Stats::Scope& scope) {
+  // We pass skip_cluster_check=true to factoryForGrpcService in order to avoid throwing
+  // exceptions in worker threads. Call sites of this getOrCreateLogger must check the cluster
+  // availability via ClusterManager::checkActiveStaticCluster beforehand, and throw exceptions in
+  // the main thread if necessary.
+
+  // If a retry policy is specified in the access log config, we copy it to the grpc_service
+  // so that the async client factory can pick it up. If the a retry policy is also be specified
+  // in the grpc_service, the one in the access log config takes precedence.
+  auto grpc_service_config = config.grpc_service();
+  if (config.has_grpc_stream_retry_policy()) {
+    *grpc_service_config.mutable_retry_policy() = config.grpc_stream_retry_policy();
+  }
+  auto factory_or_error =
+      async_client_manager.factoryForGrpcService(grpc_service_config, scope, true);
+  RETURN_IF_ERROR(factory_or_error.status());
+
+  return factory_or_error.value()->createUncachedRawAsyncClient();
+}
 
 } // namespace Common
 } // namespace AccessLoggers

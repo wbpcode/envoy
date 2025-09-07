@@ -98,19 +98,11 @@ AsyncClient::Stream* AsyncClientImpl::start(AsyncClient::StreamCallbacks& callba
   return active_streams_.front().get();
 }
 
-Router::RetryPolicyConstSharedPtr
-createRetryPolicy(const AsyncClient::StreamOptions& options,
-                  Server::Configuration::CommonFactoryContext& context,
-                  absl::Status& creation_status) {
-  if (options.retry_policy.has_value()) {
-    auto policy_or_error = Router::RetryPolicyImpl::create(
-        options.retry_policy.value(), ProtobufMessage::getNullValidationVisitor(), context);
-    creation_status = policy_or_error.status();
-    return policy_or_error.status().ok() ? std::move(policy_or_error.value())
-                                         : sharedEmptyRetryPolicy();
+Router::RetryPolicyConstSharedPtr createRetryPolicy(const AsyncClient::StreamOptions& options) {
+  if (options.retry_policy != nullptr) {
+    return options.retry_policy;
   }
-  return options.parsed_retry_policy != nullptr ? options.parsed_retry_policy
-                                                : sharedEmptyRetryPolicy();
+  return sharedEmptyRetryPolicy();
 }
 
 AsyncStreamImpl::AsyncStreamImpl(AsyncClientImpl& parent, AsyncClient::StreamCallbacks& callbacks,
@@ -126,8 +118,8 @@ AsyncStreamImpl::AsyncStreamImpl(AsyncClientImpl& parent, AsyncClient::StreamCal
                        : std::make_shared<StreamInfo::FilterStateImpl>(
                              StreamInfo::FilterState::LifeSpan::FilterChain)),
       tracing_config_(Tracing::EgressConfig::get()), local_reply_(*parent.local_reply_),
-      retry_policy_(createRetryPolicy(options, parent.factory_context_, creation_status)),
-      account_(options.account_), buffer_limit_(options.buffer_limit_), send_xff_(options.send_xff),
+      retry_policy_(createRetryPolicy(options)), account_(options.account_),
+      buffer_limit_(options.buffer_limit_), send_xff_(options.send_xff),
       send_internal_(options.send_internal) {
   // A field initialization may set the creation-status as unsuccessful.
   // In that case return immediately.

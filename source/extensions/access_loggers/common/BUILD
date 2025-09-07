@@ -23,16 +23,6 @@ envoy_cc_library(
 )
 
 envoy_cc_library(
-    name = "grpc_access_logger_utils_lib",
-    srcs = ["grpc_access_logger_utils.cc"],
-    hdrs = ["grpc_access_logger_utils.h"],
-    deps = [
-        "//envoy/common:optref_lib",
-        "@envoy_api//envoy/extensions/access_loggers/grpc/v3:pkg_cc_proto",
-    ],
-)
-
-envoy_cc_library(
     name = "file_access_log_lib",
     srcs = ["file_access_log_impl.cc"],
     hdrs = ["file_access_log_impl.h"],
@@ -59,7 +49,6 @@ envoy_cc_library(
     name = "grpc_access_logger_clients_lib",
     hdrs = ["grpc_access_logger_clients.h"],
     deps = [
-        ":grpc_access_logger_utils_lib",
         "//envoy/event:dispatcher_interface",
         "//envoy/grpc:async_client_manager_interface",
         "//envoy/singleton:instance_interface",
@@ -70,6 +59,7 @@ envoy_cc_library(
         "//source/common/protobuf:utility_lib",
         "@com_google_absl//absl/types:optional",
         "@envoy_api//envoy/config/core/v3:pkg_cc_proto",
+        "@envoy_api//envoy/extensions/access_loggers/grpc/v3:pkg_cc_proto",
     ],
 )
 
@@ -78,7 +68,6 @@ envoy_cc_library(
     hdrs = ["grpc_access_logger.h"],
     deps = [
         ":grpc_access_logger_clients_lib",
-        ":grpc_access_logger_utils_lib",
         "//envoy/event:dispatcher_interface",
         "//envoy/grpc:async_client_manager_interface",
         "//envoy/singleton:instance_interface",

@@ -68,15 +68,17 @@ public:
    */
   virtual void fetch(Tracing::Span& parent_span, JwksReceiver& receiver) PURE;
 
-  /*
+  /**
    * Factory method for creating a JwksFetcher.
    * @param cm the cluster manager to use during Jwks retrieval
    * @param remote_jwks the definition of the remote Jwks source
+   * @param retry_policy the pre-parsed retry policy from the remote_jwks config.
    * @return a JwksFetcher instance
    */
   static JwksFetcherPtr
   create(Upstream::ClusterManager& cm,
-         const envoy::extensions::filters::http::jwt_authn::v3::RemoteJwks& remote_jwks);
+         const envoy::extensions::filters::http::jwt_authn::v3::RemoteJwks& remote_jwks,
+         Router::RetryPolicyConstSharedPtr retry_policy);
 };
 } // namespace Common
 } // namespace HttpFilters

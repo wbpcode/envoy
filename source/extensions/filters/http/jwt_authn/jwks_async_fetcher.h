@@ -19,7 +19,10 @@ namespace JwtAuthn {
  *  CreateJwksFetcherCb is a callback interface for creating a JwksFetcher instance.
  */
 using CreateJwksFetcherCb = std::function<Common::JwksFetcherPtr(
-    Upstream::ClusterManager&, const envoy::extensions::filters::http::jwt_authn::v3::RemoteJwks&)>;
+    Upstream::ClusterManager& cm,
+    const envoy::extensions::filters::http::jwt_authn::v3::RemoteJwks&,
+    Router::RetryPolicyConstSharedPtr retry_policy)>;
+
 /**
  *  JwksDoneFetched is a callback interface to set a Jwks when fetch is done.
  */
@@ -57,6 +60,8 @@ private:
   Server::Configuration::FactoryContext& context_;
   // the jwks fetcher creator function
   const CreateJwksFetcherCb create_fetcher_fn_;
+  // Parsed retry policy.
+  Router::RetryPolicyConstSharedPtr retry_policy_;
   // stats
   JwtAuthnFilterStats& stats_;
   // the Jwks done function.

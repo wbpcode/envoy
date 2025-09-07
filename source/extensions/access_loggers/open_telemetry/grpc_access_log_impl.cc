@@ -47,7 +47,7 @@ GrpcAccessLoggerImpl::GrpcAccessLoggerImpl(
               client,
               *Protobuf::DescriptorPool::generated_pool()->FindMethodByName(
                   "opentelemetry.proto.collector.logs.v1.LogsService.Export"),
-              GrpcCommon::optionalRetryPolicy(config.common_config()), genOTelCallbacksFactory())),
+              genOTelCallbacksFactory())),
       stats_({ALL_GRPC_ACCESS_LOGGER_STATS(
           POOL_COUNTER_PREFIX(scope, absl::StrCat(GRPC_LOG_STATS_PREFIX, config.stat_prefix())))}) {
   initMessageRoot(config, local_info);
@@ -110,17 +110,11 @@ GrpcAccessLoggerImpl::SharedPtr GrpcAccessLoggerCacheImpl::createLogger(
     const envoy::extensions::access_loggers::open_telemetry::v3::OpenTelemetryAccessLogConfig&
         config,
     Event::Dispatcher& dispatcher) {
-  // We pass skip_cluster_check=true to factoryForGrpcService in order to avoid throwing
-  // exceptions in worker threads. Call sites of this getOrCreateLogger must check the cluster
-  // availability via ClusterManager::checkActiveStaticCluster beforehand, and throw exceptions in
-  // the main thread if necessary to ensure it does not throw here.
-  auto factory_or_error = async_client_manager_.factoryForGrpcService(
-      config.common_config().grpc_service(), scope_, true);
-  THROW_IF_NOT_OK_REF(factory_or_error.status());
-  auto client = THROW_OR_RETURN_VALUE(factory_or_error.value()->createUncachedRawAsyncClient(),
-                                      Grpc::RawAsyncClientPtr);
-  return std::make_shared<GrpcAccessLoggerImpl>(std::move(client), config, dispatcher, local_info_,
-                                                scope_);
+  auto client_or_error =
+      Common::createRawAsyncClient(config.common_config(), async_client_manager_, scope_);
+  THROW_IF_NOT_OK_REF(client_or_error.status());
+  return std::make_shared<GrpcAccessLoggerImpl>(std::move(client_or_error.value()), config,
+                                                dispatcher, local_info_, scope_);
 }
 
 } // namespace OpenTelemetry

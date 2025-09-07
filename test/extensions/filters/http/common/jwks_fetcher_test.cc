@@ -58,7 +58,7 @@ public:
     mock_factory_ctx_.server_factory_context_.cluster_manager_.initializeThreadLocalClusters(
         {"pubkey_cluster"});
     fetcher_ = JwksFetcher::create(mock_factory_ctx_.server_factory_context_.cluster_manager_,
-                                   remote_jwks_);
+                                   remote_jwks_, nullptr);
     EXPECT_TRUE(fetcher_ != nullptr);
   }
 
@@ -214,8 +214,21 @@ public:
     TestUtility::loadFromYaml(config_str, remote_jwks_);
     mock_factory_ctx_.server_factory_context_.cluster_manager_.initializeThreadLocalClusters(
         {"pubkey_cluster"});
+
+    Router::RetryPolicyConstSharedPtr retry_policy;
+    if (remote_jwks_.has_retry_policy()) {
+      envoy::config::route::v3::RetryPolicy route_retry_policy =
+          Http::Utility::convertCoreToRouteRetryPolicy(remote_jwks_.retry_policy(),
+                                                       "5xx,gateway-error,connect-failure,reset");
+      auto policy_or_error = Router::RetryPolicyImpl::create(
+          route_retry_policy, ProtobufMessage::getNullValidationVisitor(),
+          mock_factory_ctx_.server_factory_context_);
+      ASSERT(policy_or_error.ok());
+      retry_policy = std::move(policy_or_error).value();
+    }
+
     fetcher_ = JwksFetcher::create(mock_factory_ctx_.server_factory_context_.cluster_manager_,
-                                   remote_jwks_);
+                                   remote_jwks_, std::move(retry_policy));
     EXPECT_TRUE(fetcher_ != nullptr);
   }
 
@@ -279,34 +292,25 @@ TEST_P(JwksFetcherRetryingTest, TestCompleteRetryPolicy) {
              const Http::AsyncClient::RequestOptions& options) -> Http::AsyncClient::Request* {
             RetryingParameters const& rp = GetParam();
 
-            EXPECT_TRUE(options.retry_policy.has_value());
+            EXPECT_TRUE(options.retry_policy != nullptr);
             EXPECT_TRUE(options.buffer_body_for_retry);
-            EXPECT_TRUE(options.retry_policy.value().has_num_retries());
-            EXPECT_EQ(PROTOBUF_GET_WRAPPED_REQUIRED(options.retry_policy.value(), num_retries),
-                      rp.expected_num_retries_);
+            EXPECT_EQ(options.retry_policy->numRetries(), rp.expected_num_retries_);
 
-            EXPECT_TRUE(options.retry_policy.value().has_retry_back_off());
-            EXPECT_TRUE(options.retry_policy.value().retry_back_off().has_base_interval());
-            EXPECT_EQ(PROTOBUF_GET_MS_REQUIRED(options.retry_policy.value().retry_back_off(),
-                                               base_interval),
+            EXPECT_TRUE(options.retry_policy->baseInterval().has_value());
+            EXPECT_EQ(options.retry_policy->baseInterval()->count(),
                       rp.expected_backoff_base_interval_ms_);
-            EXPECT_TRUE(options.retry_policy.value().retry_back_off().has_max_interval());
-            EXPECT_EQ(PROTOBUF_GET_MS_REQUIRED(options.retry_policy.value().retry_back_off(),
-                                               max_interval),
+            EXPECT_TRUE(options.retry_policy->maxInterval().has_value());
+            EXPECT_EQ(options.retry_policy->maxInterval()->count(),
                       rp.expected_backoff_max_interval_ms_);
 
-            EXPECT_TRUE(options.retry_policy.value().has_per_try_timeout());
-            EXPECT_LE(PROTOBUF_GET_MS_REQUIRED(options.retry_policy.value().retry_back_off(),
-                                               max_interval),
-                      PROTOBUF_GET_MS_REQUIRED(options.retry_policy.value(), per_try_timeout));
+            EXPECT_LE(options.retry_policy->maxInterval(), options.retry_policy->perTryTimeout());
 
-            const std::string& retry_on = options.retry_policy.value().retry_on();
-            std::set<std::string> retry_on_modes = absl::StrSplit(retry_on, ',');
+            const uint32_t retry_on = options.retry_policy->retryOn();
 
-            EXPECT_EQ(retry_on_modes.count("5xx"), 1);
-            EXPECT_EQ(retry_on_modes.count("gateway-error"), 1);
-            EXPECT_EQ(retry_on_modes.count("connect-failure"), 1);
-            EXPECT_EQ(retry_on_modes.count("reset"), 1);
+            EXPECT_TRUE(retry_on & Router::RetryPolicyImpl::RETRY_ON_5XX);
+            EXPECT_TRUE(retry_on & Router::RetryPolicyImpl::RETRY_ON_GATEWAY_ERROR);
+            EXPECT_TRUE(retry_on & Router::RetryPolicyImpl::RETRY_ON_CONNECT_FAILURE);
+            EXPECT_TRUE(retry_on & Router::RetryPolicyImpl::RETRY_ON_RESET);
 
             return nullptr;
           }));

@@ -2332,17 +2332,6 @@ public:
   NullVirtualHost vhost_;
   NullCommonConfig config_;
 
-  void setProtoRetryPolicy(const std::string& yaml_config) {
-    envoy::config::route::v3::RetryPolicy retry_policy;
-
-    TestUtility::loadFromYaml(yaml_config, retry_policy);
-
-    stream_ = std::move(
-        Http::AsyncStreamImpl::create(client_, stream_callbacks_,
-                                      AsyncClient::StreamOptions().setRetryPolicy(retry_policy))
-            .value());
-  }
-
   void setRetryPolicy(const std::string& yaml_config) {
     envoy::config::route::v3::RetryPolicy proto_policy;
 
@@ -2403,7 +2392,7 @@ retry_back_off:
   max_interval: 30s
 )EOF";
 
-  setProtoRetryPolicy(yaml);
+  setRetryPolicy(yaml);
 
   auto& route_entry = getRouteFromStream();
 
@@ -2429,9 +2418,13 @@ retry_back_off:
 )EOF";
   envoy::config::route::v3::RetryPolicy retry_policy;
   TestUtility::loadFromYaml(yaml, retry_policy);
+  auto policy_or_error = Router::RetryPolicyImpl::create(
+      retry_policy, ProtobufMessage::getNullValidationVisitor(), client_.factory_context_);
+  THROW_IF_NOT_OK_REF(policy_or_error.status());
 
   absl::StatusOr<std::unique_ptr<AsyncStreamImpl>> stream_or_error = Http::AsyncStreamImpl::create(
-      client_, stream_callbacks_, AsyncClient::StreamOptions().setRetryPolicy(retry_policy));
+      client_, stream_callbacks_,
+      AsyncClient::StreamOptions().setRetryPolicy(std::move(policy_or_error.value())));
   EXPECT_FALSE(stream_or_error.ok());
 }
 

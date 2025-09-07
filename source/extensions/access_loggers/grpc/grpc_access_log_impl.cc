@@ -20,14 +20,13 @@ GrpcAccessLoggerImpl::GrpcAccessLoggerImpl(
     const Grpc::RawAsyncClientSharedPtr& client,
     const envoy::extensions::access_loggers::grpc::v3::CommonGrpcAccessLogConfig& config,
     Event::Dispatcher& dispatcher, const LocalInfo::LocalInfo& local_info, Stats::Scope& scope)
-    : GrpcAccessLogger(config, dispatcher, scope, GRPC_LOG_STATS_PREFIX,
-                       std::make_unique<Common::StreamingGrpcAccessLogClient<
-                           envoy::service::accesslog::v3::StreamAccessLogsMessage,
-                           envoy::service::accesslog::v3::StreamAccessLogsResponse>>(
-                           client,
-                           *Protobuf::DescriptorPool::generated_pool()->FindMethodByName(
-                               "envoy.service.accesslog.v3.AccessLogService.StreamAccessLogs"),
-                           GrpcCommon::optionalRetryPolicy(config))),
+    : GrpcAccessLogger(
+          config, dispatcher, scope, GRPC_LOG_STATS_PREFIX,
+          std::make_unique<Common::StreamingGrpcAccessLogClient<
+              envoy::service::accesslog::v3::StreamAccessLogsMessage,
+              envoy::service::accesslog::v3::StreamAccessLogsResponse>>(
+              client, *Protobuf::DescriptorPool::generated_pool()->FindMethodByName(
+                          "envoy.service.accesslog.v3.AccessLogService.StreamAccessLogs"))),
       log_name_(config.log_name()), local_info_(local_info) {}
 
 void GrpcAccessLoggerImpl::addEntry(envoy::data::accesslog::v3::HTTPAccessLogEntry&& entry) {
@@ -57,17 +56,10 @@ GrpcAccessLoggerCacheImpl::GrpcAccessLoggerCacheImpl(Grpc::AsyncClientManager& a
 GrpcAccessLoggerImpl::SharedPtr GrpcAccessLoggerCacheImpl::createLogger(
     const envoy::extensions::access_loggers::grpc::v3::CommonGrpcAccessLogConfig& config,
     Event::Dispatcher& dispatcher) {
-  // We pass skip_cluster_check=true to factoryForGrpcService in order to avoid throwing
-  // exceptions in worker threads. Call sites of this getOrCreateLogger must check the cluster
-  // availability via ClusterManager::checkActiveStaticCluster beforehand, and throw exceptions in
-  // the main thread if necessary.
-  auto factory_or_error =
-      async_client_manager_.factoryForGrpcService(config.grpc_service(), scope_, true);
-  THROW_IF_NOT_OK_REF(factory_or_error.status());
-  return std::make_shared<GrpcAccessLoggerImpl>(
-      THROW_OR_RETURN_VALUE(factory_or_error.value()->createUncachedRawAsyncClient(),
-                            Grpc::RawAsyncClientPtr),
-      config, dispatcher, local_info_, scope_);
+  auto client_or_error = Common::createRawAsyncClient(config, async_client_manager_, scope_);
+  THROW_IF_NOT_OK_REF(client_or_error.status());
+  return std::make_shared<GrpcAccessLoggerImpl>(std::move(client_or_error.value()), config,
+                                                dispatcher, local_info_, scope_);
 }
 
 } // namespace GrpcCommon

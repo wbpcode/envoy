@@ -101,7 +101,7 @@ void IAMRolesAnywhereCredentialsProvider::refresh() {
 
   // Using Http async client to fetch the AWS credentials.
   if (!metadata_fetcher_) {
-    metadata_fetcher_ = create_metadata_fetcher_cb_(context_.clusterManager(), clusterName());
+    metadata_fetcher_ = create_metadata_fetcher_cb_(context_, clusterName());
   } else {
     metadata_fetcher_->cancel(); // Cancel if there is any inflight request.
   }

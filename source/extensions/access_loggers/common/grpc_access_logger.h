@@ -15,7 +15,6 @@
 #include "source/common/protobuf/utility.h"
 #include "source/common/tracing/null_span_impl.h"
 #include "source/extensions/access_loggers/common/grpc_access_logger_clients.h"
-#include "source/extensions/access_loggers/common/grpc_access_logger_utils.h"
 
 #include "absl/container/flat_hash_map.h"
 #include "absl/types/optional.h"

@@ -72,8 +72,7 @@ public:
 
     mock_factory_ctx_.server_factory_context_.cluster_manager_.initializeThreadLocalClusters(
         {"cluster_name"});
-    fetcher_ = MetadataFetcher::create(mock_factory_ctx_.server_factory_context_.cluster_manager_,
-                                       "cluster_name");
+    fetcher_ = MetadataFetcher::create(mock_factory_ctx_.server_factory_context_, "cluster_name");
     EXPECT_TRUE(fetcher_ != nullptr);
   }
 
@@ -85,8 +84,7 @@ public:
 
     mock_factory_ctx_.server_factory_context_.cluster_manager_.initializeThreadLocalClusters(
         {"cluster_name"});
-    fetcher_ = MetadataFetcher::create(mock_factory_ctx_.server_factory_context_.cluster_manager_,
-                                       "cluster_name");
+    fetcher_ = MetadataFetcher::create(mock_factory_ctx_.server_factory_context_, "cluster_name");
     EXPECT_TRUE(fetcher_ != nullptr);
   }
 
@@ -231,8 +229,7 @@ TEST_F(MetadataFetcherTest, TestHttpFailure) {
 
 TEST_F(MetadataFetcherTest, TestClusterNotFound) {
   // Setup without thread local cluster
-  fetcher_ = MetadataFetcher::create(mock_factory_ctx_.server_factory_context_.cluster_manager_,
-                                     "cluster_name");
+  fetcher_ = MetadataFetcher::create(mock_factory_ctx_.server_factory_context_, "cluster_name");
   Http::RequestMessageImpl message;
   MockMetadataReceiver receiver;
 

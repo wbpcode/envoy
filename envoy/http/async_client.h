@@ -330,24 +330,15 @@ public:
       return *this;
     }
 
-    // this should be done with setBufferedBodyForRetry=true ?
-    // The retry policy can be set as either a proto or Router::RetryPolicy but
-    // not both. If both formats of the options are set, the more recent call
-    // will overwrite the older one.
-    StreamOptions& setRetryPolicy(const envoy::config::route::v3::RetryPolicy& p) {
-      retry_policy = p;
-      parsed_retry_policy = nullptr;
-      return *this;
-    }
-
     // The retry policy can be set as either a proto or Router::RetryPolicy but
     // not both. If both formats of the options are set, the more recent call
     // will overwrite the older one.
     StreamOptions& setRetryPolicy(Router::RetryPolicyConstSharedPtr p) {
-      parsed_retry_policy = std::move(p);
-      retry_policy = absl::nullopt;
+      ASSERT(p != nullptr);
+      retry_policy = std::move(p);
       return *this;
     }
+
     StreamOptions& setFilterConfig(const Router::FilterConfigSharedPtr& config) {
       filter_config_ = config;
       return *this;
@@ -431,8 +422,7 @@ public:
 
     absl::optional<uint32_t> buffer_limit_;
 
-    absl::optional<envoy::config::route::v3::RetryPolicy> retry_policy;
-    Router::RetryPolicyConstSharedPtr parsed_retry_policy;
+    Router::RetryPolicyConstSharedPtr retry_policy;
 
     Router::FilterConfigSharedPtr filter_config_;
 

@@ -23,8 +23,9 @@ class JwksFetcherImpl : public JwksFetcher,
                         public Logger::Loggable<Logger::Id::filter>,
                         public Http::AsyncClient::Callbacks {
 public:
-  JwksFetcherImpl(Upstream::ClusterManager& cm, const RemoteJwks& remote_jwks)
-      : cm_(cm), remote_jwks_(remote_jwks) {
+  JwksFetcherImpl(Upstream::ClusterManager& cm, const RemoteJwks& remote_jwks,
+                  Router::RetryPolicyConstSharedPtr retry_policy)
+      : cm_(cm), remote_jwks_(remote_jwks), retry_policy_(std::move(retry_policy)) {
     ENVOY_LOG(trace, "{}", __func__);
   }
 
@@ -68,11 +69,8 @@ public:
                        .setParentSpan(parent_span)
                        .setChildSpanName("JWT Remote PubKey Fetch");
 
-    if (remote_jwks_.has_retry_policy()) {
-      envoy::config::route::v3::RetryPolicy route_retry_policy =
-          Http::Utility::convertCoreToRouteRetryPolicy(remote_jwks_.retry_policy(),
-                                                       "5xx,gateway-error,connect-failure,reset");
-      options.setRetryPolicy(route_retry_policy);
+    if (retry_policy_ != nullptr) {
+      options.setRetryPolicy(std::move(retry_policy_));
       options.setBufferBodyForRetry(true);
     }
 
@@ -126,6 +124,7 @@ private:
   bool complete_{};
   JwksFetcher::JwksReceiver* receiver_{};
   const RemoteJwks& remote_jwks_;
+  Router::RetryPolicyConstSharedPtr retry_policy_;
   Http::AsyncClient::Request* request_{};
 
   void reset() {
@@ -135,11 +134,13 @@ private:
 };
 } // namespace
 
-JwksFetcherPtr JwksFetcher::create(
-    Upstream::ClusterManager& cm,
-    const envoy::extensions::filters::http::jwt_authn::v3::RemoteJwks& remote_jwks) {
-  return std::make_unique<JwksFetcherImpl>(cm, remote_jwks);
+JwksFetcherPtr
+JwksFetcher::create(Upstream::ClusterManager& cm,
+                    const envoy::extensions::filters::http::jwt_authn::v3::RemoteJwks& remote_jwks,
+                    Router::RetryPolicyConstSharedPtr retry_policy) {
+  return std::make_unique<JwksFetcherImpl>(cm, remote_jwks, std::move(retry_policy));
 }
+
 } // namespace Common
 } // namespace HttpFilters
 } // namespace Extensions

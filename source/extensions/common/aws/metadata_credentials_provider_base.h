@@ -24,8 +24,8 @@ struct MetadataCredentialsProviderStats {
 /**
  *  CreateMetadataFetcherCb is a callback interface for creating a MetadataFetcher instance.
  */
-using CreateMetadataFetcherCb =
-    std::function<MetadataFetcherPtr(Upstream::ClusterManager&, absl::string_view)>;
+using CreateMetadataFetcherCb = std::function<MetadataFetcherPtr(
+    Server::Configuration::CommonFactoryContext&, absl::string_view)>;
 
 class MetadataCredentialsProviderBase
     : public CredentialsProvider,

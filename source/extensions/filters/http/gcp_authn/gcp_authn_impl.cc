@@ -3,6 +3,8 @@
 #include "source/common/common/enum_to_int.h"
 #include "source/common/http/header_map_impl.h"
 #include "source/common/http/utility.h"
+#include "source/common/protobuf/message_validator_impl.h"
+#include "source/common/router/config_impl.h"
 
 #include "absl/strings/str_format.h"
 
@@ -60,8 +62,14 @@ void GcpAuthnClient::fetchToken(RequestCallbacks& callbacks, Http::RequestMessag
     envoy::config::route::v3::RetryPolicy route_retry_policy =
         Http::Utility::convertCoreToRouteRetryPolicy(config_.retry_policy(),
                                                      "5xx,gateway-error,connect-failure,reset");
-    options.setRetryPolicy(route_retry_policy);
-    options.setBufferBodyForRetry(true);
+
+    auto policy_or_error = Router::RetryPolicyImpl::create(
+        route_retry_policy, ProtobufMessage::getNullValidationVisitor(),
+        context_.serverFactoryContext());
+    if (policy_or_error.ok()) {
+      options.setRetryPolicy(std::move(policy_or_error).value());
+      options.setBufferBodyForRetry(true);
+    }
   }
 
   active_request_ =

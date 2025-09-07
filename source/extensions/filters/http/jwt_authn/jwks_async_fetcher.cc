@@ -1,6 +1,9 @@
 #include "source/extensions/filters/http/jwt_authn/jwks_async_fetcher.h"
 
+#include "source/common/http/utility.h"
+#include "source/common/protobuf/message_validator_impl.h"
 #include "source/common/protobuf/utility.h"
+#include "source/common/router/config_impl.h"
 #include "source/common/tracing/http_tracer_impl.h"
 
 using envoy::extensions::filters::http::jwt_authn::v3::JwksAsyncFetch;
@@ -40,6 +43,18 @@ JwksAsyncFetcher::JwksAsyncFetcher(const RemoteJwks& remote_jwks,
     : remote_jwks_(remote_jwks), context_(context), create_fetcher_fn_(create_fetcher_fn),
       stats_(stats), done_fn_(done_fn),
       debug_name_(absl::StrCat("Jwks async fetching url=", remote_jwks_.http_uri().uri())) {
+
+  if (remote_jwks.has_retry_policy()) {
+    envoy::config::route::v3::RetryPolicy route_retry_policy =
+        Http::Utility::convertCoreToRouteRetryPolicy(remote_jwks_.retry_policy(),
+                                                     "5xx,gateway-error,connect-failure,reset");
+    auto policy_or_error = Router::RetryPolicyImpl::create(
+        route_retry_policy, ProtobufMessage::getNullValidationVisitor(),
+        context.serverFactoryContext());
+    THROW_IF_NOT_OK_REF(policy_or_error.status());
+    retry_policy_ = std::move(policy_or_error).value();
+  }
+
   // if async_fetch is not enabled, do nothing.
   if (!remote_jwks_.has_async_fetch()) {
     return;
@@ -84,7 +99,8 @@ void JwksAsyncFetcher::fetch() {
   }
 
   ENVOY_LOG(debug, "{}: started", debug_name_);
-  fetcher_ = create_fetcher_fn_(context_.serverFactoryContext().clusterManager(), remote_jwks_);
+  fetcher_ = create_fetcher_fn_(context_.serverFactoryContext().clusterManager(), remote_jwks_,
+                                retry_policy_);
   fetcher_->fetch(Tracing::NullSpan::instance(), *this);
 }
 

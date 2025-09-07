@@ -3,6 +3,8 @@
 #include "source/common/common/enum_to_int.h"
 #include "source/common/http/message_impl.h"
 #include "source/common/http/utility.h"
+#include "source/common/protobuf/message_validator_impl.h"
+#include "source/common/router/config_impl.h"
 
 namespace Envoy {
 namespace Extensions {
@@ -11,13 +13,38 @@ namespace Aws {
 
 namespace {
 
+Router::RetryPolicyConstSharedPtr
+createDefaultRetryPolicy(Server::Configuration::CommonFactoryContext& context) {
+  const static Router::RetryPolicyConstSharedPtr policy = [&context]() {
+    constexpr uint64_t MAX_RETRIES = 3;
+    constexpr uint64_t RETRY_DELAY = 1000;
+    constexpr uint64_t TIMEOUT = 5 * 1000;
+
+    envoy::config::route::v3::RetryPolicy route_retry_policy;
+    route_retry_policy.mutable_num_retries()->set_value(MAX_RETRIES);
+    route_retry_policy.mutable_per_try_timeout()->CopyFrom(
+        Protobuf::util::TimeUtil::MillisecondsToDuration(TIMEOUT));
+    route_retry_policy.mutable_per_try_idle_timeout()->CopyFrom(
+        Protobuf::util::TimeUtil::MillisecondsToDuration(RETRY_DELAY));
+    route_retry_policy.set_retry_on("5xx,gateway-error,connect-failure,reset,refused-stream");
+
+    auto policy_or_error = Router::RetryPolicyImpl::create(
+        route_retry_policy, ProtobufMessage::getNullValidationVisitor(), context);
+    ASSERT(policy_or_error.ok());
+    return std::move(policy_or_error).value();
+  }();
+
+  return policy;
+}
+
 class MetadataFetcherImpl : public MetadataFetcher,
                             public Logger::Loggable<Logger::Id::aws>,
                             public Http::AsyncClient::Callbacks {
 
 public:
-  MetadataFetcherImpl(Upstream::ClusterManager& cm, absl::string_view cluster_name)
-      : cm_(cm), cluster_name_(std::string(cluster_name)) {}
+  MetadataFetcherImpl(Server::Configuration::CommonFactoryContext& context,
+                      absl::string_view cluster_name)
+      : context_(context), cluster_name_(std::string(cluster_name)) {}
 
   // TODO(suniltheta): Verify that bypassing virtual dispatch here was intentional
   ~MetadataFetcherImpl() override { MetadataFetcherImpl::cancel(); }
@@ -49,12 +76,13 @@ public:
     complete_ = false;
     receiver_ = makeOptRef(receiver);
 
+    auto& cm = context_.clusterManager();
     // Stop processing if we are shutting down
-    if (cm_.isShutdown()) {
+    if (cm.isShutdown()) {
       return;
     }
 
-    const auto thread_local_cluster = cm_.getThreadLocalCluster(cluster_name_);
+    const auto thread_local_cluster = cm.getThreadLocalCluster(cluster_name_);
     if (thread_local_cluster == nullptr) {
       ENVOY_LOG(error, "{} AWS Metadata failed: [cluster = {}] not found", __func__, cluster_name_);
       complete_ = true;
@@ -63,8 +91,6 @@ public:
       return;
     }
 
-    constexpr uint64_t MAX_RETRIES = 3;
-    constexpr uint64_t RETRY_DELAY = 1000;
     constexpr uint64_t TIMEOUT = 5 * 1000;
 
     const auto host_attributes = Http::Utility::parseAuthority(message.headers().getHostValue());
@@ -111,18 +137,10 @@ public:
                        .setTimeout(std::chrono::milliseconds(TIMEOUT))
                        .setParentSpan(parent_span)
                        .setSendXff(false)
-                       .setChildSpanName("AWS Metadata Fetch");
+                       .setChildSpanName("AWS Metadata Fetch")
+                       .setRetryPolicy(createDefaultRetryPolicy(context_))
+                       .setBufferBodyForRetry(true);
 
-    envoy::config::route::v3::RetryPolicy route_retry_policy;
-    route_retry_policy.mutable_num_retries()->set_value(MAX_RETRIES);
-    route_retry_policy.mutable_per_try_timeout()->CopyFrom(
-        Protobuf::util::TimeUtil::MillisecondsToDuration(TIMEOUT));
-    route_retry_policy.mutable_per_try_idle_timeout()->CopyFrom(
-        Protobuf::util::TimeUtil::MillisecondsToDuration(RETRY_DELAY));
-    route_retry_policy.set_retry_on("5xx,gateway-error,connect-failure,reset,refused-stream");
-
-    options.setRetryPolicy(route_retry_policy);
-    options.setBufferBodyForRetry(true);
     request_ = makeOptRefFromPtr(
         thread_local_cluster->httpAsyncClient().send(std::move(messagePtr), *this, options));
   }
@@ -173,7 +191,7 @@ public:
 
 private:
   bool complete_{};
-  Upstream::ClusterManager& cm_;
+  Server::Configuration::CommonFactoryContext& context_;
   const std::string cluster_name_;
   OptRef<MetadataFetcher::MetadataReceiver> receiver_;
   OptRef<Http::AsyncClient::Request> request_;
@@ -182,9 +200,9 @@ private:
 };
 } // namespace
 
-MetadataFetcherPtr MetadataFetcher::create(Upstream::ClusterManager& cm,
+MetadataFetcherPtr MetadataFetcher::create(Server::Configuration::CommonFactoryContext& context,
                                            absl::string_view cluster_name) {
-  return std::make_unique<MetadataFetcherImpl>(cm, cluster_name);
+  return std::make_unique<MetadataFetcherImpl>(context, cluster_name);
 }
 } // namespace Aws
 } // namespace Common
