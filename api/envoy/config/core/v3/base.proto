@@ -480,6 +480,21 @@ message HeaderValueOption {
   bool keep_empty_value = 4;
 }
 
+// The HeaderMutation structure specifies an action that may be taken on HTTP
+// headers.
+message HeaderMutation {
+  oneof action {
+    option (validate.required) = true;
+
+    // Remove the specified header if it exists.
+    string remove = 1
+        [(validate.rules).string = {well_known_regex: HTTP_HEADER_VALUE strict: false}];
+
+    // Append new header by the specified HeaderValueOption.
+    HeaderValueOption append = 2;
+  }
+}
+
 // Wrapper for a set of headers.
 message HeaderMap {
   option (udpa.annotations.versioning).previous_message_type = "envoy.api.v2.core.HeaderMap";

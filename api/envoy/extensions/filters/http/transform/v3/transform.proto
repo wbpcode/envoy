@@ -1,0 +1,59 @@
+syntax = "proto3";
+
+package envoy.extensions.filters.http.transform.v3;
+
+import "envoy/config/core/v3/base.proto";
+import "envoy/extensions/filters/common/set_filter_state/v3/value.proto";
+import "envoy/config/core/v3/substitution_format_string.proto";
+import "google/protobuf/wrappers.proto";
+
+import "udpa/annotations/status.proto";
+
+option java_package = "io.envoyproxy.envoy.extensions.filters.http.transform.v3";
+option java_outer_classname = "HeaderMutationProto";
+option java_multiple_files = true;
+option go_package = "github.com/envoyproxy/go-control-plane/envoy/extensions/filters/http/transform/v3;transformv3";
+option (udpa.annotations.file_status).package_version_status = ACTIVE;
+
+// [#protodoc-title: Transform filter configuration]
+// Transform filter :ref:`configuration overview <config_http_filters_transform>` to perform
+// HTTP header and body transformations.
+// [#extension: envoy.filters.http.transform]
+
+enum ContentType {
+  // Default value. If body_format_string is set, the body will be treated as JSON.
+  UNSPECIFIED = 0;
+
+  // JSON content type.
+  APPLICATION_JSON = 1;
+}
+
+message Transform {
+  // The header mutations to perform.
+  repeated config.core.v3.HeaderMutation headers_mutations = 1;
+
+  // Values to set in filter state.
+  repeated common.set_filter_state.v3.FilterStateValue filter_state_values = 2;
+
+  // Body transformation configuration.
+  config.core.v3.SubstitutionFormatString body_format_string = 3;
+
+  // If set the result of ``body_format_string`` will be treated as a patch and will be merged
+  // to the existing body. If not set, the result of ``body_format_string`` will replace
+  // the existing body.
+  // True by default.
+  google.protobuf.BoolValue patch_format_string = 4;
+
+  // The original content type of the body before transformation. Although content-type header
+  // also indicates the content type, it may be changed by other filters.
+  // This field is used to determine how to parse the original body.
+  ContentType body_content_type = 5;
+}
+
+message TransformConfig {
+  // Configuration for transforming request.
+  Transform request_transform = 1;
+
+  // Configuration for transforming response.
+  Transform response_transform = 2;
+}
