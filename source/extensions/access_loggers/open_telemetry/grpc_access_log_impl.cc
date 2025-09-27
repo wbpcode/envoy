@@ -110,17 +110,15 @@ GrpcAccessLoggerImpl::SharedPtr GrpcAccessLoggerCacheImpl::createLogger(
     const envoy::extensions::access_loggers::open_telemetry::v3::OpenTelemetryAccessLogConfig&
         config,
     Event::Dispatcher& dispatcher) {
-  // We pass skip_cluster_check=true to factoryForGrpcService in order to avoid throwing
+  // We pass skip_cluster_check=true to getOrCreateRawAsyncClient in order to avoid throwing
   // exceptions in worker threads. Call sites of this getOrCreateLogger must check the cluster
   // availability via ClusterManager::checkActiveStaticCluster beforehand, and throw exceptions in
   // the main thread if necessary to ensure it does not throw here.
-  auto factory_or_error = async_client_manager_.factoryForGrpcService(
+  auto client_or_error = async_client_manager_.getOrCreateRawAsyncClient(
       config.common_config().grpc_service(), scope_, true);
-  THROW_IF_NOT_OK_REF(factory_or_error.status());
-  auto client = THROW_OR_RETURN_VALUE(factory_or_error.value()->createUncachedRawAsyncClient(),
-                                      Grpc::RawAsyncClientPtr);
-  return std::make_shared<GrpcAccessLoggerImpl>(std::move(client), config, dispatcher, local_info_,
-                                                scope_);
+  THROW_IF_NOT_OK_REF(client_or_error.status());
+  return std::make_shared<GrpcAccessLoggerImpl>(std::move(client_or_error.value()), config,
+                                                dispatcher, local_info_, scope_);
 }
 
 } // namespace OpenTelemetry

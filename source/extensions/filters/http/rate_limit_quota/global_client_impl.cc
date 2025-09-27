@@ -53,17 +53,12 @@ GlobalRateLimitClientImpl::GlobalRateLimitClientImpl(
       main_dispatcher_(main_dispatcher) {
   ASSERT_IS_MAIN_OR_TEST_THREAD();
 
-  absl::StatusOr<Grpc::AsyncClientFactoryPtr> rlqs_stream_client_factory =
+  auto rlqs_stream_client =
       context.serverFactoryContext()
           .clusterManager()
           .grpcAsyncClientManager()
-          .factoryForGrpcService(config_with_hash_key.config(), context.scope(), true);
-  if (!rlqs_stream_client_factory.ok()) {
-    throw EnvoyException(std::string(rlqs_stream_client_factory.status().message()));
-  }
+          .getOrCreateRawAsyncClientWithHashKey(config_with_hash_key, context.scope(), true);
 
-  absl::StatusOr<Grpc::RawAsyncClientPtr> rlqs_stream_client =
-      (*rlqs_stream_client_factory)->createUncachedRawAsyncClient();
   if (!rlqs_stream_client.ok()) {
     throw EnvoyException(std::string(rlqs_stream_client.status().message()));
   }

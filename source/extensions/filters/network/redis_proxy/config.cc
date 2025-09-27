@@ -129,8 +129,9 @@ Network::FilterFactoryCb RedisProxyFilterConfigFactory::createFilterFactoryFromP
           std::move(custom_commands));
 
   auto has_external_auth_provider_ = proto_config.has_external_auth_provider();
-  auto grpc_service = proto_config.external_auth_provider().grpc_service();
-  auto timeout_ms = PROTOBUF_GET_MS_OR_DEFAULT(grpc_service, timeout, 200);
+  auto grpc_service =
+      Grpc::GrpcServiceConfigWithHashKey(proto_config.external_auth_provider().grpc_service());
+  auto timeout_ms = PROTOBUF_GET_MS_OR_DEFAULT(grpc_service.config(), timeout, 200);
 
   return [has_external_auth_provider_, grpc_service, &context, splitter, filter_config,
           timeout_ms](Network::FilterManager& filter_manager) -> void {
@@ -142,14 +143,11 @@ Network::FilterFactoryCb RedisProxyFilterConfigFactory::createFilterFactoryFromP
           context.serverFactoryContext()
               .clusterManager()
               .grpcAsyncClientManager()
-              .factoryForGrpcService(grpc_service, context.scope(), true);
+              .getOrCreateRawAsyncClientWithHashKey(grpc_service, context.scope(), true);
       THROW_IF_NOT_OK_REF(auth_client_factory_or_error.status());
 
       auth_client = std::make_unique<ExternalAuth::GrpcExternalAuthClient>(
-          THROW_OR_RETURN_VALUE(
-              auth_client_factory_or_error.value()->createUncachedRawAsyncClient(),
-              Grpc::RawAsyncClientPtr),
-          std::chrono::milliseconds(timeout_ms));
+          std::move(auth_client_factory_or_error.value()), std::chrono::milliseconds(timeout_ms));
     }
 
     filter_manager.addReadFilter(std::make_shared<ProxyFilter>(

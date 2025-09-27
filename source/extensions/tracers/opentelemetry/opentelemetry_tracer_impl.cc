@@ -95,14 +95,12 @@ Driver::Driver(const envoy::config::trace::v3::OpenTelemetryConfig& opentelemetr
                       sampler](Event::Dispatcher& dispatcher) {
     OpenTelemetryTraceExporterPtr exporter;
     if (opentelemetry_config.has_grpc_service()) {
-      auto factory_or_error =
-          factory_context.clusterManager().grpcAsyncClientManager().factoryForGrpcService(
+      auto client_or_error =
+          factory_context.clusterManager().grpcAsyncClientManager().getOrCreateRawAsyncClient(
               opentelemetry_config.grpc_service(), factory_context.scope(), true);
-      THROW_IF_NOT_OK_REF(factory_or_error.status());
-      Grpc::AsyncClientFactoryPtr&& factory = std::move(factory_or_error.value());
-      const Grpc::RawAsyncClientSharedPtr& async_client_shared_ptr =
-          THROW_OR_RETURN_VALUE(factory->createUncachedRawAsyncClient(), Grpc::RawAsyncClientPtr);
-      exporter = std::make_unique<OpenTelemetryGrpcTraceExporter>(async_client_shared_ptr);
+      THROW_IF_NOT_OK_REF(client_or_error.status());
+      exporter =
+          std::make_unique<OpenTelemetryGrpcTraceExporter>(std::move(client_or_error.value()));
     } else if (opentelemetry_config.has_http_service()) {
       exporter = std::make_unique<OpenTelemetryHttpTraceExporter>(
           factory_context.clusterManager(), opentelemetry_config.http_service());

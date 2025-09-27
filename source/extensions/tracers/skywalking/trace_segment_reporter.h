@@ -21,7 +21,7 @@ using cpp2sky::TracingContextSharedPtr;
 class TraceSegmentReporter : public Logger::Loggable<Logger::Id::tracing>,
                              public Grpc::AsyncStreamCallbacks<skywalking::v3::Commands> {
 public:
-  explicit TraceSegmentReporter(Grpc::AsyncClientFactoryPtr&& factory,
+  explicit TraceSegmentReporter(Grpc::RawAsyncClientSharedPtr&& client,
                                 Event::Dispatcher& dispatcher, Random::RandomGenerator& random,
                                 SkyWalkingTracerStatsSharedPtr stats, uint32_t delayed_buffer_size,
                                 const std::string& token);

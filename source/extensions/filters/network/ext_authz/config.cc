@@ -28,17 +28,16 @@ Network::FilterFactoryCb ExtAuthzConfigFactory::createFilterFactoryFromProtoType
   const uint32_t timeout_ms = PROTOBUF_GET_MS_OR_DEFAULT(proto_config.grpc_service(), timeout, 200);
 
   THROW_IF_NOT_OK(Envoy::Config::Utility::checkTransportVersion(proto_config));
-  return [grpc_service = proto_config.grpc_service(), &context, ext_authz_config,
-          timeout_ms](Network::FilterManager& filter_manager) -> void {
-    auto factory_or_error = context.serverFactoryContext()
-                                .clusterManager()
-                                .grpcAsyncClientManager()
-                                .factoryForGrpcService(grpc_service, context.scope(), true);
-    THROW_IF_NOT_OK_REF(factory_or_error.status());
+  return [grpc_service = Grpc::GrpcServiceConfigWithHashKey(proto_config.grpc_service()), &context,
+          ext_authz_config, timeout_ms](Network::FilterManager& filter_manager) -> void {
+    auto client_or_error =
+        context.serverFactoryContext()
+            .clusterManager()
+            .grpcAsyncClientManager()
+            .getOrCreateRawAsyncClientWithHashKey(grpc_service, context.scope(), true);
+    THROW_IF_NOT_OK_REF(client_or_error.status());
     auto client = std::make_unique<Filters::Common::ExtAuthz::GrpcClientImpl>(
-        THROW_OR_RETURN_VALUE(factory_or_error.value()->createUncachedRawAsyncClient(),
-                              Grpc::RawAsyncClientPtr),
-        std::chrono::milliseconds(timeout_ms));
+        std::move(client_or_error.value()), std::chrono::milliseconds(timeout_ms));
     filter_manager.addReadFilter(Network::ReadFilterSharedPtr{
         std::make_shared<Filter>(ext_authz_config, std::move(client))});
   };
