@@ -10,3 +10,6 @@
   - CVE-2025-27818: kafka
   - CVE-2024-51745: wasmtime
   - CVE-2025-53901: wasmtime
+
+  - c-ares/CVE-2025-0913:
+      Use after free can crash Envoy due to malfunctioning or compromised DNS.
