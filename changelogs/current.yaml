@@ -27,6 +27,14 @@ behavior_changes:
 
 minor_behavior_changes:
 # *Changes that may cause incompatibilities for some users, but should not for most*
+- area: http
+  change: |
+    Fixed downstream stream reset behavior when upstream has a protocol error. Previously, when the
+    upstream connection had a protocol error (``UpstreamProtocolError`` flag), Envoy would reset the
+    downstream stream with ``PROTOCOL_ERROR``, incorrectly suggesting the downstream client violated
+    the protocol. Now Envoy resets with ``INTERNAL_ERROR`` (or ``NO_ERROR`` depending on the
+    ``envoy.reloadable_features.reset_with_error`` runtime flag), which correctly indicates an
+    internal issue rather than a downstream protocol violation.
 - area: router
   change: |
     Added :ref:`host_rewrite <envoy_v3_api_field_config.route.v3.RouteAction.host_rewrite>` and
