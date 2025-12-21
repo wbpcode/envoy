@@ -288,14 +288,11 @@ void ConnectionManagerImpl::doEndStream(ActiveStream& stream, bool check_for_def
     } else {
       const bool reset_with_error =
           Runtime::runtimeFeatureEnabled("envoy.reloadable_features.reset_with_error");
-      // TODO(wbpcode): We may should not propagate UpstreamProtocolError to downstream as that
-      // indicates an error on the upstream connection and may have nothing to do with the
-      // downstream.
-      if (stream.filter_manager_.streamInfo().hasResponseFlag(
-              StreamInfo::CoreResponseFlag::UpstreamProtocolError)) {
-        stream.response_encoder_->getStream().resetStream(StreamResetReason::ProtocolError);
-      } else if (reset_with_error && stream.filter_manager_.streamInfo().hasResponseFlag(
-                                         StreamInfo::CoreResponseFlag::DownstreamProtocolError)) {
+      // UpstreamProtocolError should not be propagated to downstream as ProtocolError because it
+      // indicates an error on the upstream connection and has nothing to do with the downstream
+      // protocol. The downstream should be reset with LocalReset instead.
+      if (reset_with_error && stream.filter_manager_.streamInfo().hasResponseFlag(
+                                  StreamInfo::CoreResponseFlag::DownstreamProtocolError)) {
         stream.response_encoder_->getStream().resetStream(StreamResetReason::ProtocolError);
       } else {
         stream.response_encoder_->getStream().resetStream(StreamResetReason::LocalReset);
