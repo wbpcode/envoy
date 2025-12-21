@@ -3570,13 +3570,16 @@ TEST_P(MultiplexedIntegrationTestWithSimulatedTimeHttp2Only, ResetPropogation) {
   {
     size_t log_num = 0;
     if (GetParam().http2_implementation == Http2Impl::Oghttp2) {
-      log_num = 2;
+      log_num = 1;
     } else {
-      log_num = 4;
+      log_num = 2;
     }
 
-    // The ProtocolError will be translated to OGHTTP2_PROTOCOL_ERROR (1).
-    EXPECT_LOG_CONTAINS_N_TIMES("debug", "closed: 1", log_num, {
+    // When upstream sends ProtocolError, it gets translated to UpstreamProtocolError flag.
+    // To avoid confusing downstream clients, this is not propagated as ProtocolError to
+    // downstream (which would suggest the downstream violated protocol). Instead, downstream
+    // receives LocalReset, which translates to OGHTTP2_INTERNAL_ERROR (2).
+    EXPECT_LOG_CONTAINS_N_TIMES("debug", "closed: 2", log_num, {
       codec_client_ = makeHttpConnection(lookupPort("http"));
       auto encoder_decoder = codec_client_->startRequest(default_request_headers_);
       auto response = std::move(encoder_decoder.second);
@@ -3587,7 +3590,7 @@ TEST_P(MultiplexedIntegrationTestWithSimulatedTimeHttp2Only, ResetPropogation) {
       // is not complete yet, it will finally result in resetting of the downstream stream.
       upstream_request_->encodeResetStream(Http::StreamResetReason::ProtocolError);
       ASSERT_TRUE(response->waitForReset());
-      EXPECT_EQ(Http::StreamResetReason::ProtocolError, response->resetReason());
+      EXPECT_EQ(Http::StreamResetReason::LocalReset, response->resetReason());
 
       cleanupUpstreamAndDownstream();
     });
