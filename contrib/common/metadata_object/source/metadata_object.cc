@@ -70,7 +70,7 @@ Envoy::ProtobufTypes::MessagePtr WorkloadMetadataObject::serializeAsProto() cons
   if (!workload_name_.empty()) {
     (*message->mutable_fields())[WorkloadNameToken].set_string_value(workload_name_);
   }
-  if (!cluster_name_.empty()) {
+  if (!instance_name_.empty()) {
     (*message->mutable_fields())[InstanceNameToken].set_string_value(instance_name_);
   }
   if (!cluster_name_.empty()) {
