@@ -15,6 +15,7 @@ CONTRIB_EXTENSIONS = {
     "envoy.filters.http.golang":                                "//contrib/golang/filters/http/source:config",
     "envoy.filters.http.language":                              "//contrib/language/filters/http/source:config_lib",
     "envoy.filters.http.peak_ewma":                             "//contrib/peak_ewma/filters/http/source:config",
+    "envoy.filters.http.peer_metadata":                         "//contrib/peer_metadata/filters/http/source:config",
     "envoy.filters.http.sxg":                                   "//contrib/sxg/filters/http/source:config",
 
     #
