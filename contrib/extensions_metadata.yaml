@@ -151,6 +151,13 @@ envoy.filters.http.peak_ewma:
   status: alpha
   type_urls:
   - envoy.extensions.filters.http.peak_ewma.v3alpha.PeakEwmaConfig
+envoy.filters.http.peer_metadata:
+  categories:
+  - envoy.filters.http
+  security_posture: requires_trusted_downstream_and_upstream
+  status: alpha
+  type_urls:
+  - envoy.extensions.filters.http.peer_metadata.v3alpha.PeerMetadataConfig
 envoy.load_balancing_policies.peak_ewma:
   categories:
   - envoy.load_balancing_policies
