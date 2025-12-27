@@ -252,8 +252,7 @@ convertStructToWorkloadMetadata(const google::protobuf::Struct& metadata,
           app_name = labels_it.second.string_value();
         } else if (labels_it.first == AppVersionLabel) {
           app_version = labels_it.second.string_value();
-        } else if (!additional_labels.empty() &&
-                   additional_labels.contains(std::string(labels_it.first))) {
+        } else if (additional_labels.contains(std::string(labels_it.first))) {
           labels.push_back(
               {std::string(labels_it.first), std::string(labels_it.second.string_value())});
         }
