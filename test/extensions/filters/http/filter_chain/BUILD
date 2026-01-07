@@ -22,6 +22,7 @@ envoy_extension_cc_test(
         "//source/extensions/filters/http/filter_chain:filter_lib",
         "//test/mocks/server:factory_context_mocks",
         "//test/mocks/server:instance_mocks",
+        "//test/test_common:utility_lib",
     ],
 )
 
@@ -39,6 +40,7 @@ envoy_extension_cc_test(
         "//test/mocks/http:http_mocks",
         "//test/mocks/server:factory_context_mocks",
         "//test/mocks/server:instance_mocks",
+        "//test/test_common:utility_lib",
     ],
 )
 
@@ -59,6 +61,7 @@ envoy_extension_cc_test(
         "//test/integration/filters:add_header_filter_config_lib",
         "//test/integration/filters:set_response_code_filter_config_proto_cc_proto",
         "//test/integration/filters:set_response_code_filter_lib",
+        "@envoy_api//envoy/extensions/filters/http/buffer/v3:pkg_cc_proto",
         "@envoy_api//envoy/extensions/filters/http/filter_chain/v3:pkg_cc_proto",
         "@envoy_api//envoy/extensions/filters/network/http_connection_manager/v3:pkg_cc_proto",
     ],
