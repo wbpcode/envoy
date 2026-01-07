@@ -201,13 +201,13 @@ void DelegatedFilterChain::encodeComplete() {
 
 void DelegatedFilterChain::onDestroy() {
   for (auto& filter : filters_) {
-    static_cast<Http::StreamDecoderFilter&>(*filter).onDestroy();
+    filter->onDestroy();
   }
 }
 
 void DelegatedFilterChain::onStreamComplete() {
   for (auto& filter : filters_) {
-    static_cast<Http::StreamDecoderFilter&>(*filter).onStreamComplete();
+    filter->onStreamComplete();
   }
 }
 
@@ -469,13 +469,13 @@ void Filter::encodeComplete() {
 
 void Filter::onDestroy() {
   if (delegated_filter_) {
-    static_cast<Http::StreamDecoderFilter&>(*delegated_filter_).onDestroy();
+    delegated_filter_->onDestroy();
   }
 }
 
 void Filter::onStreamComplete() {
   if (delegated_filter_) {
-    static_cast<Http::StreamDecoderFilter&>(*delegated_filter_).onStreamComplete();
+    delegated_filter_->onStreamComplete();
   }
 }
 
