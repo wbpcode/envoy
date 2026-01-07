@@ -6,6 +6,7 @@
 
 #include "test/mocks/server/factory_context.h"
 #include "test/mocks/server/instance.h"
+#include "test/test_common/utility.h"
 
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
@@ -96,11 +97,10 @@ TEST(FilterChainFilterFactoryTest, FilterChainFilterEmptyProto) {
 TEST(FilterChainFilterFactoryTest, FilterChainFilterEmptyRouteProto) {
   FilterChainFilterFactory factory;
   EXPECT_NO_THROW({
-    EXPECT_NE(
-        nullptr,
-        dynamic_cast<
-            envoy::extensions::filters::http::filter_chain::v3::FilterChainConfigPerRoute*>(
-            factory.createEmptyRouteConfigProto().get()));
+    EXPECT_NE(nullptr,
+              dynamic_cast<
+                  envoy::extensions::filters::http::filter_chain::v3::FilterChainConfigPerRoute*>(
+                  factory.createEmptyRouteConfigProto().get()));
   });
 }
 

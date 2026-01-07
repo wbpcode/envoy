@@ -1,3 +1,4 @@
+#include "envoy/extensions/filters/http/buffer/v3/buffer.pb.h"
 #include "envoy/extensions/filters/http/filter_chain/v3/filter_chain.pb.h"
 #include "envoy/extensions/filters/network/http_connection_manager/v3/http_connection_manager.pb.h"
 

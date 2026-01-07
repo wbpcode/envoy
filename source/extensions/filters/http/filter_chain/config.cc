@@ -12,9 +12,8 @@ namespace FilterChain {
 Http::FilterFactoryCb FilterChainFilterFactory::createFilterFactoryFromProtoTyped(
     const envoy::extensions::filters::http::filter_chain::v3::FilterChainConfig& proto_config,
     const std::string& stats_prefix, Server::Configuration::FactoryContext& context) {
-  auto filter_config = std::make_shared<FilterChainConfig>(proto_config,
-                                                           context.serverFactoryContext(),
-                                                           stats_prefix);
+  auto filter_config = std::make_shared<FilterChainConfig>(
+      proto_config, context.serverFactoryContext(), stats_prefix);
   return [filter_config](Http::FilterChainFactoryCallbacks& callbacks) -> void {
     callbacks.addStreamFilter(std::make_shared<Filter>(filter_config));
   };

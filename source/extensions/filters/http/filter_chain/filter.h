@@ -64,8 +64,7 @@ public:
       Server::Configuration::ServerFactoryContext& context, const std::string& stats_prefix);
 
   FilterChainSettingsConstSharedPtr defaultFilterChain() const { return default_filter_chain_; }
-  FilterChainSettingsConstSharedPtr
-  findFilterChainByName(const std::string& name) const {
+  FilterChainSettingsConstSharedPtr findFilterChainByName(const std::string& name) const {
     auto it = named_filter_chains_.find(name);
     if (it != named_filter_chains_.end()) {
       return it->second;

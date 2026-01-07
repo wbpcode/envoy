@@ -14,20 +14,19 @@ namespace FilterChain {
 namespace {
 
 // Helper to process filter config and create filter factories
-Http::FilterChainUtility::FilterFactoriesList
-createFilterFactoriesFromConfig(
+Http::FilterChainUtility::FilterFactoriesList createFilterFactoriesFromConfig(
     const envoy::extensions::filters::http::filter_chain::v3::FilterChain& proto_config,
     Server::Configuration::ServerFactoryContext& context, const std::string& stats_prefix) {
   Http::FilterChainUtility::FilterFactoriesList filter_factories;
   filter_factories.reserve(proto_config.filters_size());
 
   for (const auto& filter_config : proto_config.filters()) {
-    auto& factory = Config::Utility::getAndCheckFactory<
-        Server::Configuration::NamedHttpFilterConfigFactory>(filter_config);
+    auto& factory =
+        Config::Utility::getAndCheckFactory<Server::Configuration::NamedHttpFilterConfigFactory>(
+            filter_config);
 
-    ProtobufTypes::MessagePtr message =
-        Config::Utility::translateToFactoryConfig(filter_config, context.messageValidationVisitor(),
-                                                  factory);
+    ProtobufTypes::MessagePtr message = Config::Utility::translateToFactoryConfig(
+        filter_config, context.messageValidationVisitor(), factory);
     auto callback_or_error =
         factory.createFilterFactoryFromProtoWithServerContext(*message, stats_prefix, context);
 
@@ -75,7 +74,7 @@ FilterChainConfig::FilterChainConfig(
 // DelegatedFilterChain implementation
 
 Http::FilterHeadersStatus DelegatedFilterChain::decodeHeaders(Http::RequestHeaderMap& headers,
-                                                               bool end_stream) {
+                                                              bool end_stream) {
   for (auto& filter : filters_) {
     auto status = filter->decodeHeaders(headers, end_stream);
     if (status != Http::FilterHeadersStatus::Continue) {
@@ -128,8 +127,8 @@ void DelegatedFilterChain::decodeComplete() {
   }
 }
 
-Http::Filter1xxHeadersStatus DelegatedFilterChain::encode1xxHeaders(
-    Http::ResponseHeaderMap& headers) {
+Http::Filter1xxHeadersStatus
+DelegatedFilterChain::encode1xxHeaders(Http::ResponseHeaderMap& headers) {
   // Encoding happens in reverse order
   for (auto it = filters_.rbegin(); it != filters_.rend(); ++it) {
     auto status = (*it)->encode1xxHeaders(headers);
@@ -141,7 +140,7 @@ Http::Filter1xxHeadersStatus DelegatedFilterChain::encode1xxHeaders(
 }
 
 Http::FilterHeadersStatus DelegatedFilterChain::encodeHeaders(Http::ResponseHeaderMap& headers,
-                                                               bool end_stream) {
+                                                              bool end_stream) {
   // Encoding happens in reverse order
   for (auto it = filters_.rbegin(); it != filters_.rend(); ++it) {
     auto status = (*it)->encodeHeaders(headers, end_stream);
@@ -219,7 +218,8 @@ Filter::Filter(FilterChainConfigSharedPtr config) : config_(std::move(config)) {
 FilterChainSettingsConstSharedPtr Filter::resolveFilterChain() {
   // Check if there's a per-route configuration
   const auto* per_route_config =
-      Http::Utility::resolveMostSpecificPerFilterConfig<FilterChainPerRouteConfig>(decoder_callbacks_);
+      Http::Utility::resolveMostSpecificPerFilterConfig<FilterChainPerRouteConfig>(
+          decoder_callbacks_);
 
   if (per_route_config != nullptr) {
     // If the per-route config has a direct filter chain, use it

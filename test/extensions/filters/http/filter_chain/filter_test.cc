@@ -10,6 +10,7 @@
 #include "test/mocks/http/mocks.h"
 #include "test/mocks/server/factory_context.h"
 #include "test/mocks/server/instance.h"
+#include "test/test_common/utility.h"
 
 #include "gtest/gtest.h"
 
