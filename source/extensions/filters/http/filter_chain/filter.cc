@@ -376,7 +376,7 @@ Http::FilterHeadersStatus Filter::decodeHeaders(Http::RequestHeaderMap& headers,
       Http::StreamDecoderFilterSharedPtr decoder_filter_;
     };
 
-    FactoryCallbacksWrapper(Event::Dispatcher& d) : dispatcher_(d) {}
+    explicit FactoryCallbacksWrapper(Event::Dispatcher& dispatcher) : dispatcher_(dispatcher) {}
     Event::Dispatcher& dispatcher_;
     std::vector<Http::StreamFilterSharedPtr> filters;
   };
