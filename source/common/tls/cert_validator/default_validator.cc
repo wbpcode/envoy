@@ -253,6 +253,7 @@ DefaultCertValidator::verifyCertificate(X509* cert, const std::vector<std::strin
                                         std::string* error_details, uint8_t* out_alert) {
   Envoy::Ssl::ClientValidationStatus validated = Envoy::Ssl::ClientValidationStatus::NotValidated;
   if (!verify_san_list.empty()) {
+    ENVOY_LOG(error, "verify_san_list: {}", absl::StrJoin(verify_san_list, ","));
     if (!verifySubjectAltName(cert, verify_san_list)) {
       const char* error = "verify cert failed: verify SAN list";
       if (error_details != nullptr) {
@@ -379,6 +380,7 @@ bool DefaultCertValidator::verifySubjectAltName(X509* cert,
   for (const GENERAL_NAME* general_name : san_names.get()) {
     const std::string san = Utility::generalNameAsString(general_name);
     for (auto& config_san : subject_alt_names) {
+      ENVOY_LOG(error, "cert SAN: {} vs {} by type {}", san, config_san, general_name->type);
       if (general_name->type == GEN_DNS ? Utility::dnsNameMatch(config_san, san.c_str())
                                         : config_san == san) {
         return true;

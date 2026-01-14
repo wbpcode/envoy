@@ -6,7 +6,8 @@
 #include <functional>
 #include <memory>
 #include <string>
-
+#include "source/common/network/filter_state_proxy_info.h"
+#include "source/common/network/utility.h"
 #include "envoy/event/dispatcher.h"
 #include "envoy/event/timer.h"
 #include "envoy/grpc/status.h"
@@ -664,6 +665,10 @@ Http::FilterHeadersStatus Filter::decodeHeaders(Http::RequestHeaderMap& headers,
 
     if (upstream_http_protocol_options->auto_san_validation() &&
         !filter_state->hasDataWithName(Network::UpstreamSubjectAltNames::key())) {
+
+      ENVOY_LOG(error, "Setting SAN validation from auto_san_validation for host '{}'",
+                parsed_authority.host_);
+
       filter_state->setData(Network::UpstreamSubjectAltNames::key(),
                             std::make_unique<Network::UpstreamSubjectAltNames>(
                                 std::vector<std::string>{std::string(parsed_authority.host_)}),
@@ -673,6 +678,20 @@ Http::FilterHeadersStatus Filter::decodeHeaders(Http::RequestHeaderMap& headers,
 
   transport_socket_options_ = Network::TransportSocketOptionsUtility::fromFilterState(
       *callbacks_->streamInfo().filterState());
+
+  if (transport_socket_options_ == nullptr) {
+    ENVOY_LOG(error, "Transport socket options not found in filter state for upstream cluster '{}'",
+              cluster_->name());
+  } else {
+    ENVOY_LOG(error, "Transport socket options found in filter state for upstream cluster '{}'",
+              cluster_->name());
+    ENVOY_LOG(error, "SNI: '{}'",
+              transport_socket_options_->serverNameOverride()
+                  ? transport_socket_options_->serverNameOverride().value()
+                  : "<not set>");
+    ENVOY_LOG(error, "SANs: '{}'",
+              absl::StrJoin(transport_socket_options_->verifySubjectAltNameListOverride(), ","));
+  }
 
   if (auto downstream_connection = downstreamConnection(); downstream_connection != nullptr) {
     if (auto typed_state = downstream_connection->streamInfo()

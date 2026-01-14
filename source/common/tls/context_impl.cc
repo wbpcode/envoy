@@ -1,6 +1,13 @@
 #include "source/common/tls/context_impl.h"
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wold-style-cast"
+#pragma GCC diagnostic ignored "-Wunused-parameter"
+
 #include <openssl/ssl.h>
+#include "ssl/internal.h"
+
+#pragma GCC diagnostic pop
 
 #include <algorithm>
 #include <cstddef>
@@ -509,6 +516,20 @@ ValidationResults ContextImpl::customVerifyCertChain(
     return {ValidationResults::ValidationStatus::Failed, Ssl::ClientValidationStatus::NotValidated,
             SSL_AD_INTERNAL_ERROR, absl::nullopt};
   }
+
+  ENVOY_LOG(error, "Verified SSL with early data enabled: {}",
+            static_cast<bool>(ssl->enable_early_data));
+
+  auto session = SSL_get_session(ssl);
+  ENVOY_LOG(error, "Used session for custom verify callback: {}", fmt::ptr(session));
+  ENVOY_LOG(error, "Number of early data bytes: {}", session->ticket_max_early_data);
+
+  auto reason = SSL_get_early_data_reason(ssl);
+  ENVOY_LOG(error, "Early data reason: {}", static_cast<int>(reason));
+  // Print the version of the SSL connection.
+  const char* version = SSL_get_version(ssl);
+  ENVOY_LOG(error, "SSL version: {}", version);
+
   ASSERT(cert_validator_);
   const char* host_name = SSL_get_servername(ssl, TLSEXT_NAMETYPE_host_name);
 

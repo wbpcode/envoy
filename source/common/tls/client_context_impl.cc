@@ -1,6 +1,13 @@
 #include "source/common/tls/client_context_impl.h"
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wold-style-cast"
+#pragma GCC diagnostic ignored "-Wunused-parameter"
+
 #include <openssl/ssl.h>
+#include "ssl/internal.h"
+
+#pragma GCC diagnostic pop
 
 #include <algorithm>
 #include <cstddef>
@@ -167,6 +174,8 @@ ClientContextImpl::newSsl(const Network::TransportSocketOptionsConstSharedPtr& o
         // Use the most recently stored session key, since it has the highest
         // probability of still being recognized/accepted by the server.
         SSL_SESSION* session = session_keys_.front().get();
+        ENVOY_LOG(error, "Using stored session for client context: {}", fmt::ptr(session));
+        ENVOY_LOG(error, "Number of early data bytes: {}", session->ticket_max_early_data);
         SSL_set_session(ssl_con.get(), session);
         // Remove single-use session key (TLS 1.3) after first use.
         if (SSL_SESSION_should_be_single_use(session)) {
@@ -180,10 +189,15 @@ ClientContextImpl::newSsl(const Network::TransportSocketOptionsConstSharedPtr& o
         // Use the most recently stored session key, since it has the highest
         // probability of still being recognized/accepted by the server.
         SSL_SESSION* session = session_keys_.front().get();
+        ENVOY_LOG(error, "Using stored session for client context: {}", fmt::ptr(session));
+        ENVOY_LOG(error, "Number of early data bytes: {}", session->ticket_max_early_data);
         SSL_set_session(ssl_con.get(), session);
       }
     }
   }
+
+  ENVOY_LOG(error, "New SSL socket with early data enabled: {}",
+            static_cast<bool>(ssl_con.get()->enable_early_data));
 
   return ssl_con;
 }
@@ -199,6 +213,9 @@ int ClientContextImpl::newSessionKey(SSL_SESSION* session) {
   while (session_keys_.size() >= max_session_keys_) {
     session_keys_.pop_back();
   }
+  ENVOY_LOG(error, "Storing new session for client context: {}", fmt::ptr(session));
+  ENVOY_LOG(error, "Number of early data bytes: {}", session->ticket_max_early_data);
+
   // Add new session key at the front of the queue, so that it's used first.
   session_keys_.push_front(bssl::UniquePtr<SSL_SESSION>(session));
   return 1; // Tell BoringSSL that we took ownership of the session.
