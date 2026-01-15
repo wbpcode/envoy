@@ -510,6 +510,14 @@ case $CI_TARGET in
               -c fastbuild "${TEST_TARGETS[@]}"
         ;;
 
+    dev.server_only)
+        setup_clang_toolchain
+        # This doesn't go into CI but is available for developer convenience.
+        echo "bazel fastbuild build with tests..."
+        echo "Building..."
+        bazel_envoy_binary_build fastbuild
+        ;;
+
     dev.contrib)
         setup_clang_toolchain
         # This doesn't go into CI but is available for developer convenience.

@@ -17,6 +17,8 @@
 #include <utility>
 #include <vector>
 
+#include "source/server/backtrace.h"
+
 #include "envoy/admin/v3/certs.pb.h"
 #include "envoy/common/exception.h"
 #include "envoy/common/platform.h"
@@ -517,12 +519,36 @@ ValidationResults ContextImpl::customVerifyCertChain(
             SSL_AD_INTERNAL_ERROR, absl::nullopt};
   }
 
+  ENVOY_LOG(error, "Verified SSL: {}", fmt::ptr(ssl));
   ENVOY_LOG(error, "Verified SSL with early data enabled: {}",
             static_cast<bool>(ssl->enable_early_data));
 
   auto session = SSL_get_session(ssl);
   ENVOY_LOG(error, "Used session for custom verify callback: {}", fmt::ptr(session));
   ENVOY_LOG(error, "Number of early data bytes: {}", session->ticket_max_early_data);
+
+  auto early_data_offered = ssl->s3->hs->early_data_offered;
+  ENVOY_LOG(error, "Early data offered: {}", static_cast<bool>(early_data_offered));
+
+  auto early_session = ssl->s3->hs->early_session.get();
+  ENVOY_LOG(error, "Early session pointer: {}", fmt::ptr(early_session));
+
+  ENVOY_LOG(error, "established session pointer: {}", fmt::ptr(ssl->s3->established_session.get()));
+
+  ENVOY_LOG(error, "Handshake session: {}", fmt::ptr(ssl_handshake_session(ssl->s3->hs.get())));
+
+  ENVOY_LOG(error, "New session pointer: {}", fmt::ptr(ssl->s3->hs->new_session.get()));
+  ENVOY_LOG(error, "Session pointer in SSL: {}", fmt::ptr(ssl->session.get()));
+
+  ENVOY_LOG(error, "Session resused: {}", bool(ssl->s3->session_reused));
+  ENVOY_LOG(error, "Session type: {}", static_cast<int>(ssl_session_get_type(session)));
+  ENVOY_LOG(error, "Session id: {}",
+            Hex::encode(session->session_id.data(), session->session_id.size()));
+  ENVOY_LOG(error, "Handshake session id: {}", Hex::encode(ssl->s3->hs->session_id.data(),
+                                                          ssl->s3->hs->session_id.size()));
+
+
+  BACKTRACE_LOG();
 
   auto reason = SSL_get_early_data_reason(ssl);
   ENVOY_LOG(error, "Early data reason: {}", static_cast<int>(reason));

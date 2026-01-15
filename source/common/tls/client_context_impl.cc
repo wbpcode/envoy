@@ -216,6 +216,20 @@ int ClientContextImpl::newSessionKey(SSL_SESSION* session) {
   ENVOY_LOG(error, "Storing new session for client context: {}", fmt::ptr(session));
   ENVOY_LOG(error, "Number of early data bytes: {}", session->ticket_max_early_data);
 
+  X509* leaf_cert = sk_X509_value(session->x509_chain, 0);
+  bssl::UniquePtr<GENERAL_NAMES> san_names(static_cast<GENERAL_NAMES*>(
+      X509_get_ext_d2i(leaf_cert, NID_subject_alt_name, nullptr, nullptr)));
+  if (san_names == nullptr) {
+    return false;
+  }
+  for (const GENERAL_NAME* general_name : san_names.get()) {
+    if (general_name->type == GEN_DNS) {
+      ENVOY_LOG(error, "Session stored for Cert: {}",
+                absl::string_view(reinterpret_cast<const char*>(general_name->d.dNSName->data),
+                                  general_name->d.dNSName->length));
+    }
+  }
+
   // Add new session key at the front of the queue, so that it's used first.
   session_keys_.push_front(bssl::UniquePtr<SSL_SESSION>(session));
   return 1; // Tell BoringSSL that we took ownership of the session.

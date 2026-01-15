@@ -1724,6 +1724,15 @@ void Filter::onUpstreamHeaders(uint64_t response_code, Http::ResponseHeaderMapPt
                                UpstreamRequest& upstream_request, bool end_stream) {
   ENVOY_STREAM_LOG(debug, "upstream headers complete: end_stream={}", *callbacks_, end_stream);
 
+  ENVOY_LOG(error, "Upstream certificate validation status when get response");
+  auto upstream_ssl_connection = callbacks_->streamInfo().upstreamInfo()->upstreamSslConnection();
+  for (const auto& san : upstream_ssl_connection->dnsSansPeerCertificate()) {
+    ENVOY_LOG(error, "Upstream SAN when get response: {}", san);
+  }
+  for (const auto& uri : upstream_ssl_connection->uriSanPeerCertificate()) {
+    ENVOY_LOG(error, "Upstream URI SAN when get response: {}", uri);
+  }
+
   ASSERT(!host_selection_cancelable_);
 
   // When grpc-status appears in response headers, convert grpc-status to HTTP status code
