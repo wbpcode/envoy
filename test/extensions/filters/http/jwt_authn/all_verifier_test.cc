@@ -12,13 +12,17 @@
 #include "gmock/gmock.h"
 
 using envoy::extensions::filters::http::jwt_authn::v3::JwtAuthentication;
-using ::google::jwt_verify::Status;
 using ::testing::NiceMock;
 
 namespace Envoy {
 namespace Extensions {
 namespace HttpFilters {
 namespace JwtAuthn {
+
+// Namespace alias for test code.
+namespace JwtVerify = Common::JwtVerify;
+using JwtVerify::Status;
+
 namespace {
 
 constexpr char kConfigTemplate[] = R"(

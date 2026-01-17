@@ -21,8 +21,6 @@ using envoy::extensions::filters::http::jwt_authn::v3::RemoteJwks;
 using Envoy::Extensions::HttpFilters::Common::JwksFetcher;
 using Envoy::Extensions::HttpFilters::Common::JwksFetcherPtr;
 using Envoy::Extensions::HttpFilters::Common::MockJwksFetcher;
-using ::google::jwt_verify::Jwks;
-using ::google::jwt_verify::Status;
 using ::testing::_;
 using ::testing::Invoke;
 using ::testing::MockFunction;
@@ -33,6 +31,12 @@ namespace Envoy {
 namespace Extensions {
 namespace HttpFilters {
 namespace JwtAuthn {
+
+// Namespace alias for test code.
+namespace JwtVerify = Common::JwtVerify;
+using JwtVerify::Jwks;
+using JwtVerify::Status;
+
 namespace {
 
 class AuthenticatorTest : public testing::Test {
@@ -43,7 +47,7 @@ public:
   }
 
   void createAuthenticator(
-      ::google::jwt_verify::CheckAudience* check_audience = nullptr,
+      JwtVerify::CheckAudience* check_audience = nullptr,
       const absl::optional<std::string>& provider = absl::make_optional<std::string>(ProviderName),
       bool allow_failed = false, bool allow_missing = false) {
     filter_config_ = std::make_unique<FilterConfigImpl>(proto_config_, "", mock_factory_ctx_);
@@ -63,8 +67,8 @@ public:
   void expectVerifyStatus(Status expected_status, Http::RequestHeaderMap& headers,
                           bool expect_clear_route = false) {
     std::function<void(const Status&)> on_complete_cb = [&expected_status](const Status& status) {
-      ASSERT_STREQ(google::jwt_verify::getStatusString(status).c_str(),
-                   google::jwt_verify::getStatusString(expected_status).c_str());
+      ASSERT_STREQ(JwtVerify::getStatusString(status).c_str(),
+                   JwtVerify::getStatusString(expected_status).c_str());
     };
     auto set_extracted_jwt_data_cb = [this](const std::string& name,
                                             const Protobuf::Struct& extracted_data) {
@@ -99,7 +103,7 @@ public:
   MockJwksFetcher* raw_fetcher_;
   JwksFetcherPtr fetcher_;
   AuthenticatorPtr auth_;
-  ::google::jwt_verify::JwksPtr jwks_;
+  JwtVerify::JwksPtr jwks_;
   Protobuf::Struct out_extracted_data_;
   NiceMock<Tracing::MockSpan> parent_span_;
 };
@@ -408,7 +412,7 @@ TEST_F(AuthenticatorTest, TestSetExpiredJwtToGetStatus) {
                                                .at("code")
                                                .number_value());
 
-  EXPECT_EQ(google::jwt_verify::getStatusString(Status::JwtExpired), out_extracted_data_.fields()
+  EXPECT_EQ(JwtVerify::getStatusString(Status::JwtExpired), out_extracted_data_.fields()
                                                                          .at("jwt-failure-reason")
                                                                          .struct_value()
                                                                          .fields()
@@ -442,7 +446,7 @@ TEST_F(AuthenticatorTest, TestSetInvalidJwtInvalidAudienceToGetStatus) {
                                                           .at("code")
                                                           .number_value());
 
-  EXPECT_EQ(google::jwt_verify::getStatusString(Status::JwtAudienceNotAllowed),
+  EXPECT_EQ(JwtVerify::getStatusString(Status::JwtAudienceNotAllowed),
             out_extracted_data_.fields()
                 .at("jwt-failure-reason")
                 .struct_value()
@@ -475,7 +479,7 @@ TEST_F(AuthenticatorTest, TestSetMissingJwtToGetStatus) {
                                               .at("code")
                                               .number_value());
 
-  EXPECT_EQ(google::jwt_verify::getStatusString(Status::JwtMissed), out_extracted_data_.fields()
+  EXPECT_EQ(JwtVerify::getStatusString(Status::JwtMissed), out_extracted_data_.fields()
                                                                         .at("jwt-failure-reason")
                                                                         .struct_value()
                                                                         .fields()
@@ -515,7 +519,7 @@ TEST_F(AuthenticatorTest, TestSetInvalidAndValidJwtToGetStatus) {
                                                           .at("code")
                                                           .number_value());
 
-  EXPECT_EQ(google::jwt_verify::getStatusString(Status::JwtAudienceNotAllowed),
+  EXPECT_EQ(JwtVerify::getStatusString(Status::JwtAudienceNotAllowed),
             out_extracted_data_.fields()
                 .at("jwt-failure-reason")
                 .struct_value()
@@ -553,7 +557,7 @@ TEST_F(AuthenticatorTest, TestSetTwoInvalidJwtToGetStatus) {
                                                .at("code")
                                                .number_value());
 
-  EXPECT_EQ(google::jwt_verify::getStatusString(Status::JwtExpired), out_extracted_data_.fields()
+  EXPECT_EQ(JwtVerify::getStatusString(Status::JwtExpired), out_extracted_data_.fields()
                                                                          .at("jwt-failure-reason")
                                                                          .struct_value()
                                                                          .fields()
@@ -1037,7 +1041,7 @@ TEST_F(AuthenticatorTest, TestAllowFailedMultipleIssuers) {
   EXPECT_CALL(*raw_fetcher_, fetch(_, _))
       .Times(2)
       .WillRepeatedly(Invoke([](Tracing::Span&, JwksFetcher::JwksReceiver& receiver) {
-        ::google::jwt_verify::JwksPtr jwks = Jwks::createFrom(PublicKey, Jwks::JWKS);
+        JwtVerify::JwksPtr jwks = Jwks::createFrom(PublicKey, Jwks::JWKS);
         EXPECT_TRUE(jwks->getStatus() == Status::Ok);
         receiver.onJwksSuccess(std::move(jwks));
       }));
@@ -1057,7 +1061,7 @@ TEST_F(AuthenticatorTest, TestAllowFailedMultipleIssuers) {
 
 // Test checks that supplying a CheckAudience to auth will override the one in JwksCache.
 TEST_F(AuthenticatorTest, TestCustomCheckAudience) {
-  auto check_audience = std::make_unique<::google::jwt_verify::CheckAudience>(
+  auto check_audience = std::make_unique<JwtVerify::CheckAudience>(
       std::vector<std::string>{"invalid_service"});
   createAuthenticator(check_audience.get());
   EXPECT_CALL(*raw_fetcher_, fetch(_, _))
@@ -1114,7 +1118,7 @@ public:
                   on_complete_cb, nullptr);
   }
 
-  ::google::jwt_verify::JwksPtr jwks_;
+  JwtVerify::JwksPtr jwks_;
   NiceMock<MockJwksCache> jwks_cache_;
   MockFunction<Common::JwksFetcherPtr(Upstream::ClusterManager&, Router::RetryPolicyConstSharedPtr,
                                       const RemoteJwks&)>
@@ -1170,7 +1174,7 @@ TEST_F(AuthenticatorJwtCacheTest, TestCacheHit) {
 
   createAuthenticator("provider");
 
-  ::google::jwt_verify::Jwt cached_jwt;
+  JwtVerify::Jwt cached_jwt;
   cached_jwt.parseFromString(GoodToken);
   // jwt_cache hit: lookup return a cached jwt.
   EXPECT_CALL(jwks_cache_.jwks_data_.jwt_cache_, lookup(_)).WillOnce(Return(&cached_jwt));
