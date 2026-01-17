@@ -34,7 +34,7 @@ envoy_cc_library(
     deps = [
         "//envoy/upstream:cluster_manager_interface",
         "//source/common/http:utility_lib",
-        "@com_github_google_jwt_verify//:jwt_verify_lib",
+        "//source/extensions/filters/http/common/jwt:jwt_verify_lib",
         "@envoy_api//envoy/config/core/v3:pkg_cc_proto",
         "@envoy_api//envoy/extensions/filters/http/jwt_authn/v3:pkg_cc_proto",
     ],
