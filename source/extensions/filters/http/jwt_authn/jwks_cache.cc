@@ -41,7 +41,7 @@ public:
     for (const auto& aud : jwt_provider_.audiences()) {
       audiences.push_back(aud);
     }
-    audiences_ = std::make_unique<::JwtVerify::CheckAudience>(audiences);
+    audiences_ = std::make_unique<JwtVerify::CheckAudience>(audiences);
 
     if (jwt_provider_.has_subjects()) {
       sub_matcher_.emplace(jwt_provider_.subjects(), context.serverFactoryContext());
@@ -69,7 +69,7 @@ public:
                               std::string);
     if (!inline_jwks.empty()) {
       auto jwks =
-          ::JwtVerify::Jwks::createFrom(inline_jwks, ::JwtVerify::Jwks::JWKS);
+          JwtVerify::Jwks::createFrom(inline_jwks, JwtVerify::Jwks::JWKS);
       if (jwks->getStatus() != Status::Ok) {
         ENVOY_LOG(warn, "Invalid inline jwks for issuer: {}, jwks: {}", jwt_provider_.issuer(),
                   inline_jwks);
@@ -158,7 +158,7 @@ public:
 
   bool isExpired() const override { return time_source_.monotonicTime() >= tls_->expire_; }
 
-  const ::JwtVerify::Jwks* setRemoteJwks(JwksConstPtr&& jwks) override {
+  const JwtVerify::Jwks* setRemoteJwks(JwksConstPtr&& jwks) override {
     // convert unique_ptr to shared_ptr
     JwksConstSharedPtr shared_jwks = std::move(jwks);
     tls_->jwks_ = shared_jwks;
@@ -198,7 +198,7 @@ private:
   // The retry policy for remote jwks fetcher.
   Router::RetryPolicyConstSharedPtr retry_policy_;
   // Check audience object
-  ::JwtVerify::CheckAudiencePtr audiences_;
+  JwtVerify::CheckAudiencePtr audiences_;
   // the time source
   TimeSource& time_source_;
   // the thread local slot for cache
