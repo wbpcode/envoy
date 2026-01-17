@@ -51,8 +51,8 @@ envoy_cc_library(
         "//source/common/http:utility_lib",
         "//source/extensions/filters/http/common:factory_base_lib",
         "//source/extensions/filters/http/common:pass_through_filter_lib",
-        "@com_github_google_jwt_verify//:jwt_verify_lib",
-        "@com_github_google_jwt_verify//:simple_lru_cache_lib",
+        "//source/extensions/filters/http/common/jwt:jwt_verify_lib",
+        "//source/extensions/filters/http/common/jwt:simple_lru_cache_lib",
         "@envoy_api//envoy/extensions/filters/http/gcp_authn/v3:pkg_cc_proto",
     ],
 )

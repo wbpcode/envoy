@@ -5,12 +5,15 @@
 #include "envoy/extensions/filters/http/jwt_authn/v3/config.pb.h"
 #include "envoy/upstream/cluster_manager.h"
 
-#include "jwt_verify_lib/jwks.h"
+#include "source/extensions/filters/http/common/jwt/jwks.h"
 
 namespace Envoy {
 namespace Extensions {
 namespace HttpFilters {
 namespace Common {
+
+// Namespace alias for backward compatibility.
+namespace JwtVerify = Common::JwtVerify;
 
 class JwksFetcher;
 using JwksFetcherPtr = std::unique_ptr<JwksFetcher>;
@@ -37,7 +40,7 @@ public:
      * of the returned JWKS object.
      * @param jwks the JWKS object retrieved.
      */
-    virtual void onJwksSuccess(google::jwt_verify::JwksPtr&& jwks) PURE;
+    virtual void onJwksSuccess(JwtVerify::JwksPtr&& jwks) PURE;
     /*
      * Retrieval error callback.
      * * @param reason the failure reason.
