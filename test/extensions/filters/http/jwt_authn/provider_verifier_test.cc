@@ -12,7 +12,6 @@
 
 using envoy::extensions::filters::http::jwt_authn::v3::JwtAuthentication;
 using envoy::extensions::filters::http::jwt_authn::v3::JwtRequirement;
-using ::google::jwt_verify::Status;
 using ::testing::Eq;
 using ::testing::NiceMock;
 
@@ -20,6 +19,11 @@ namespace Envoy {
 namespace Extensions {
 namespace HttpFilters {
 namespace JwtAuthn {
+
+// Namespace alias for test code.
+namespace JwtVerify = Common::JwtVerify;
+using JwtVerify::Status;
+
 namespace {
 
 Protobuf::Struct getExpectedPayload(const std::string& name) {

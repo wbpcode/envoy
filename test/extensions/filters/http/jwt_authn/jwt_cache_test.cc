@@ -10,12 +10,15 @@
 #include "test/test_common/simulated_time_system.h"
 #include "test/test_common/utility.h"
 
-using ::google::jwt_verify::Status;
-
 namespace Envoy {
 namespace Extensions {
 namespace HttpFilters {
 namespace JwtAuthn {
+
+// Namespace alias for test code.
+namespace JwtVerify = Common::JwtVerify;
+using JwtVerify::Status;
+
 namespace {
 
 class JwtCacheTest : public testing::Test {
@@ -28,14 +31,14 @@ public:
   }
 
   void loadJwt(const char* jwt_str) {
-    jwt_ = std::make_unique<::google::jwt_verify::Jwt>();
+    jwt_ = std::make_unique<JwtVerify::Jwt>();
     Status status = jwt_->parseFromString(jwt_str);
     EXPECT_EQ(status, Status::Ok);
   }
 
   Event::SimulatedTimeSystem time_system_;
   JwtCachePtr cache_;
-  std::unique_ptr<::google::jwt_verify::Jwt> jwt_;
+  std::unique_ptr<JwtVerify::Jwt> jwt_;
 };
 
 TEST_F(JwtCacheTest, TestEnabledCache) {
