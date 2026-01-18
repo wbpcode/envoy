@@ -5,13 +5,12 @@
 #include "envoy/registry/registry.h"
 
 #include "source/common/config/datasource.h"
+#include "source/extensions/filters/http/common/jwt/jwks.h"
 #include "source/extensions/filters/http/jwt_authn/filter.h"
 
-#include "jwt_verify_lib/jwks.h"
-
 using envoy::extensions::filters::http::jwt_authn::v3::JwtAuthentication;
-using ::google::jwt_verify::Jwks;
-using ::google::jwt_verify::Status;
+using JwtVerify::Jwks;
+using JwtVerify::Status;
 
 namespace Envoy {
 namespace Extensions {
@@ -31,7 +30,7 @@ void validateJwtConfig(const JwtAuthentication& proto_config, Api::Api& api) {
       if (jwks_obj->getStatus() != Status::Ok) {
         throw EnvoyException(
             fmt::format("Provider '{}' in jwt_authn config has invalid local jwks: {}", name,
-                        ::google::jwt_verify::getStatusString(jwks_obj->getStatus())));
+                        ::JwtVerify::getStatusString(jwks_obj->getStatus())));
       }
     }
   }

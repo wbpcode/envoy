@@ -9,13 +9,17 @@
 #include "gmock/gmock.h"
 
 using envoy::extensions::filters::http::jwt_authn::v3::JwtAuthentication;
-using ::google::jwt_verify::Status;
 using ::testing::NiceMock;
 
 namespace Envoy {
 namespace Extensions {
 namespace HttpFilters {
 namespace JwtAuthn {
+
+// Namespace alias for test code.
+namespace JwtVerify = Common::JwtVerify;
+using JwtVerify::Status;
+
 namespace {
 
 const char AllWithAny[] = R"(
@@ -71,7 +75,7 @@ class GroupVerifierTest : public testing::Test {
 public:
   void createVerifier() {
     ON_CALL(mock_factory_, create(_, _, _, _))
-        .WillByDefault(Invoke([&](const ::google::jwt_verify::CheckAudience*,
+        .WillByDefault(Invoke([&](const JwtVerify::CheckAudience*,
                                   const absl::optional<std::string>& provider, bool, bool) {
           return std::move(mock_auths_[provider ? provider.value() : allowfailed]);
         }));

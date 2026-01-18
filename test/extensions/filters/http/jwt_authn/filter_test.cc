@@ -8,8 +8,6 @@
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
 
-using ::google::jwt_verify::Status;
-
 using testing::_;
 using testing::Invoke;
 using testing::Return;
@@ -19,6 +17,11 @@ namespace Envoy {
 namespace Extensions {
 namespace HttpFilters {
 namespace JwtAuthn {
+
+// Namespace alias for test code.
+namespace JwtVerify = Common::JwtVerify;
+using JwtVerify::Status;
+
 namespace {
 
 class MockMatcher : public Matcher {

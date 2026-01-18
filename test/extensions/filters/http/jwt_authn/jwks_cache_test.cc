@@ -15,13 +15,17 @@
 
 using envoy::extensions::filters::http::jwt_authn::v3::JwtAuthentication;
 using envoy::extensions::filters::http::jwt_authn::v3::RemoteJwks;
-using ::google::jwt_verify::Status;
 using ::testing::MockFunction;
 
 namespace Envoy {
 namespace Extensions {
 namespace HttpFilters {
 namespace JwtAuthn {
+
+// Namespace alias for test code.
+namespace JwtVerify = Common::JwtVerify;
+using JwtVerify::Status;
+
 namespace {
 
 JwtAuthnFilterStats generateMockStats(Stats::Scope& scope) {
@@ -36,7 +40,7 @@ protected:
     // fetcher is only called at async_fetch. In this test, it is never called.
     EXPECT_CALL(mock_fetcher_, Call(_, _, _)).Times(0);
     setupCache(ExampleConfig);
-    jwks_ = google::jwt_verify::Jwks::createFrom(PublicKey, google::jwt_verify::Jwks::JWKS);
+    jwks_ = JwtVerify::Jwks::createFrom(PublicKey, JwtVerify::Jwks::JWKS);
   }
 
   void setupCache(const std::string& config_str) {
@@ -47,7 +51,7 @@ protected:
   JwtAuthentication config_;
   NiceMock<Server::Configuration::MockFactoryContext> context_;
   JwksCachePtr cache_;
-  google::jwt_verify::JwksPtr jwks_;
+  JwtVerify::JwksPtr jwks_;
   MockFunction<Common::JwksFetcherPtr(Upstream::ClusterManager&, Router::RetryPolicyConstSharedPtr,
                                       const RemoteJwks&)>
       mock_fetcher_;
