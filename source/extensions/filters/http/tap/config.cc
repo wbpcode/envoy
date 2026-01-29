@@ -45,6 +45,26 @@ Http::FilterFactoryCb TapFilterFactory::createFilterFactoryFromProtoTyped(
   };
 }
 
+Http::FilterFactoryCb TapFilterFactory::createFilterFactoryFromProtoWithServerContextTyped(
+    const envoy::extensions::filters::http::tap::v3::Tap& proto_config,
+    const std::string& stats_prefix, Server::Configuration::ServerFactoryContext& context) {
+  Extensions::Common::Tap::TapConfigFactoryPtr&& config_factory =
+      Extensions::Common::Tap::TapConfigFactoryImpl::createConfigFactory(
+          proto_config.common_config(), context.admin(), context.singletonManager(),
+          context.threadLocal(), context.mainThreadDispatcher());
+
+  FilterConfigSharedPtr filter_config(new FilterConfigImpl(
+      std::move(config_factory), Extensions::Common::Tap::Utility::
+                                      makeOptRefFromPtr<Server::Configuration::ServerFactoryContext>(
+                                          &context)));
+
+  return [filter_config, stats_prefix](Http::FilterChainFactoryCallbacks& callbacks) -> void {
+    auto filter = std::make_shared<Filter>(filter_config, stats_prefix);
+    callbacks.addStreamFilter(filter);
+    callbacks.addAccessLogHandler(filter);
+  };
+}
+
 /**
  * Static registration for the tap filter. @see RegisterFactory.
  */
