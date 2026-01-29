@@ -45,3 +45,14 @@ envoy_extension_cc_test(
         "@envoy_api//envoy/extensions/filters/network/http_connection_manager/v3:pkg_cc_proto",
     ],
 )
+
+envoy_extension_cc_test(
+    name = "config_test",
+    srcs = ["config_test.cc"],
+    extension_names = ["envoy.filters.http.cors"],
+    deps = [
+        "//source/extensions/filters/http/cors:config",
+        "//test/mocks/server:factory_context_mocks",
+        "@envoy_api//envoy/extensions/filters/http/cors/v3:pkg_cc_proto",
+    ],
+)
