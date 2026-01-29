@@ -219,6 +219,29 @@ success_criteria:
   EXPECT_EQ(0.7, config->maxRejectionProbability());
 }
 
+TEST(AdmissionControlFilterConfigTest, ValidConfigWithServerContext) {
+  const std::string yaml = R"EOF(
+enabled:
+  default_value: true
+  runtime_key: "foo.enabled"
+success_criteria:
+  http_criteria:
+  grpc_criteria:
+sampling_window: 1s
+  )EOF";
+
+  AdmissionControlProto proto_config;
+  TestUtility::loadFromYaml(yaml, proto_config);
+
+  testing::NiceMock<Server::Configuration::MockServerFactoryContext> context;
+  AdmissionControlFilterFactory factory;
+  Envoy::Http::FilterFactoryCb cb =
+      factory.createFilterFactoryFromProtoWithServerContext(proto_config, "stats", context);
+  Envoy::Http::MockFilterChainFactoryCallbacks filter_callback;
+  EXPECT_CALL(filter_callback, addStreamFilter(_));
+  cb(filter_callback);
+}
+
 } // namespace
 } // namespace AdmissionControl
 } // namespace HttpFilters

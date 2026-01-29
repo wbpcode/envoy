@@ -60,6 +60,15 @@ AdmissionControlFilterFactory::createFilterFactoryFromProtoTyped(
   };
 }
 
+Envoy::Http::FilterFactoryCb
+AdmissionControlFilterFactory::createFilterFactoryFromProtoWithServerContextTyped(
+    const envoy::extensions::filters::http::admission_control::v3::AdmissionControl& config,
+    const std::string& stats_prefix, Server::Configuration::ServerFactoryContext& context) {
+  return THROW_OR_RETURN_VALUE(
+      createFilterFactoryFromProtoTyped(config, stats_prefix, DualInfo(context), context),
+      Envoy::Http::FilterFactoryCb);
+}
+
 /**
  * Static registration for the admission_control filter. @see RegisterFactory.
  */
