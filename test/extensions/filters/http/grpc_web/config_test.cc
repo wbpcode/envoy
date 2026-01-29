@@ -23,6 +23,17 @@ TEST(GrpcWebFilterConfigTest, GrpcWebFilter) {
   cb(filter_callback);
 }
 
+TEST(GrpcWebFilterConfigTest, GrpcWebFilterWithServerContext) {
+  envoy::extensions::filters::http::grpc_web::v3::GrpcWeb config;
+  testing::NiceMock<Server::Configuration::MockServerFactoryContext> context;
+  GrpcWebFilterConfig factory;
+  Http::FilterFactoryCb cb =
+      factory.createFilterFactoryFromProtoWithServerContext(config, "stats", context);
+  Http::MockFilterChainFactoryCallbacks filter_callbacks;
+  EXPECT_CALL(filter_callbacks, addStreamFilter(_));
+  cb(filter_callbacks);
+}
+
 } // namespace
 } // namespace GrpcWeb
 } // namespace HttpFilters
