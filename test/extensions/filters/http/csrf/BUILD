@@ -41,3 +41,14 @@ envoy_extension_cc_test(
         "//test/integration:http_protocol_integration_lib",
     ],
 )
+
+envoy_extension_cc_test(
+    name = "config_test",
+    srcs = ["config_test.cc"],
+    extension_names = ["envoy.filters.http.csrf"],
+    deps = [
+        "//source/extensions/filters/http/csrf:config",
+        "//test/mocks/server:factory_context_mocks",
+        "@envoy_api//envoy/extensions/filters/http/csrf/v3:pkg_cc_proto",
+    ],
+)
