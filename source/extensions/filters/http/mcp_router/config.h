@@ -27,6 +27,11 @@ private:
   Http::FilterFactoryCb createFilterFactoryFromProtoTyped(
       const envoy::extensions::filters::http::mcp_router::v3::McpRouter& proto_config,
       const std::string& stats_prefix, Server::Configuration::FactoryContext& context) override;
+
+  Http::FilterFactoryCb createFilterFactoryFromProtoWithServerContextTyped(
+      const envoy::extensions::filters::http::mcp_router::v3::McpRouter& proto_config,
+      const std::string& stats_prefix,
+      Server::Configuration::ServerFactoryContext& context) override;
 };
 
 } // namespace McpRouter

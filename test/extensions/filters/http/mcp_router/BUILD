@@ -12,6 +12,17 @@ licenses(["notice"])  # Apache 2
 envoy_package()
 
 envoy_extension_cc_test(
+    name = "config_test",
+    srcs = ["config_test.cc"],
+    extension_names = ["envoy.filters.http.mcp_router"],
+    deps = [
+        "//source/extensions/filters/http/mcp_router:config",
+        "//test/mocks/server:factory_context_mocks",
+        "@envoy_api//envoy/extensions/filters/http/mcp_router/v3:pkg_cc_proto",
+    ],
+)
+
+envoy_extension_cc_test(
     name = "session_codec_test",
     srcs = ["session_codec_test.cc"],
     extension_names = ["envoy.filters.http.mcp_router"],

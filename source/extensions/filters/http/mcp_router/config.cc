@@ -21,6 +21,17 @@ Http::FilterFactoryCb McpRouterFilterConfigFactory::createFilterFactoryFromProto
   };
 }
 
+Http::FilterFactoryCb McpRouterFilterConfigFactory::createFilterFactoryFromProtoWithServerContextTyped(
+    const envoy::extensions::filters::http::mcp_router::v3::McpRouter& proto_config,
+    const std::string& /* stats_prefix */, Server::Configuration::ServerFactoryContext& context) {
+
+  auto config = std::make_shared<McpRouterConfig>(proto_config, context);
+
+  return [config](Http::FilterChainFactoryCallbacks& callbacks) -> void {
+    callbacks.addStreamDecoderFilter(std::make_shared<McpRouterFilter>(config));
+  };
+}
+
 /**
  * Static registration for the MCP router filter. @see RegisterFactory.
  */
