@@ -32,6 +32,23 @@ Http::FilterFactoryCb CacheFilterFactory::createFilterFactoryFromProtoTyped(
   };
 }
 
+Http::FilterFactoryCb CacheFilterFactory::createFilterFactoryFromProtoWithServerContextTyped(
+    const envoy::extensions::filters::http::cache::v3::CacheConfig& config,
+    const std::string& /*stats_prefix*/, Server::Configuration::ServerFactoryContext& context) {
+  // Note: Cache factory requires FactoryContext for getCache(), so this method only
+  // supports the disabled cache configuration.
+  if (!config.disabled().value()) {
+    throw EnvoyException(
+        "createFilterFactoryFromProtoWithServerContext only supports disabled cache configuration");
+  }
+
+  return [config = std::make_shared<CacheFilterConfig>(config, context),
+          cache = std::shared_ptr<HttpCache>()](
+             Http::FilterChainFactoryCallbacks& callbacks) -> void {
+    callbacks.addStreamFilter(std::make_shared<CacheFilter>(config, cache));
+  };
+}
+
 REGISTER_FACTORY(CacheFilterFactory, Server::Configuration::NamedHttpFilterConfigFactory);
 
 } // namespace Cache
