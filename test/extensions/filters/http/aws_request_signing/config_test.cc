@@ -756,6 +756,25 @@ match_excluded_headers:
       "Proto constraint validation failed");
 }
 
+TEST(AwsRequestSigningFilterConfigTest, AwsRequestSigningFilterWithServerContext) {
+  const std::string yaml = R"EOF(
+service_name: s3
+region: us-west-2
+  )EOF";
+
+  AwsRequestSigningProtoConfig proto_config;
+  TestUtility::loadFromYamlAndValidate(yaml, proto_config);
+
+  testing::NiceMock<Server::Configuration::MockServerFactoryContext> context;
+  AwsRequestSigningFilterFactory factory;
+
+  Http::FilterFactoryCb cb =
+      factory.createFilterFactoryFromProtoWithServerContext(proto_config, "stats", context);
+  Http::MockFilterChainFactoryCallbacks filter_callbacks;
+  EXPECT_CALL(filter_callbacks, addStreamDecoderFilter(_));
+  cb(filter_callbacks);
+}
+
 } // namespace AwsRequestSigningFilter
 } // namespace HttpFilters
 } // namespace Extensions

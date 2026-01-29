@@ -44,6 +44,15 @@ AwsRequestSigningFilterFactory::createFilterFactoryFromProtoTyped(
   };
 }
 
+Http::FilterFactoryCb
+AwsRequestSigningFilterFactory::createFilterFactoryFromProtoWithServerContextTyped(
+    const AwsRequestSigningProtoConfig& config, const std::string& stats_prefix,
+    Server::Configuration::ServerFactoryContext& context) {
+  return THROW_OR_RETURN_VALUE(
+      createFilterFactoryFromProtoTyped(config, stats_prefix, DualInfo(context), context),
+      Http::FilterFactoryCb);
+}
+
 absl::StatusOr<Router::RouteSpecificFilterConfigConstSharedPtr>
 AwsRequestSigningFilterFactory::createRouteSpecificFilterConfigTyped(
     const AwsRequestSigningProtoPerRouteConfig& per_route_config,
