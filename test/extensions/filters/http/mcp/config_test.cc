@@ -40,6 +40,19 @@ TEST_F(McpFilterConfigTest, CreateFilterWithEmptyConfig) {
   (*cb)(filter_callbacks);
 }
 
+TEST_F(McpFilterConfigTest, CreateFilterWithServerContext) {
+  envoy::extensions::filters::http::mcp::v3::Mcp proto_config;
+  proto_config.mutable_model_config()->set_model_name("test-model");
+  proto_config.mutable_model_config()->set_model_version("1.0");
+
+  NiceMock<Server::Configuration::MockServerFactoryContext> context;
+  auto cb = factory_->createFilterFactoryFromProtoWithServerContext(proto_config, "stats", context);
+
+  Http::MockFilterChainFactoryCallbacks filter_callbacks;
+  EXPECT_CALL(filter_callbacks, addStreamFilter(_));
+  (*cb)(filter_callbacks);
+}
+
 // Test creating route-specific config
 TEST_F(McpFilterConfigTest, CreateRouteSpecificConfig) {
   envoy::extensions::filters::http::mcp::v3::McpOverride proto_config;
