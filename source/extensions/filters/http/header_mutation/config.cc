@@ -22,6 +22,15 @@ HeaderMutationFactoryConfig::createFilterFactoryFromProtoTyped(
   };
 }
 
+Envoy::Http::FilterFactoryCb
+HeaderMutationFactoryConfig::createFilterFactoryFromProtoWithServerContextTyped(
+    const ProtoConfig& config, const std::string& stats_prefix,
+    Server::Configuration::ServerFactoryContext& context) {
+  return THROW_OR_RETURN_VALUE(
+      createFilterFactoryFromProtoTyped(config, stats_prefix, DualInfo(context), context),
+      Envoy::Http::FilterFactoryCb);
+}
+
 absl::StatusOr<Router::RouteSpecificFilterConfigConstSharedPtr>
 HeaderMutationFactoryConfig::createRouteSpecificFilterConfigTyped(
     const PerRouteProtoConfig& proto_config, Server::Configuration::ServerFactoryContext& context,
