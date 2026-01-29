@@ -35,6 +35,11 @@ private:
       const std::string& stats_prefix, DualInfo dual_info,
       Server::Configuration::ServerFactoryContext& context) override;
 
+  Http::FilterFactoryCb createFilterFactoryFromProtoWithServerContextTyped(
+      const envoy::extensions::filters::http::aws_lambda::v3::Config& proto_config,
+      const std::string& stats_prefix,
+      Server::Configuration::ServerFactoryContext& context) override;
+
   absl::StatusOr<Router::RouteSpecificFilterConfigConstSharedPtr>
   createRouteSpecificFilterConfigTyped(
       const envoy::extensions::filters::http::aws_lambda::v3::PerRouteConfig&,

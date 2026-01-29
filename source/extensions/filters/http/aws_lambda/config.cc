@@ -88,6 +88,14 @@ absl::StatusOr<Http::FilterFactoryCb> AwsLambdaFilterFactory::createFilterFactor
   };
 }
 
+Http::FilterFactoryCb AwsLambdaFilterFactory::createFilterFactoryFromProtoWithServerContextTyped(
+    const envoy::extensions::filters::http::aws_lambda::v3::Config& proto_config,
+    const std::string& stats_prefix, Server::Configuration::ServerFactoryContext& context) {
+  return THROW_OR_RETURN_VALUE(
+      createFilterFactoryFromProtoTyped(proto_config, stats_prefix, DualInfo(context), context),
+      Http::FilterFactoryCb);
+}
+
 absl::StatusOr<Router::RouteSpecificFilterConfigConstSharedPtr>
 AwsLambdaFilterFactory::createRouteSpecificFilterConfigTyped(
     const envoy::extensions::filters::http::aws_lambda::v3::PerRouteConfig& per_route_config,
