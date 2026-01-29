@@ -21,11 +21,22 @@ public:
   AlternateProtocolsCacheFilterFactory()
       : FactoryBase(HttpFilterNames::get().AlternateProtocolsCache) {}
 
-private:
   Http::FilterFactoryCb createFilterFactoryFromProtoTyped(
       const envoy::extensions::filters::http::alternate_protocols_cache::v3::FilterConfig&
           proto_config,
       const std::string& stats_prefix, Server::Configuration::FactoryContext& context) override;
+
+  Http::FilterFactoryCb createFilterFactoryFromProtoWithServerContextTyped(
+      const envoy::extensions::filters::http::alternate_protocols_cache::v3::FilterConfig&
+          proto_config,
+      const std::string& stats_prefix,
+      Server::Configuration::ServerFactoryContext& context) override;
+
+private:
+  Http::FilterFactoryCb createFilterFactory(
+      const envoy::extensions::filters::http::alternate_protocols_cache::v3::FilterConfig&
+          proto_config,
+      Server::Configuration::ServerFactoryContext& context);
 };
 
 DECLARE_FACTORY(AlternateProtocolsCacheFilterFactory);
