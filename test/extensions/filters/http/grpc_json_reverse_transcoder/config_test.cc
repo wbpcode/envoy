@@ -25,6 +25,15 @@ TEST(GrpcJsonTranscoderFilterConfigTest, ValidateFail) {
                ProtoValidationException);
 }
 
+TEST(GrpcJsonTranscoderFilterConfigTest, ValidateFailWithServerContext) {
+  NiceMock<Server::Configuration::MockServerFactoryContext> context;
+  EXPECT_THROW(GrpcJsonReverseTranscoderFactory().createFilterFactoryFromProtoWithServerContext(
+                   envoy::extensions::filters::http::grpc_json_reverse_transcoder::v3::
+                       GrpcJsonReverseTranscoder(),
+                   "stats", context),
+               ProtoValidationException);
+}
+
 } // namespace
 } // namespace GrpcJsonReverseTranscoder
 } // namespace HttpFilters
