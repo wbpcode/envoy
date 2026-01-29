@@ -27,6 +27,17 @@ TEST(ConnectGrpcBridgeFilterConfigTest, ConnectGrpcBridgeFilter) {
   cb(filter_callback);
 }
 
+TEST(ConnectGrpcBridgeFilterConfigTest, ConnectGrpcBridgeFilterWithServerContext) {
+  envoy::extensions::filters::http::connect_grpc_bridge::v3::FilterConfig config;
+  testing::NiceMock<Server::Configuration::MockServerFactoryContext> context;
+  ConnectGrpcFilterConfigFactory factory;
+  Http::FilterFactoryCb cb =
+      factory.createFilterFactoryFromProtoWithServerContext(config, "stats", context);
+  Http::MockFilterChainFactoryCallbacks filter_callbacks;
+  EXPECT_CALL(filter_callbacks, addStreamFilter(_)).Times(AtLeast(1));
+  cb(filter_callbacks);
+}
+
 } // namespace
 } // namespace ConnectGrpcBridge
 } // namespace HttpFilters
