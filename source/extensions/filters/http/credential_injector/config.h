@@ -21,6 +21,11 @@ private:
       const envoy::extensions::filters::http::credential_injector::v3::CredentialInjector& config,
       const std::string& stats_prefix, DualInfo dual_info,
       Server::Configuration::ServerFactoryContext& context) override;
+
+  Http::FilterFactoryCb createFilterFactoryFromProtoWithServerContextTyped(
+      const envoy::extensions::filters::http::credential_injector::v3::CredentialInjector& config,
+      const std::string& stats_prefix,
+      Server::Configuration::ServerFactoryContext& context) override;
 };
 
 using UpstreamCredentialInjectorFilterFactory = CredentialInjectorFilterFactory;

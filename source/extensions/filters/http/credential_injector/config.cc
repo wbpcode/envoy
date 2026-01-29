@@ -45,6 +45,15 @@ CredentialInjectorFilterFactory::createFilterFactoryFromProtoTyped(
   };
 }
 
+Envoy::Http::FilterFactoryCb
+CredentialInjectorFilterFactory::createFilterFactoryFromProtoWithServerContextTyped(
+    const envoy::extensions::filters::http::credential_injector::v3::CredentialInjector& config,
+    const std::string& stats_prefix, Server::Configuration::ServerFactoryContext& context) {
+  return THROW_OR_RETURN_VALUE(
+      createFilterFactoryFromProtoTyped(config, stats_prefix, DualInfo(context), context),
+      Envoy::Http::FilterFactoryCb);
+}
+
 REGISTER_FACTORY(CredentialInjectorFilterFactory,
                  Server::Configuration::NamedHttpFilterConfigFactory);
 REGISTER_FACTORY(UpstreamCredentialInjectorFilterFactory,
