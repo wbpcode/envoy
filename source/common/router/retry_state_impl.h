@@ -143,6 +143,7 @@ private:
   uint32_t host_selection_max_attempts_;
   Upstream::ResourcePriority priority_;
   const bool auto_configured_for_http3_{};
+  const bool refresh_cluster_on_retry_{false};
 };
 
 } // namespace Router
