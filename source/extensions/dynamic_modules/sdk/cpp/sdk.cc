@@ -29,7 +29,7 @@ HttpFilterConfigHandle::~HttpFilterConfigHandle() = default;
 
 namespace Utility {
 
-std::string readWholeBody(BodyBuffer& buffered, BodyBuffer& received, bool is_buffered) {
+std::string getBodyContent(BodyBuffer& buffered, BodyBuffer& received, bool is_buffered) {
   const size_t total_size = buffered.getSize() + (is_buffered ? 0 : received.getSize());
   std::string result;
   result.reserve(total_size);
@@ -50,13 +50,13 @@ std::string readWholeBody(BodyBuffer& buffered, BodyBuffer& received, bool is_bu
 }
 
 std::string readWholeRequestBody(HttpFilterHandle& handle) {
-  return readWholeBody(handle.bufferedRequestBody(), handle.receivedRequestBody(),
-                       handle.receivedBufferedRequestBody());
+  return getBodyContent(handle.bufferedRequestBody(), handle.receivedRequestBody(),
+                        handle.receivedBufferedRequestBody());
 }
 
 std::string readWholeResponseBody(HttpFilterHandle& handle) {
-  return readWholeBody(handle.bufferedResponseBody(), handle.receivedResponseBody(),
-                       handle.receivedBufferedResponseBody());
+  return getBodyContent(handle.bufferedResponseBody(), handle.receivedResponseBody(),
+                        handle.receivedBufferedResponseBody());
 }
 } // namespace Utility
 
