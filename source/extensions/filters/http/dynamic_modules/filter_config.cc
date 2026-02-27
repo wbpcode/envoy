@@ -25,6 +25,33 @@ DynamicModuleHttpFilterConfig::~DynamicModuleHttpFilterConfig() {
   if (on_http_filter_config_destroy_) {
     (*on_http_filter_config_destroy_)(in_module_config_);
   }
+  // Null out in_module_config_ so that pending callout/stream callbacks won't invoke a destroyed
+  // module.
+  in_module_config_ = nullptr;
+
+  // Cancel all pending one-shot callouts.
+  while (!http_callouts_.empty()) {
+    auto it = http_callouts_.begin();
+    if (it->second->request_) {
+      it->second->request_->cancel();
+    }
+    if (!http_callouts_.empty() && http_callouts_.begin() == it) {
+      http_callouts_.erase(it);
+    }
+  }
+
+  // Reset all pending streams.
+  while (!http_stream_callouts_.empty()) {
+    auto it = http_stream_callouts_.begin();
+    if (it->second->stream_) {
+      it->second->stream_->reset();
+    }
+    if (!http_stream_callouts_.empty() && http_stream_callouts_.begin() == it) {
+      std::unique_ptr<Event::DeferredDeletable> deletable(it->second.release());
+      main_thread_dispatcher_.deferredDelete(std::move(deletable));
+      http_stream_callouts_.erase(it);
+    }
+  }
 }
 
 DynamicModuleHttpPerRouteFilterConfig::~DynamicModuleHttpPerRouteFilterConfig() {
@@ -138,10 +165,28 @@ absl::StatusOr<DynamicModuleHttpFilterConfigSharedPtr> newDynamicModuleHttpFilte
       "envoy_dynamic_module_on_http_filter_scheduled");
   RETURN_IF_NOT_OK_REF(on_scheduled.status());
 
-  // This is optional. Those modules that don't need config-level scheduling don't need to
-  // implement it.
+  // These are optional. Modules that don't need config-level scheduling or config-level
+  // callouts/streams don't need to implement them.
   auto on_config_scheduled = dynamic_module->getFunctionPointer<OnHttpFilterConfigScheduled>(
       "envoy_dynamic_module_on_http_filter_config_scheduled");
+  auto on_config_http_callout_done =
+      dynamic_module->getFunctionPointer<OnHttpFilterConfigHttpCalloutDoneType>(
+          "envoy_dynamic_module_on_http_filter_config_http_callout_done");
+  auto on_config_http_stream_headers =
+      dynamic_module->getFunctionPointer<OnHttpFilterConfigHttpStreamHeadersType>(
+          "envoy_dynamic_module_on_http_filter_config_http_stream_headers");
+  auto on_config_http_stream_data =
+      dynamic_module->getFunctionPointer<OnHttpFilterConfigHttpStreamDataType>(
+          "envoy_dynamic_module_on_http_filter_config_http_stream_data");
+  auto on_config_http_stream_trailers =
+      dynamic_module->getFunctionPointer<OnHttpFilterConfigHttpStreamTrailersType>(
+          "envoy_dynamic_module_on_http_filter_config_http_stream_trailers");
+  auto on_config_http_stream_complete =
+      dynamic_module->getFunctionPointer<OnHttpFilterConfigHttpStreamCompleteType>(
+          "envoy_dynamic_module_on_http_filter_config_http_stream_complete");
+  auto on_config_http_stream_reset =
+      dynamic_module->getFunctionPointer<OnHttpFilterConfigHttpStreamResetType>(
+          "envoy_dynamic_module_on_http_filter_config_http_stream_reset");
 
   auto on_downstream_above_write_buffer_high_watermark =
       dynamic_module->getFunctionPointer<OnHttpFilterDownstreamAboveWriteBufferHighWatermark>(
@@ -192,6 +237,24 @@ absl::StatusOr<DynamicModuleHttpFilterConfigSharedPtr> newDynamicModuleHttpFilte
   if (on_config_scheduled.ok()) {
     config->on_http_filter_config_scheduled_ = on_config_scheduled.value();
   }
+  if (on_config_http_callout_done.ok()) {
+    config->on_http_filter_config_http_callout_done_ = on_config_http_callout_done.value();
+  }
+  if (on_config_http_stream_headers.ok()) {
+    config->on_http_filter_config_http_stream_headers_ = on_config_http_stream_headers.value();
+  }
+  if (on_config_http_stream_data.ok()) {
+    config->on_http_filter_config_http_stream_data_ = on_config_http_stream_data.value();
+  }
+  if (on_config_http_stream_trailers.ok()) {
+    config->on_http_filter_config_http_stream_trailers_ = on_config_http_stream_trailers.value();
+  }
+  if (on_config_http_stream_complete.ok()) {
+    config->on_http_filter_config_http_stream_complete_ = on_config_http_stream_complete.value();
+  }
+  if (on_config_http_stream_reset.ok()) {
+    config->on_http_filter_config_http_stream_reset_ = on_config_http_stream_reset.value();
+  }
   config->on_http_filter_downstream_above_write_buffer_high_watermark_ =
       on_downstream_above_write_buffer_high_watermark.value();
   config->on_http_filter_downstream_below_write_buffer_low_watermark_ =
@@ -203,6 +266,276 @@ absl::StatusOr<DynamicModuleHttpFilterConfigSharedPtr> newDynamicModuleHttpFilte
 void DynamicModuleHttpFilterConfig::onScheduled(uint64_t event_id) {
   if (on_http_filter_config_scheduled_) {
     (*on_http_filter_config_scheduled_)(this, in_module_config_, event_id);
+  }
+}
+
+envoy_dynamic_module_type_http_callout_init_result DynamicModuleHttpFilterConfig::sendHttpCallout(
+    uint64_t* callout_id_out, absl::string_view cluster_name, Http::RequestMessagePtr&& message,
+    uint64_t timeout_milliseconds) {
+  Upstream::ThreadLocalCluster* cluster = cluster_manager_.getThreadLocalCluster(cluster_name);
+  if (!cluster) {
+    return envoy_dynamic_module_type_http_callout_init_result_ClusterNotFound;
+  }
+  Http::AsyncClient::RequestOptions options;
+  options.setTimeout(std::chrono::milliseconds(timeout_milliseconds));
+
+  const uint64_t callout_id = getNextCalloutId();
+  auto http_callout_callback = std::make_unique<DynamicModuleHttpFilterConfig::HttpCalloutCallback>(
+      shared_from_this(), callout_id);
+  DynamicModuleHttpFilterConfig::HttpCalloutCallback& callback = *http_callout_callback;
+
+  auto request = cluster->httpAsyncClient().send(std::move(message), callback, options);
+  if (!request) {
+    return envoy_dynamic_module_type_http_callout_init_result_CannotCreateRequest;
+  }
+
+  callback.request_ = request;
+  http_callouts_.emplace(callout_id, std::move(http_callout_callback));
+  *callout_id_out = callout_id;
+  return envoy_dynamic_module_type_http_callout_init_result_Success;
+}
+
+void DynamicModuleHttpFilterConfig::HttpCalloutCallback::onSuccess(
+    const Http::AsyncClient::Request&, Http::ResponseMessagePtr&& response) {
+  // Move the config to local scope so that on_http_filter_config_http_callout_done_ cannot
+  // trigger destruction of this callback while we're still in it.
+  DynamicModuleHttpFilterConfigSharedPtr config = std::move(config_);
+  const uint64_t callout_id = callout_id_;
+  if (!config->in_module_config_ || !config->on_http_filter_config_http_callout_done_) {
+    config->http_callouts_.erase(callout_id);
+    return;
+  }
+
+  absl::InlinedVector<envoy_dynamic_module_type_envoy_http_header, 16> headers_vector;
+  headers_vector.reserve(response->headers().size());
+  response->headers().iterate([&headers_vector](
+                                  const Http::HeaderEntry& header) -> Http::HeaderMap::Iterate {
+    headers_vector.emplace_back(envoy_dynamic_module_type_envoy_http_header{
+        const_cast<char*>(header.key().getStringView().data()), header.key().getStringView().size(),
+        const_cast<char*>(header.value().getStringView().data()),
+        header.value().getStringView().size()});
+    return Http::HeaderMap::Iterate::Continue;
+  });
+
+  Envoy::Buffer::RawSliceVector body = response->body().getRawSlices(std::nullopt);
+  config->on_http_filter_config_http_callout_done_(
+      config.get(), config->in_module_config_, callout_id,
+      envoy_dynamic_module_type_http_callout_result_Success, headers_vector.data(),
+      headers_vector.size(), reinterpret_cast<envoy_dynamic_module_type_envoy_buffer*>(body.data()),
+      body.size());
+  config->http_callouts_.erase(callout_id);
+}
+
+void DynamicModuleHttpFilterConfig::HttpCalloutCallback::onFailure(
+    const Http::AsyncClient::Request&, Http::AsyncClient::FailureReason reason) {
+  DynamicModuleHttpFilterConfigSharedPtr config = std::move(config_);
+  const uint64_t callout_id = callout_id_;
+  if (!config->in_module_config_ || !config->on_http_filter_config_http_callout_done_) {
+    config->http_callouts_.erase(callout_id);
+    return;
+  }
+  if (request_) {
+    envoy_dynamic_module_type_http_callout_result result;
+    switch (reason) {
+    case Http::AsyncClient::FailureReason::Reset:
+      result = envoy_dynamic_module_type_http_callout_result_Reset;
+      break;
+    case Http::AsyncClient::FailureReason::ExceedResponseBufferLimit:
+      result = envoy_dynamic_module_type_http_callout_result_ExceedResponseBufferLimit;
+      break;
+    }
+    config->on_http_filter_config_http_callout_done_(config.get(), config->in_module_config_,
+                                                     callout_id, result, nullptr, 0, nullptr, 0);
+  }
+  config->http_callouts_.erase(callout_id);
+}
+
+envoy_dynamic_module_type_http_callout_init_result DynamicModuleHttpFilterConfig::startHttpStream(
+    uint64_t* stream_id_out, absl::string_view cluster_name, Http::RequestMessagePtr&& message,
+    bool end_stream, uint64_t timeout_milliseconds) {
+  Upstream::ThreadLocalCluster* cluster = cluster_manager_.getThreadLocalCluster(cluster_name);
+  if (cluster == nullptr) {
+    return envoy_dynamic_module_type_http_callout_init_result_ClusterNotFound;
+  }
+  if (!message->headers().Path() || !message->headers().Method() || !message->headers().Host()) {
+    return envoy_dynamic_module_type_http_callout_init_result_MissingRequiredHeaders;
+  }
+
+  const uint64_t callout_id = getNextCalloutId();
+  auto callback = std::make_unique<DynamicModuleHttpFilterConfig::HttpStreamCalloutCallback>(
+      shared_from_this(), callout_id);
+  DynamicModuleHttpFilterConfig::HttpStreamCalloutCallback& callback_ref = *callback;
+  http_stream_callouts_[callout_id] = std::move(callback);
+
+  Http::AsyncClient::StreamOptions options;
+  options.setTimeout(std::chrono::milliseconds(timeout_milliseconds));
+
+  Http::AsyncClient::Stream* async_stream = cluster->httpAsyncClient().start(callback_ref, options);
+  if (!async_stream) {
+    http_stream_callouts_.erase(callout_id);
+    return envoy_dynamic_module_type_http_callout_init_result_CannotCreateRequest;
+  }
+
+  callback_ref.stream_ = async_stream;
+  callback_ref.request_message_ = std::move(message);
+  *stream_id_out = callout_id;
+
+  bool has_initial_body = callback_ref.request_message_->body().length() > 0;
+  if (has_initial_body) {
+    callback_ref.stream_->sendHeaders(callback_ref.request_message_->headers(),
+                                      false /* end_stream */);
+    if (callback_ref.stream_ == nullptr) {
+      return envoy_dynamic_module_type_http_callout_init_result_Success;
+    }
+    callback_ref.stream_->sendData(callback_ref.request_message_->body(), end_stream);
+    if (callback_ref.stream_ == nullptr) {
+      return envoy_dynamic_module_type_http_callout_init_result_Success;
+    }
+  } else {
+    callback_ref.stream_->sendHeaders(callback_ref.request_message_->headers(), end_stream);
+    if (callback_ref.stream_ == nullptr) {
+      return envoy_dynamic_module_type_http_callout_init_result_Success;
+    }
+  }
+  return envoy_dynamic_module_type_http_callout_init_result_Success;
+}
+
+void DynamicModuleHttpFilterConfig::resetHttpStream(uint64_t stream_id) {
+  auto it = http_stream_callouts_.find(stream_id);
+  if (it != http_stream_callouts_.end() && it->second->stream_) {
+    it->second->stream_->reset();
+  }
+}
+
+bool DynamicModuleHttpFilterConfig::sendStreamData(uint64_t stream_id, Buffer::Instance& data,
+                                                   bool end_stream) {
+  auto it = http_stream_callouts_.find(stream_id);
+  if (it == http_stream_callouts_.end() || !it->second->stream_) {
+    return false;
+  }
+  it->second->stream_->sendData(data, end_stream);
+  return true;
+}
+
+bool DynamicModuleHttpFilterConfig::sendStreamTrailers(uint64_t stream_id,
+                                                       Http::RequestTrailerMapPtr trailers) {
+  auto it = http_stream_callouts_.find(stream_id);
+  if (it == http_stream_callouts_.end() || !it->second->stream_) {
+    return false;
+  }
+  it->second->request_trailers_ = std::move(trailers);
+  it->second->stream_->sendTrailers(*it->second->request_trailers_);
+  return true;
+}
+
+void DynamicModuleHttpFilterConfig::HttpStreamCalloutCallback::onHeaders(
+    Http::ResponseHeaderMapPtr&& headers, bool end_stream) {
+  if (!config_->in_module_config_ || !config_->on_http_filter_config_http_stream_headers_) {
+    return;
+  }
+  absl::InlinedVector<envoy_dynamic_module_type_envoy_http_header, 16> headers_vector;
+  headers_vector.reserve(headers->size());
+  headers->iterate([&headers_vector](const Http::HeaderEntry& header) -> Http::HeaderMap::Iterate {
+    headers_vector.emplace_back(envoy_dynamic_module_type_envoy_http_header{
+        const_cast<char*>(header.key().getStringView().data()), header.key().getStringView().size(),
+        const_cast<char*>(header.value().getStringView().data()),
+        header.value().getStringView().size()});
+    return Http::HeaderMap::Iterate::Continue;
+  });
+  config_->on_http_filter_config_http_stream_headers_(config_.get(), config_->in_module_config_,
+                                                      callout_id_, headers_vector.data(),
+                                                      headers_vector.size(), end_stream);
+}
+
+void DynamicModuleHttpFilterConfig::HttpStreamCalloutCallback::onData(Buffer::Instance& data,
+                                                                      bool end_stream) {
+  if (!config_->in_module_config_ || !config_->on_http_filter_config_http_stream_data_) {
+    return;
+  }
+  const uint64_t length = data.length();
+  if (length > 0 || end_stream) {
+    std::vector<envoy_dynamic_module_type_envoy_buffer> buffers;
+    const auto& slices = data.getRawSlices();
+    buffers.reserve(slices.size());
+    for (const auto& slice : slices) {
+      buffers.push_back({static_cast<char*>(slice.mem_), slice.len_});
+    }
+    config_->on_http_filter_config_http_stream_data_(config_.get(), config_->in_module_config_,
+                                                     callout_id_, buffers.data(), buffers.size(),
+                                                     end_stream);
+  }
+}
+
+void DynamicModuleHttpFilterConfig::HttpStreamCalloutCallback::onTrailers(
+    Http::ResponseTrailerMapPtr&& trailers) {
+  if (!config_->in_module_config_ || !config_->on_http_filter_config_http_stream_trailers_) {
+    return;
+  }
+  absl::InlinedVector<envoy_dynamic_module_type_envoy_http_header, 16> trailers_vector;
+  trailers_vector.reserve(trailers->size());
+  trailers->iterate([&trailers_vector](
+                        const Http::HeaderEntry& header) -> Http::HeaderMap::Iterate {
+    trailers_vector.emplace_back(envoy_dynamic_module_type_envoy_http_header{
+        const_cast<char*>(header.key().getStringView().data()), header.key().getStringView().size(),
+        const_cast<char*>(header.value().getStringView().data()),
+        header.value().getStringView().size()});
+    return Http::HeaderMap::Iterate::Continue;
+  });
+  config_->on_http_filter_config_http_stream_trailers_(config_.get(), config_->in_module_config_,
+                                                       callout_id_, trailers_vector.data(),
+                                                       trailers_vector.size());
+}
+
+void DynamicModuleHttpFilterConfig::HttpStreamCalloutCallback::onComplete() {
+  if (cleaned_up_) {
+    return;
+  }
+  cleaned_up_ = true;
+
+  DynamicModuleHttpFilterConfigSharedPtr config = std::move(config_);
+  Event::Dispatcher& dispatcher = config->main_thread_dispatcher_;
+
+  if (config->in_module_config_ && config->on_http_filter_config_http_stream_complete_) {
+    config->on_http_filter_config_http_stream_complete_(config.get(), config->in_module_config_,
+                                                        callout_id_);
+  }
+
+  stream_ = nullptr;
+  request_message_.reset();
+  request_trailers_.reset();
+
+  auto it = config->http_stream_callouts_.find(callout_id_);
+  if (it != config->http_stream_callouts_.end()) {
+    std::unique_ptr<Event::DeferredDeletable> deletable(it->second.release());
+    dispatcher.deferredDelete(std::move(deletable));
+    config->http_stream_callouts_.erase(it);
+  }
+}
+
+void DynamicModuleHttpFilterConfig::HttpStreamCalloutCallback::onReset() {
+  if (cleaned_up_) {
+    return;
+  }
+  cleaned_up_ = true;
+
+  DynamicModuleHttpFilterConfigSharedPtr config = std::move(config_);
+  Event::Dispatcher& dispatcher = config->main_thread_dispatcher_;
+
+  if (stream_ && config->in_module_config_ && config->on_http_filter_config_http_stream_reset_) {
+    config->on_http_filter_config_http_stream_reset_(
+        config.get(), config->in_module_config_, callout_id_,
+        envoy_dynamic_module_type_http_stream_reset_reason_LocalReset);
+  }
+
+  stream_ = nullptr;
+  request_message_.reset();
+  request_trailers_.reset();
+
+  auto it = config->http_stream_callouts_.find(callout_id_);
+  if (it != config->http_stream_callouts_.end()) {
+    std::unique_ptr<Event::DeferredDeletable> deletable(it->second.release());
+    dispatcher.deferredDelete(std::move(deletable));
+    config->http_stream_callouts_.erase(it);
   }
 }
 
