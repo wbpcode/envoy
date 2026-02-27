@@ -320,7 +320,8 @@ pub trait HttpFilterConfig<EHF: EnvoyHttpFilter>: Sync {
   /// [`EnvoyHttpFilterConfig::send_http_callout`] completes.
   ///
   /// * `envoy_config` can be used to interact with the underlying Envoy filter config object.
-  /// * `callout_id` is the opaque handle returned from [`EnvoyHttpFilterConfig::send_http_callout`].
+  /// * `callout_id` is the opaque handle returned from
+  ///   [`EnvoyHttpFilterConfig::send_http_callout`].
   /// * `result` indicates the result of the callout.
   /// * `response_headers` is a list of key-value pairs of the response headers.
   /// * `response_body` is the response body chunks.
@@ -4384,7 +4385,9 @@ unsafe extern "C" fn envoy_dynamic_module_on_http_filter_config_http_callout_don
     None
   };
   config.on_http_callout_done(
-    &mut EnvoyHttpFilterConfigImpl { raw_ptr: envoy_config_ptr },
+    &mut EnvoyHttpFilterConfigImpl {
+      raw_ptr: envoy_config_ptr,
+    },
     callout_id,
     result,
     headers,
@@ -4411,7 +4414,9 @@ unsafe extern "C" fn envoy_dynamic_module_on_http_filter_config_http_stream_head
     &[]
   };
   config.on_http_stream_headers(
-    &mut EnvoyHttpFilterConfigImpl { raw_ptr: envoy_config_ptr },
+    &mut EnvoyHttpFilterConfigImpl {
+      raw_ptr: envoy_config_ptr,
+    },
     stream_handle,
     headers,
     end_stream,
@@ -4435,7 +4440,9 @@ unsafe extern "C" fn envoy_dynamic_module_on_http_filter_config_http_stream_data
     &[]
   };
   config.on_http_stream_data(
-    &mut EnvoyHttpFilterConfigImpl { raw_ptr: envoy_config_ptr },
+    &mut EnvoyHttpFilterConfigImpl {
+      raw_ptr: envoy_config_ptr,
+    },
     stream_handle,
     data,
     end_stream,
@@ -4460,7 +4467,9 @@ unsafe extern "C" fn envoy_dynamic_module_on_http_filter_config_http_stream_trai
     &[]
   };
   config.on_http_stream_trailers(
-    &mut EnvoyHttpFilterConfigImpl { raw_ptr: envoy_config_ptr },
+    &mut EnvoyHttpFilterConfigImpl {
+      raw_ptr: envoy_config_ptr,
+    },
     stream_handle,
     trailers,
   );
@@ -4475,7 +4484,9 @@ unsafe extern "C" fn envoy_dynamic_module_on_http_filter_config_http_stream_comp
   let config = config_ptr as *mut *mut dyn HttpFilterConfig<EnvoyHttpFilterImpl>;
   let config = &**config;
   config.on_http_stream_complete(
-    &mut EnvoyHttpFilterConfigImpl { raw_ptr: envoy_config_ptr },
+    &mut EnvoyHttpFilterConfigImpl {
+      raw_ptr: envoy_config_ptr,
+    },
     stream_handle,
   );
 }
@@ -4490,7 +4501,9 @@ unsafe extern "C" fn envoy_dynamic_module_on_http_filter_config_http_stream_rese
   let config = config_ptr as *mut *mut dyn HttpFilterConfig<EnvoyHttpFilterImpl>;
   let config = &**config;
   config.on_http_stream_reset(
-    &mut EnvoyHttpFilterConfigImpl { raw_ptr: envoy_config_ptr },
+    &mut EnvoyHttpFilterConfigImpl {
+      raw_ptr: envoy_config_ptr,
+    },
     stream_handle,
     reset_reason,
   );
