@@ -914,9 +914,9 @@ TEST_P(DynamicModuleHttpLanguageTests, HttpFilterConfigHttpCallout_failing) {
   Http::AsyncClient::Callbacks* config_callbacks_captured = nullptr;
   NiceMock<Http::MockAsyncClientRequest> config_request(&cluster->async_client_);
   EXPECT_CALL(cluster->async_client_, send_(_, _, _))
-      .WillOnce(Invoke(
-          [&](Http::RequestMessagePtr&, Http::AsyncClient::Callbacks& callbacks,
-              const Http::AsyncClient::RequestOptions&) -> Http::AsyncClient::Request* {
+      .WillOnce(
+          Invoke([&](Http::RequestMessagePtr&, Http::AsyncClient::Callbacks& callbacks,
+                     const Http::AsyncClient::RequestOptions&) -> Http::AsyncClient::Request* {
             config_callbacks_captured = &callbacks;
             return &config_request;
           }));

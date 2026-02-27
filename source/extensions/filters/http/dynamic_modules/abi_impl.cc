@@ -1783,8 +1783,7 @@ envoy_dynamic_module_callback_http_filter_config_start_http_stream(
     envoy_dynamic_module_type_http_filter_config_envoy_ptr filter_config_envoy_ptr,
     uint64_t* stream_id_out, envoy_dynamic_module_type_module_buffer cluster_name,
     envoy_dynamic_module_type_module_http_header* headers, size_t headers_size,
-    envoy_dynamic_module_type_module_buffer body, bool end_stream,
-    uint64_t timeout_milliseconds) {
+    envoy_dynamic_module_type_module_buffer body, bool end_stream, uint64_t timeout_milliseconds) {
   auto filter_config = static_cast<DynamicModuleHttpFilterConfig*>(filter_config_envoy_ptr);
 
   absl::string_view cluster_name_view(cluster_name.ptr, cluster_name.length);

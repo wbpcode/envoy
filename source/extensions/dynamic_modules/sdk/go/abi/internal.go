@@ -1113,7 +1113,7 @@ func newDymStreamPluginHandle(
 }
 
 type dymConfigHandle struct {
-	hostConfigPtr   C.envoy_dynamic_module_type_http_filter_config_envoy_ptr
+	hostConfigPtr    C.envoy_dynamic_module_type_http_filter_config_envoy_ptr
 	calloutCallbacks map[uint64]shared.HttpCalloutCallback
 	streamCallbacks  map[uint64]shared.HttpStreamCallback
 }

@@ -669,8 +669,7 @@ public:
         envoy_dynamic_module_type_module_buffer{body.data(), body.size()}, end_of_stream);
   }
 
-  bool sendHttpStreamTrailers(uint64_t stream_id,
-                              absl::Span<const HeaderView> trailers) override {
+  bool sendHttpStreamTrailers(uint64_t stream_id, absl::Span<const HeaderView> trailers) override {
     return envoy_dynamic_module_callback_http_filter_config_stream_send_trailers(
         host_config_ptr_, stream_id,
         const_cast<envoy_dynamic_module_type_module_http_header*>(
@@ -1062,8 +1061,8 @@ envoy_dynamic_module_on_http_filter_local_reply(
 
 void envoy_dynamic_module_on_http_filter_config_http_callout_done(
     envoy_dynamic_module_type_http_filter_config_envoy_ptr filter_config_envoy_ptr,
-    envoy_dynamic_module_type_http_filter_config_module_ptr filter_config_ptr,
-    uint64_t callout_id, envoy_dynamic_module_type_http_callout_result result,
+    envoy_dynamic_module_type_http_filter_config_module_ptr filter_config_ptr, uint64_t callout_id,
+    envoy_dynamic_module_type_http_callout_result result,
     envoy_dynamic_module_type_envoy_http_header* headers, size_t headers_size,
     envoy_dynamic_module_type_envoy_buffer* body_chunks, size_t body_chunks_size) {
   auto* factory_wrapper = unwrapPointer<HttpFilterFactoryWrapper>(filter_config_ptr);
@@ -1154,8 +1153,7 @@ void envoy_dynamic_module_on_http_filter_config_http_stream_trailers(
 
 void envoy_dynamic_module_on_http_filter_config_http_stream_complete(
     envoy_dynamic_module_type_http_filter_config_envoy_ptr filter_config_envoy_ptr,
-    envoy_dynamic_module_type_http_filter_config_module_ptr filter_config_ptr,
-    uint64_t stream_id) {
+    envoy_dynamic_module_type_http_filter_config_module_ptr filter_config_ptr, uint64_t stream_id) {
   auto* factory_wrapper = unwrapPointer<HttpFilterFactoryWrapper>(filter_config_ptr);
   if (!factory_wrapper) {
     return;

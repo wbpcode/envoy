@@ -1486,8 +1486,7 @@ REGISTER_HTTP_FILTER_CONFIG_FACTORY(UpstreamResetConfigFactory, "upstream_reset"
 
 class HttpConfigCalloutFilter : public HttpFilter {
 public:
-  HttpConfigCalloutFilter(HttpFilterHandle& handle,
-                          std::shared_ptr<std::atomic<bool>> callout_done)
+  HttpConfigCalloutFilter(HttpFilterHandle& handle, std::shared_ptr<std::atomic<bool>> callout_done)
       : handle_(handle), callout_done_(std::move(callout_done)) {}
 
   HeadersStatus onRequestHeaders(HeaderMap& headers, bool end_stream) override {
@@ -1566,8 +1565,7 @@ REGISTER_HTTP_FILTER_CONFIG_FACTORY(HttpConfigCalloutConfigFactory, "http_config
 
 class HttpConfigStreamFilter : public HttpFilter {
 public:
-  HttpConfigStreamFilter(HttpFilterHandle& handle,
-                         std::shared_ptr<std::atomic<bool>> stream_done)
+  HttpConfigStreamFilter(HttpFilterHandle& handle, std::shared_ptr<std::atomic<bool>> stream_done)
       : handle_(handle), stream_done_(std::move(stream_done)) {}
 
   HeadersStatus onRequestHeaders(HeaderMap& headers, bool end_stream) override {
