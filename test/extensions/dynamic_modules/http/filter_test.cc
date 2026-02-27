@@ -811,6 +811,204 @@ TEST_P(DynamicModuleHttpLanguageTests, HttpFilterHttpCallout_resetting) {
   callbacks_captured->onFailure(req, Http::AsyncClient::FailureReason::Reset);
 }
 
+// Config-context callout tests. The module initiates an HTTP callout during
+// on_http_filter_config_new, and subsequent filter requests check the result.
+
+TEST_P(DynamicModuleHttpLanguageTests, HttpFilterConfigHttpCallout_success) {
+  const std::string filter_name = "http_config_callout";
+  NiceMock<Server::Configuration::MockServerFactoryContext> context;
+  NiceMock<Server::MockOptions> options;
+  ON_CALL(options, concurrency()).WillByDefault(testing::Return(1));
+  ON_CALL(context, options()).WillByDefault(testing::ReturnRef(options));
+  ScopedThreadLocalServerContextSetter setter(context);
+
+  auto dynamic_module =
+      newDynamicModule(testSharedObjectPath("http_integration_test", GetParam()), false);
+  EXPECT_TRUE(dynamic_module.ok());
+
+  Stats::IsolatedStoreImpl stats_store;
+  auto stats_scope = stats_store.createScope("");
+  Upstream::MockClusterManager cluster_manager;
+  NiceMock<Upstream::MockThreadLocalCluster> thread_local_cluster;
+  EXPECT_CALL(cluster_manager, getThreadLocalCluster(_))
+      .WillRepeatedly(testing::Return(&thread_local_cluster));
+  EXPECT_CALL(context, clusterManager()).WillRepeatedly(testing::ReturnRef(cluster_manager));
+
+  // The config-level callout target cluster.
+  const std::string filter_config = "success_cluster";
+  std::shared_ptr<Upstream::MockThreadLocalCluster> cluster =
+      std::make_shared<NiceMock<Upstream::MockThreadLocalCluster>>();
+  EXPECT_CALL(cluster_manager, getThreadLocalCluster(absl::string_view{filter_config}))
+      .WillRepeatedly(testing::Return(cluster.get()));
+
+  // Capture the async client callback that will be triggered during config creation.
+  Http::AsyncClient::Callbacks* config_callbacks_captured = nullptr;
+  NiceMock<Http::MockAsyncClientRequest> config_request(&cluster->async_client_);
+  EXPECT_CALL(cluster->async_client_, send_(_, _, _))
+      .WillOnce(Invoke(
+          [&](Http::RequestMessagePtr& message, Http::AsyncClient::Callbacks& callbacks,
+              const Http::AsyncClient::RequestOptions& option) -> Http::AsyncClient::Request* {
+            EXPECT_EQ(message->headers().Path()->value().getStringView(), "/config-init");
+            EXPECT_EQ(message->headers().Method()->value().getStringView(), "GET");
+            EXPECT_EQ(message->headers().Host()->value().getStringView(), "example.com");
+            EXPECT_EQ(option.timeout.value(), std::chrono::milliseconds(1000));
+            config_callbacks_captured = &callbacks;
+            return &config_request;
+          }));
+
+  // Config creation triggers the callout.
+  auto filter_config_or_status =
+      Envoy::Extensions::DynamicModules::HttpFilters::newDynamicModuleHttpFilterConfig(
+          filter_name, filter_config, DefaultMetricsNamespace, false,
+          std::move(dynamic_module.value()), *stats_scope, context);
+  EXPECT_TRUE(filter_config_or_status.ok());
+  EXPECT_TRUE(config_callbacks_captured);
+
+  // Simulate the config callout response. This calls on_http_filter_config_http_callout_done.
+  Http::ResponseHeaderMapPtr resp_headers(
+      new Http::TestResponseHeaderMapImpl({{"x-callout-response", "ok"}}));
+  Http::ResponseMessagePtr response(new Http::ResponseMessageImpl(std::move(resp_headers)));
+  response->body().add("config_callout_body");
+  NiceMock<Http::MockAsyncClientRequest> req{&cluster->async_client_};
+  config_callbacks_captured->onSuccess(req, std::move(response));
+
+  // Now create a filter. The filter should see callout_done=true and respond with 200.
+  NiceMock<Http::MockStreamDecoderFilterCallbacks> callbacks;
+  auto filter = std::make_shared<DynamicModuleHttpFilter>(filter_config_or_status.value(),
+                                                          stats_scope->symbolTable(), 0);
+  filter->initializeInModuleFilter();
+  filter->setDecoderFilterCallbacks(callbacks);
+  EXPECT_CALL(callbacks, sendLocalReply(Http::Code::OK, _, _, _, _));
+  EXPECT_CALL(callbacks, encodeHeaders_(_, true));
+
+  TestRequestHeaderMapImpl headers{{}};
+  EXPECT_EQ(FilterHeadersStatus::StopIteration, filter->decodeHeaders(headers, false));
+}
+
+TEST_P(DynamicModuleHttpLanguageTests, HttpFilterConfigHttpCallout_failing) {
+  const std::string filter_name = "http_config_callout";
+  NiceMock<Server::Configuration::MockServerFactoryContext> context;
+  NiceMock<Server::MockOptions> options;
+  ON_CALL(options, concurrency()).WillByDefault(testing::Return(1));
+  ON_CALL(context, options()).WillByDefault(testing::ReturnRef(options));
+  ScopedThreadLocalServerContextSetter setter(context);
+
+  auto dynamic_module =
+      newDynamicModule(testSharedObjectPath("http_integration_test", GetParam()), false);
+  EXPECT_TRUE(dynamic_module.ok());
+
+  Stats::IsolatedStoreImpl stats_store;
+  auto stats_scope = stats_store.createScope("");
+  Upstream::MockClusterManager cluster_manager;
+  NiceMock<Upstream::MockThreadLocalCluster> thread_local_cluster;
+  EXPECT_CALL(cluster_manager, getThreadLocalCluster(_))
+      .WillRepeatedly(testing::Return(&thread_local_cluster));
+  EXPECT_CALL(context, clusterManager()).WillRepeatedly(testing::ReturnRef(cluster_manager));
+
+  const std::string filter_config = "failing_cluster";
+  std::shared_ptr<Upstream::MockThreadLocalCluster> cluster =
+      std::make_shared<NiceMock<Upstream::MockThreadLocalCluster>>();
+  EXPECT_CALL(cluster_manager, getThreadLocalCluster(absl::string_view{filter_config}))
+      .WillRepeatedly(testing::Return(cluster.get()));
+
+  Http::AsyncClient::Callbacks* config_callbacks_captured = nullptr;
+  NiceMock<Http::MockAsyncClientRequest> config_request(&cluster->async_client_);
+  EXPECT_CALL(cluster->async_client_, send_(_, _, _))
+      .WillOnce(Invoke(
+          [&](Http::RequestMessagePtr&, Http::AsyncClient::Callbacks& callbacks,
+              const Http::AsyncClient::RequestOptions&) -> Http::AsyncClient::Request* {
+            config_callbacks_captured = &callbacks;
+            return &config_request;
+          }));
+
+  auto filter_config_or_status =
+      Envoy::Extensions::DynamicModules::HttpFilters::newDynamicModuleHttpFilterConfig(
+          filter_name, filter_config, DefaultMetricsNamespace, false,
+          std::move(dynamic_module.value()), *stats_scope, context);
+  EXPECT_TRUE(filter_config_or_status.ok());
+  EXPECT_TRUE(config_callbacks_captured);
+
+  // Simulate a callout failure.
+  NiceMock<Http::MockAsyncClientRequest> req{&cluster->async_client_};
+  config_callbacks_captured->onFailure(req, Http::AsyncClient::FailureReason::Reset);
+
+  // The filter should see callout_done=false and respond with 503.
+  NiceMock<Http::MockStreamDecoderFilterCallbacks> callbacks;
+  auto filter = std::make_shared<DynamicModuleHttpFilter>(filter_config_or_status.value(),
+                                                          stats_scope->symbolTable(), 0);
+  filter->initializeInModuleFilter();
+  filter->setDecoderFilterCallbacks(callbacks);
+  EXPECT_CALL(callbacks, sendLocalReply(Http::Code::ServiceUnavailable, _, _, _, _));
+  EXPECT_CALL(callbacks, encodeHeaders_(_, true));
+
+  TestRequestHeaderMapImpl headers{{}};
+  EXPECT_EQ(FilterHeadersStatus::StopIteration, filter->decodeHeaders(headers, false));
+}
+
+TEST_P(DynamicModuleHttpLanguageTests, HttpFilterConfigHttpStream_success) {
+  const std::string filter_name = "http_config_stream";
+  NiceMock<Server::Configuration::MockServerFactoryContext> context;
+  NiceMock<Server::MockOptions> options;
+  ON_CALL(options, concurrency()).WillByDefault(testing::Return(1));
+  ON_CALL(context, options()).WillByDefault(testing::ReturnRef(options));
+  ScopedThreadLocalServerContextSetter setter(context);
+
+  auto dynamic_module =
+      newDynamicModule(testSharedObjectPath("http_integration_test", GetParam()), false);
+  EXPECT_TRUE(dynamic_module.ok());
+
+  Stats::IsolatedStoreImpl stats_store;
+  auto stats_scope = stats_store.createScope("");
+  Upstream::MockClusterManager cluster_manager;
+  NiceMock<Upstream::MockThreadLocalCluster> thread_local_cluster;
+  EXPECT_CALL(cluster_manager, getThreadLocalCluster(_))
+      .WillRepeatedly(testing::Return(&thread_local_cluster));
+  EXPECT_CALL(context, clusterManager()).WillRepeatedly(testing::ReturnRef(cluster_manager));
+
+  const std::string filter_config = "stream_cluster";
+  std::shared_ptr<Upstream::MockThreadLocalCluster> cluster =
+      std::make_shared<NiceMock<Upstream::MockThreadLocalCluster>>();
+  EXPECT_CALL(cluster_manager, getThreadLocalCluster(absl::string_view{filter_config}))
+      .WillRepeatedly(testing::Return(cluster.get()));
+
+  // Capture the stream callbacks triggered during config creation.
+  Http::AsyncClient::StreamCallbacks* stream_callbacks_captured = nullptr;
+  NiceMock<Http::MockAsyncClientStream> stream;
+  EXPECT_CALL(cluster->async_client_, start(_, _))
+      .WillOnce(Invoke([&](Http::AsyncClient::StreamCallbacks& callbacks,
+                           const Http::AsyncClient::StreamOptions&) -> Http::AsyncClient::Stream* {
+        stream_callbacks_captured = &callbacks;
+        return &stream;
+      }));
+  // expect the initial headers to be sent on the stream
+  EXPECT_CALL(stream, sendHeaders(_, true));
+
+  auto filter_config_or_status =
+      Envoy::Extensions::DynamicModules::HttpFilters::newDynamicModuleHttpFilterConfig(
+          filter_name, filter_config, DefaultMetricsNamespace, false,
+          std::move(dynamic_module.value()), *stats_scope, context);
+  EXPECT_TRUE(filter_config_or_status.ok());
+  EXPECT_TRUE(stream_callbacks_captured);
+
+  // Deliver response headers then complete the stream.
+  Http::ResponseHeaderMapPtr resp_headers(
+      new Http::TestResponseHeaderMapImpl({{"x-stream-response", "ok"}}));
+  stream_callbacks_captured->onHeaders(std::move(resp_headers), false);
+  stream_callbacks_captured->onComplete();
+
+  // Filter should see stream_done=true and respond with 200.
+  NiceMock<Http::MockStreamDecoderFilterCallbacks> callbacks;
+  auto filter = std::make_shared<DynamicModuleHttpFilter>(filter_config_or_status.value(),
+                                                          stats_scope->symbolTable(), 0);
+  filter->initializeInModuleFilter();
+  filter->setDecoderFilterCallbacks(callbacks);
+  EXPECT_CALL(callbacks, sendLocalReply(Http::Code::OK, _, _, _, _));
+  EXPECT_CALL(callbacks, encodeHeaders_(_, true));
+
+  TestRequestHeaderMapImpl headers{{}};
+  EXPECT_EQ(FilterHeadersStatus::StopIteration, filter->decodeHeaders(headers, false));
+}
+
 // This test verifies that handling of per-route config is correct in terms of lifetimes.
 TEST_P(DynamicModuleHttpLanguageTests, HttpFilterPerRouteConfigLifetimes) {
   const std::string filter_name = "per_route_config";
