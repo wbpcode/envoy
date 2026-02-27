@@ -196,7 +196,9 @@ struct ConfigCalloutConfig {
 
 impl<EHF: EnvoyHttpFilter> HttpFilterConfig<EHF> for ConfigCalloutConfig {
   fn new_http_filter(&self, _envoy: &mut EHF) -> Box<dyn HttpFilter<EHF>> {
-    Box::new(ConfigCalloutFilter { callout_done: self.callout_done.clone() })
+    Box::new(ConfigCalloutFilter {
+      callout_done: self.callout_done.clone(),
+    })
   }
 
   fn on_http_callout_done(
@@ -243,7 +245,9 @@ struct ConfigStreamConfig {
 
 impl<EHF: EnvoyHttpFilter> HttpFilterConfig<EHF> for ConfigStreamConfig {
   fn new_http_filter(&self, _envoy: &mut EHF) -> Box<dyn HttpFilter<EHF>> {
-    Box::new(ConfigStreamFilter { stream_done: self.stream_done.clone() })
+    Box::new(ConfigStreamFilter {
+      stream_done: self.stream_done.clone(),
+    })
   }
 
   fn on_http_stream_complete(
