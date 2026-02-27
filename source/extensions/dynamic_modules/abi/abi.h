@@ -2290,9 +2290,9 @@ bool envoy_dynamic_module_callback_http_stream_send_trailers(
 
 /**
  * envoy_dynamic_module_callback_http_filter_config_http_callout is called by the module to
- * initiate an HTTP callout from an HTTP filter configuration context. Unlike the per-filter callout,
- * this callout is tied to the filter configuration lifetime and is not bound to any specific HTTP
- * request. The response is received in
+ * initiate an HTTP callout from an HTTP filter configuration context. Unlike the per-filter
+ * callout, this callout is tied to the filter configuration lifetime and is not bound to any
+ * specific HTTP request. The response is received in
  * envoy_dynamic_module_on_http_filter_config_http_callout_done.
  *
  * @param filter_config_envoy_ptr is the pointer to the DynamicModuleHttpFilterConfig object.
@@ -2350,8 +2350,7 @@ envoy_dynamic_module_callback_http_filter_config_start_http_stream(
     envoy_dynamic_module_type_http_filter_config_envoy_ptr filter_config_envoy_ptr,
     uint64_t* stream_id_out, envoy_dynamic_module_type_module_buffer cluster_name,
     envoy_dynamic_module_type_module_http_header* headers, size_t headers_size,
-    envoy_dynamic_module_type_module_buffer body, bool end_stream,
-    uint64_t timeout_milliseconds);
+    envoy_dynamic_module_type_module_buffer body, bool end_stream, uint64_t timeout_milliseconds);
 
 /**
  * envoy_dynamic_module_callback_http_filter_config_reset_http_stream is called by the module to
