@@ -17,8 +17,8 @@ import (
 func init() {
 	sdk.RegisterHttpFilterConfigFactories(map[string]shared.HttpFilterConfigFactory{
 		"passthrough":                  &PassthroughConfigFactory{},
-		"header_callbacks":             &HeaderCallbacksConfigFactory{},
 		"header_callbacks_on_creation": &HeaderCallbacksOnCreationConfigFactory{},
+		"header_callbacks":             &HeaderCallbacksConfigFactory{},
 		"per_route_config":             &PerRouteConfigFactory{},
 		"body_callbacks":               &BodyCallbacksConfigFactory{},
 		"http_callouts":                &HttpCalloutsConfigFactory{},
