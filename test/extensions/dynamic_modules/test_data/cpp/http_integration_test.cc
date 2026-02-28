@@ -1532,6 +1532,7 @@ public:
     return TrailersStatus::Continue;
   }
   void onStreamComplete() override {}
+  void onDestroy() override {}
 
 private:
   HttpFilterHandle& handle_;
@@ -1611,6 +1612,7 @@ public:
     return TrailersStatus::Continue;
   }
   void onStreamComplete() override {}
+  void onDestroy() override {}
 
 private:
   HttpFilterHandle& handle_;
