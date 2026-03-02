@@ -83,6 +83,9 @@ bug_fixes:
   change: |
     Fixed an issue where cookies prefixed with ``__Secure-`` or ``__Host-`` were not receiving a
     Secure attribute.
+- area: oauth2
+  change: |
+    Fixed OAuth2 refresh requests so host rewriting no longer overrides the original Host value.
 
 new_features:
 - area: wasm
