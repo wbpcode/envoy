@@ -76,7 +76,8 @@ RetryStateImpl::RetryStateImpl(const RetryPolicy& route_policy,
       reset_headers_(route_policy.resetHeaders()),
       reset_max_interval_(route_policy.resetMaxInterval()), retry_on_(route_policy.retryOn()),
       retries_remaining_(route_policy.numRetries()), priority_(priority),
-      auto_configured_for_http3_(auto_configured_for_http3) {
+      auto_configured_for_http3_(auto_configured_for_http3),
+      refresh_cluster_on_retry_(route_policy.refreshClusterOnRetry()) {
   if ((cluster.features() & Upstream::ClusterInfo::Features::HTTP3) &&
       Http::Utility::isSafeRequest(request_headers)) {
     // Because 0-RTT requests could be rejected because they are sent too early, and such requests

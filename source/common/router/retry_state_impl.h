@@ -98,6 +98,7 @@ public:
   uint32_t hostSelectionMaxAttempts() const override { return host_selection_max_attempts_; }
 
   bool isAutomaticallyConfiguredForHttp3() const { return auto_configured_for_http3_; }
+  bool refreshClusterOnRetry() const override { return refresh_cluster_on_retry_; }
 
 private:
   RetryStateImpl(const RetryPolicy& route_policy, Http::RequestHeaderMap& request_headers,
@@ -129,12 +130,12 @@ private:
   Event::SchedulableCallbackPtr next_loop_callback_;
   Event::TimerPtr retry_timer_;
   BackOffStrategyPtr backoff_strategy_;
-  BackOffStrategyPtr ratelimited_backoff_strategy_{};
+  BackOffStrategyPtr ratelimited_backoff_strategy_;
   std::vector<Upstream::RetryHostPredicateSharedPtr> retry_host_predicates_;
   Upstream::RetryPrioritySharedPtr retry_priority_;
   std::vector<uint32_t> retriable_status_codes_;
   std::vector<Http::HeaderMatcherSharedPtr> retriable_headers_;
-  std::vector<ResetHeaderParserSharedPtr> reset_headers_{};
+  std::vector<ResetHeaderParserSharedPtr> reset_headers_;
   std::chrono::milliseconds reset_max_interval_{};
 
   // Keep small members (bools, enums and int32s) at the end of class, to reduce alignment overhead.
@@ -143,6 +144,7 @@ private:
   uint32_t host_selection_max_attempts_;
   Upstream::ResourcePriority priority_;
   const bool auto_configured_for_http3_{};
+  const bool refresh_cluster_on_retry_{false};
 };
 
 } // namespace Router

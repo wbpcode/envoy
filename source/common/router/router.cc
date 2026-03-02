@@ -1489,6 +1489,17 @@ bool Filter::maybeRetryReset(Http::StreamResetReason reset_reason,
                                    ->upstreamTiming()
                                    .first_upstream_tx_byte_sent_.has_value();
 
+  if (retry_state_->refreshClusterOnRetry()) {
+    // TODO(wbpcode): the weighted cluster and so on could support their own refresh logic.
+    callbacks_->downstreamCallbacks()->refreshRouteCluster();
+    cluster_ = callbacks_->clusterInfo();
+    // TODO(wbpcode): we need a stat or response flag to indicate this event.
+    if (cluster_ == nullptr) {
+      ENVOY_STREAM_LOG(debug, "no cluster available after refreshClusterOnRetry", *callbacks_);
+      return false;
+    }
+  }
+
   const RetryStatus retry_status = retry_state_->shouldRetryReset(
       reset_reason, was_using_http3,
       [this, can_send_early_data = upstream_request.upstreamStreamOptions().can_send_early_data_,
@@ -1758,6 +1769,15 @@ void Filter::onUpstreamHeaders(uint64_t response_code, Http::ResponseHeaderMapPt
   // Check if this upstream request was already retried, for instance after
   // hitting a per try timeout. Don't retry it if we already have.
   if (retry_state_) {
+    if (retry_state_->refreshClusterOnRetry()) {
+      callbacks_->downstreamCallbacks()->refreshRouteCluster();
+      cluster_ = callbacks_->clusterInfo();
+      // TODO(wbpcode): we need a stat or response flag to indicate this event.
+      if (cluster_ == nullptr) {
+        ENVOY_STREAM_LOG(debug, "no cluster available after refreshClusterOnRetry", *callbacks_);
+      }
+    }
+
     if (upstream_request.retried()) {
       // We already retried this request (presumably for a per try timeout) so
       // we definitely won't retry it again. Check if we would have retried it

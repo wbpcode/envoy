@@ -326,6 +326,11 @@ public:
    * back-off interval parsed from response headers.
    */
   virtual std::chrono::milliseconds resetMaxInterval() const PURE;
+
+  /**
+   * @return whether the cluster should be refreshed on retry.
+   */
+  virtual bool refreshClusterOnRetry() const PURE;
 };
 
 /**
@@ -515,6 +520,11 @@ public:
    * return how many times host selection should be reattempted during host selection.
    */
   virtual uint32_t hostSelectionMaxAttempts() const PURE;
+
+  /**
+   * @return whether the cluster should be refreshed on retry.
+   */
+  virtual bool refreshClusterOnRetry() const PURE;
 };
 
 using RetryStatePtr = std::unique_ptr<RetryState>;
