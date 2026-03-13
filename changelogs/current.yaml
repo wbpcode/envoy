@@ -98,6 +98,11 @@ minor_behavior_changes:
     Now all the dynamic module extension factories (HTTP, network, listener, UDP listener, and so on) will
     serialize the ``google.protobuf.Struct`` configuration message to JSON string and pass it to the
     dynamic module side as the configuration.
+- area: filters
+  change: |
+    Removed all istio related extensions that were introduced in the v1.37 release. The Istio
+    team want a more robust approach to migrate. And to avoid confusion for users, Envoy decided to
+    remove the extensions until a better migration plan is in place.
 
 bug_fixes:
 # *Changes expected to improve the state of the world and are unlikely to have negative effects*
