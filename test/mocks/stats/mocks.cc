@@ -120,8 +120,8 @@ MockStore::MockStore() {
 }
 MockStore::~MockStore() = default;
 
-ScopeSharedPtr MockStore::makeScope(StatName prefix) {
-  return std::make_shared<MockScope>(prefix, *this);
+ScopeSharedPtr MockStore::makeScope(StatName prefix, StatsMatcherSharedPtr) {
+  return std::make_shared<NiceMock<MockScope>>(prefix, *this);
 }
 
 MockIsolatedStatsStore::MockIsolatedStatsStore() = default;
