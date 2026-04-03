@@ -89,10 +89,14 @@ public:
    * @param matcher optional per-scope stats matcher; replaces the store-level matcher when set.
    * NOTE: If the scope specific matcher is set, then the sub scope will inherit the same matcher
    * unless another matcher is explicitly set.
+   * @param tags optional scope-level tags to attach to all stats created in this scope. Tags
+   * with ignore_name_=true will only append the value to the stat name; otherwise both name and
+   * value are appended.
    */
   virtual ScopeSharedPtr createScope(const std::string& name, bool evictable = false,
                                      const ScopeStatsLimitSettings& limits = {},
-                                     StatsMatcherSharedPtr matcher = nullptr) PURE;
+                                     StatsMatcherSharedPtr matcher = nullptr,
+                                     TagViewVectorOptConstRef tags = {}) PURE;
 
   /**
    * Allocate a new scope. NOTE: The implementation should correctly handle overlapping scopes
@@ -106,10 +110,13 @@ public:
    * @param matcher optional per-scope stats matcher; replaces the store-level matcher when set.
    * NOTE: If the scope specific matcher is set, then the sub scope will inherit the same matcher
    * unless another matcher is explicitly set.
+   * @param tags optional scope-level tags (as StatName pairs) to attach to all stats created in
+   * this scope. Tags with ignore_name_=true will only append the value to the stat name.
    */
   virtual ScopeSharedPtr scopeFromStatName(StatName name, bool evictable = false,
                                            const ScopeStatsLimitSettings& limits = {},
-                                           StatsMatcherSharedPtr matcher = nullptr) PURE;
+                                           StatsMatcherSharedPtr matcher = nullptr,
+                                           StatNameTagVectorOptConstRef tags = {}) PURE;
 
   /**
    * Creates a Counter from the stat name. Tag extraction will be performed on the name.

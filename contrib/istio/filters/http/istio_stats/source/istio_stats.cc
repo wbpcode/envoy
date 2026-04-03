@@ -386,7 +386,7 @@ struct MetricOverrides : public Logger::Loggable<Logger::Id::filter> {
     if (tag_overrides_it == tag_overrides_.end()) {
       out = tags;
     } else {
-      for (const auto& [key, val] : tags) {
+      for (const auto& [key, val, _] : tags) {
         const auto& it = tag_overrides_it->second.find(key);
         if (it != tag_overrides_it->second.end()) {
           if (it->second.has_value()) {

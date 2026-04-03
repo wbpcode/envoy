@@ -18,6 +18,7 @@
 #include "source/common/api/os_sys_calls_impl.h"
 #include "source/common/common/assert.h"
 #include "source/common/config/utility.h"
+#include "source/common/config/well_known_names.h"
 #include "source/common/listener_manager/active_raw_udp_listener_config.h"
 #include "source/common/listener_manager/filter_chain_manager_impl.h"
 #include "source/common/listener_manager/listener_manager_impl.h"
@@ -30,6 +31,7 @@
 #include "source/common/network/utility.h"
 #include "source/common/protobuf/utility.h"
 #include "source/common/runtime/runtime_features.h"
+#include "source/common/stats/utility.h"
 #include "source/server/configuration_impl.h"
 #include "source/server/drain_manager_impl.h"
 #include "source/server/transport_socket_config_impl.h"
@@ -254,15 +256,30 @@ std::string listenerStatsScope(const envoy::config::listener::v3::Listener& conf
   // Listener creation will fail shortly when the address is used.
   return absl::StrCat("invalid_address_listener");
 }
+
+Stats::ScopeSharedPtr createStatsScope(Stats::Store& store, absl::string_view scope_name) {
+  // Sanitize the listener address so special chars (e.g. ':' in IPv4 port) are replaced with '_',
+  // matching the old createScope(fmt::format("listener.{}.", addr)) behavior via sanitizeStatsName.
+  const std::string addr = Stats::Utility::sanitizeStatsName(scope_name);
+
+  if (Runtime::runtimeFeatureEnabled(
+          "envoy.reloadable_features.stats_typed_tags_no_regex_extraction")) {
+    // Ignore the tag name in final full stat name to keep the same full stat name as before.
+    Stats::TagViewVector tags{
+        {Config::TagNames::get().LISTENER_ADDRESS, addr, /*ignore_name_=*/true}};
+    return store.createScope("listener.", false, {}, nullptr,
+                             Stats::TagViewVectorOptConstRef(std::cref(tags)));
+  }
+  return store.createScope(fmt::format("listener.{}.", addr));
+}
 } // namespace
 
 ListenerFactoryContextBaseImpl::ListenerFactoryContextBaseImpl(
     Envoy::Server::Instance& server, ProtobufMessage::ValidationVisitor& validation_visitor,
     const envoy::config::listener::v3::Listener& config, DrainManagerPtr drain_manager)
-    : Server::FactoryContextImplBase(
-          server, validation_visitor, server.stats().createScope(""),
-          server.stats().createScope(fmt::format("listener.{}.", listenerStatsScope(config))),
-          std::make_shared<ListenerInfoImpl>(config)),
+    : Server::FactoryContextImplBase(server, validation_visitor, server.stats().createScope(""),
+                                     createStatsScope(server.stats(), listenerStatsScope(config)),
+                                     std::make_shared<ListenerInfoImpl>(config)),
       drain_manager_(std::move(drain_manager)) {}
 
 Network::DrainDecision& ListenerFactoryContextBaseImpl::drainDecision() { return *this; }

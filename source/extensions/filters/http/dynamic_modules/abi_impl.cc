@@ -43,7 +43,7 @@ buildTagsForModuleMetric(DynamicModuleHttpFilter& filter, const Stats::StatNameV
   for (size_t i = 0; i < label_values_length; i++) {
     absl::string_view label_value_view(label_values[i].ptr, label_values[i].length);
     auto label_value = filter.getStatNamePool().add(label_value_view);
-    tags.push_back(Stats::StatNameTag(label_names[i], label_value));
+    tags.push_back(Stats::StatNameTag{label_names[i], label_value});
   }
   return tags;
 }

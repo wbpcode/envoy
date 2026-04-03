@@ -6,6 +6,7 @@
 #include "envoy/stats/scope.h"
 
 #include "source/common/common/base64.h"
+#include "source/common/config/well_known_names.h"
 #include "source/common/grpc/async_client_impl.h"
 #include "source/common/protobuf/utility.h"
 
@@ -79,13 +80,25 @@ absl::StatusOr<RawAsyncClientPtr> AsyncClientFactoryImpl::createUncachedRawAsync
   return AsyncClientImpl::create(config_, context_);
 }
 
+Stats::ScopeSharedPtr createScope(Stats::Scope& parent_scope, absl::string_view scope_name) {
+  if (Runtime::runtimeFeatureEnabled(
+          "envoy.reloadable_features.stats_typed_tags_no_regex_extraction")) {
+    // Ingore the tag name in final full stat name to keep the same full stat name as before.
+    const Stats::TagViewVector tags{
+        {Config::TagNames::get().GOOGLE_GRPC_CLIENT_PREFIX, scope_name, /*ignore_name_=*/true}};
+    return parent_scope.createScope("grpc.", false, {}, nullptr,
+                                    Stats::TagViewVectorOptConstRef(std::cref(tags)));
+  }
+  return parent_scope.createScope(fmt::format("grpc.{}.", scope_name));
+}
+
 GoogleAsyncClientFactoryImpl::GoogleAsyncClientFactoryImpl(
     const envoy::config::core::v3::GrpcService& config, ThreadLocal::Slot* google_tls_slot,
     Stats::Scope& scope, Server::Configuration::CommonFactoryContext& context,
     const StatNames& stat_names, absl::Status& creation_status)
     : google_tls_slot_(google_tls_slot),
-      scope_(scope.createScope(fmt::format("grpc.{}.", config.google_grpc().stat_prefix()))),
-      config_(config), factory_context_(context), stat_names_(stat_names) {
+      scope_(createScope(scope, config.google_grpc().stat_prefix())), config_(config),
+      factory_context_(context), stat_names_(stat_names) {
 #ifndef ENVOY_GOOGLE_GRPC
   UNREFERENCED_PARAMETER(google_tls_slot_);
   UNREFERENCED_PARAMETER(scope_);

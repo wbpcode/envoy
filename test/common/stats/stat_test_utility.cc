@@ -119,9 +119,11 @@ TestScope::TestScope(StatName prefix, TestStore& store)
     : IsolatedScopeImpl(prefix, store), store_(store),
       prefix_str_(addDot(store.symbolTable().toString(prefix))) {}
 
-TestScope::TestScope(StatName prefix, TestStore& store, StatsMatcherSharedPtr matcher)
-    : IsolatedScopeImpl(prefix, store, std::move(matcher)), store_(store),
-      prefix_str_(addDot(store.symbolTable().toString(prefix))) {}
+TestScope::TestScope(StatName prefix, TestStore& store, StatsMatcherSharedPtr matcher,
+                     std::unique_ptr<StatNamePool> scope_tags_pool, StatNameTagVector scope_tags)
+    : IsolatedScopeImpl(prefix, store, std::move(matcher), std::move(scope_tags_pool),
+                        std::move(scope_tags)),
+      store_(store), prefix_str_(addDot(store.symbolTable().toString(prefix))) {}
 
 // Override the Stats::Store methods for name-based lookup of stats, to use
 // and update the string-maps in this class. Note that IsolatedStoreImpl
@@ -158,7 +160,7 @@ Histogram& TestScope::histogramFromString(const std::string& leaf_name, Histogra
 
 std::string TestScope::statNameWithTags(const StatName& stat_name,
                                         StatNameTagVectorOptConstRef tags) {
-  TagUtility::TagStatNameJoiner joiner(prefix(), stat_name, tags, symbolTable());
+  TagUtility::TagStatNameJoiner joiner(prefix(), scopeTagsRef(), stat_name, tags, symbolTable());
   return symbolTable().toString(joiner.nameWithTags());
 }
 
@@ -166,7 +168,7 @@ void TestScope::verifyConsistency(StatName ref_stat_name, StatName stat_name,
                                   StatNameTagVectorOptConstRef tags) {
   // Ensures StatNames with the same string representation are specified
   // consistently using symbolic/dynamic components on every access.
-  TagUtility::TagStatNameJoiner joiner(prefix(), stat_name, tags, symbolTable());
+  TagUtility::TagStatNameJoiner joiner(prefix(), scopeTagsRef(), stat_name, tags, symbolTable());
   StatName joined_stat_name = joiner.nameWithTags();
   ASSERT(ref_stat_name == joined_stat_name,
          absl::StrCat("Inconsistent dynamic vs symbolic stat name specification: ref_stat_name=",
@@ -212,8 +214,11 @@ Histogram& TestScope::histogramFromStatNameWithTags(const StatName& stat_name,
   return *histogram_ref;
 }
 
-ScopeSharedPtr TestStore::makeScope(StatName name, StatsMatcherSharedPtr matcher) {
-  return std::make_shared<TestScope>(name, *this, std::move(matcher));
+ScopeSharedPtr TestStore::makeScope(StatName name, StatsMatcherSharedPtr matcher,
+                                    std::unique_ptr<StatNamePool> scope_tags_pool,
+                                    StatNameTagVector scope_tags) {
+  return std::make_shared<TestScope>(name, *this, std::move(matcher), std::move(scope_tags_pool),
+                                     std::move(scope_tags));
 }
 
 TestStore::TestStore() : IsolatedStoreImpl(*global_symbol_table_) {}

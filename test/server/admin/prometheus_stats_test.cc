@@ -116,8 +116,8 @@ protected:
   std::string baseName(const std::string& name, Stats::StatNameTagVector cluster_tags) {
     std::string result = name;
     for (const auto& name_tag : cluster_tags) {
-      result.append(fmt::format("<{}:{}>", symbol_table_->toString(name_tag.first),
-                                symbol_table_->toString(name_tag.second)));
+      result.append(fmt::format("<{}:{}>", symbol_table_->toString(name_tag.name_),
+                                symbol_table_->toString(name_tag.value_)));
     }
     return result;
   }

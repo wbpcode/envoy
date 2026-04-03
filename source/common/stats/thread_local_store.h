@@ -291,7 +291,9 @@ private:
   struct ScopeImpl : public Scope {
     ScopeImpl(ThreadLocalStoreImpl& parent, StatName prefix, bool evictable,
               const ScopeStatsLimitSettings& limits = {},
-              StatsMatcherSharedPtr scope_matcher = nullptr);
+              StatsMatcherSharedPtr scope_matcher = nullptr,
+              std::unique_ptr<StatNamePool> scope_tags_pool = nullptr,
+              StatNameTagVector scope_tags = {});
     ~ScopeImpl() override;
 
     // Stats::Scope
@@ -306,10 +308,12 @@ private:
                                                  StatNameTagVectorOptConstRef tags) override;
     ScopeSharedPtr createScope(const std::string& name, bool evictable = false,
                                const ScopeStatsLimitSettings& limits = {},
-                               StatsMatcherSharedPtr matcher = nullptr) override;
+                               StatsMatcherSharedPtr matcher = nullptr,
+                               TagViewVectorOptConstRef tags = {}) override;
     ScopeSharedPtr scopeFromStatName(StatName name, bool evictable = false,
                                      const ScopeStatsLimitSettings& limits = {},
-                                     StatsMatcherSharedPtr matcher = nullptr) override;
+                                     StatsMatcherSharedPtr matcher = nullptr,
+                                     StatNameTagVectorOptConstRef tags = absl::nullopt) override;
     const SymbolTable& constSymbolTable() const final { return parent_.constSymbolTable(); }
     SymbolTable& symbolTable() final { return parent_.symbolTable(); }
 
@@ -481,6 +485,12 @@ private:
   private:
     StatNameStorage prefix_;
     mutable CentralCacheEntrySharedPtr central_cache_ ABSL_GUARDED_BY(parent_.lock_);
+
+    // Owns the StatName storage backing scope_tags_. Null when there are no scope-level tags.
+    // Declared before scope_tags_ so it outlives the tag vector.
+    std::unique_ptr<StatNamePool> scope_tags_pool_;
+    // Scope-level tags inserted between prefix and stat name in the flat stat name.
+    StatNameTagVector scope_tags_;
   };
 
   struct TlsCache : public ThreadLocal::ThreadLocalObject {

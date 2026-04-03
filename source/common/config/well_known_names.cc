@@ -65,9 +65,11 @@ TagNameValues::TagNameValues() {
   // - Typical * notation will be used to denote an arbitrary set of characters.
 
   // *_rq(_<response_code>)
+  // Done.
   addRe2(RESPONSE_CODE, R"(_rq(_(\d{3}))$)", "_rq_");
 
   // *_rq_(<response_code_class>)xx
+  // Done.
   addRe2(RESPONSE_CODE_CLASS, R"(_rq_((\d))xx$)", "_rq_");
 
   // http.[<stat_prefix>.]dynamodb.table.[<table_name>.]capacity.[<operation_name>.](__partition_id=<last_seven_characters_from_partition_id>)
@@ -104,6 +106,7 @@ TagNameValues::TagNameValues() {
   addTokenized(HTTP_USER_AGENT, "http.*.user_agent.$.**");
 
   // vhost.[<virtual host name>.]vcluster.(<virtual_cluster_name>.)*
+  // Done.
   addTokenized(VIRTUAL_CLUSTER, "vhost.*.vcluster.$.**");
 
   // http.[<stat_prefix>.]fault.(<downstream_cluster>.)*
@@ -134,6 +137,7 @@ TagNameValues::TagNameValues() {
   addTokenized(GRPC_BRIDGE_SERVICE, "cluster.*.grpc.$.**");
 
   // tcp.(<stat_prefix>.)*
+  // Done.
   addTokenized(TCP_PREFIX, "tcp.$.**");
 
   // udp.(<stat_prefix>.)*
@@ -191,6 +195,7 @@ TagNameValues::TagNameValues() {
          ".scoped_rds.");
 
   // vhost.[<virtual host name>.]route.(<route_stat_prefix>.)*
+  // Done.
   addTokenized(ROUTE, "vhost.*.route.$.**");
 
   // thrift.(<stat_prefix>.)*

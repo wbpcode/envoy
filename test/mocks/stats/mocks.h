@@ -102,9 +102,9 @@ public:
     tag_names_and_values_.clear();
     tags_.clear();
     for (const StatNameTag& tag : tags) {
-      tag_names_and_values_.push_back(tag.first);
-      tag_names_and_values_.push_back(tag.second);
-      tags_.push_back(Tag{symbol_table_->toString(tag.first), symbol_table_->toString(tag.second)});
+      tag_names_and_values_.push_back(tag.name_);
+      tag_names_and_values_.push_back(tag.value_);
+      tags_.push_back(Tag{symbol_table_->toString(tag.name_), symbol_table_->toString(tag.value_)});
     }
   }
 
@@ -298,11 +298,13 @@ public:
   MockScope(StatName prefix, MockStore& store);
 
   ScopeSharedPtr createScope(const std::string& name, bool, const ScopeStatsLimitSettings&,
-                             StatsMatcherSharedPtr = nullptr) override {
+                             StatsMatcherSharedPtr = nullptr,
+                             TagViewVectorOptConstRef = {}) override {
     return ScopeSharedPtr(createScope_(name));
   }
   ScopeSharedPtr scopeFromStatName(StatName name, bool, const ScopeStatsLimitSettings&,
-                                   StatsMatcherSharedPtr = nullptr) override {
+                                   StatsMatcherSharedPtr = nullptr,
+                                   StatNameTagVectorOptConstRef = absl::nullopt) override {
     return createScope_(symbolTable().toString(name));
   }
 
@@ -352,7 +354,9 @@ public:
     return *scope;
   }
 
-  ScopeSharedPtr makeScope(StatName name, StatsMatcherSharedPtr matcher = nullptr) override;
+  ScopeSharedPtr makeScope(StatName name, StatsMatcherSharedPtr matcher = nullptr,
+                           std::unique_ptr<StatNamePool> scope_tags_pool = nullptr,
+                           StatNameTagVector scope_tags = {}) override;
 
   TestUtil::TestSymbolTable symbol_table_;
   testing::NiceMock<MockCounter> counter_;

@@ -56,6 +56,19 @@ public:
 private:
   friend class CodeStatsTest;
 
+  void chargeBasicResponseStatWithTags(Stats::Scope& scope, Stats::StatName prefix,
+                                       Code response_code, bool exclude_http_code_stats) const;
+  void chargeResponseStatWithTags(const ResponseStatInfo& info, bool exclude_http_code_stats) const;
+  void chargeResponseTimingWithTags(const ResponseTimingInfo& info) const;
+  Stats::StatName codeGroup(Code response_code) const;
+  Stats::StatName codeStatName(Code response_code) const;
+  void writeCategoryWithTags(const ResponseStatInfo& info, Stats::StatName rq_group,
+                             Stats::StatName rq_code, Stats::StatName category) const;
+  void incCounterWithTags(Stats::Scope& scope, Stats::StatName a, Stats::StatName b,
+                          Stats::StatName c, const Stats::StatNameTagVector& tags) const;
+  void incCounterWithTags(Stats::Scope& scope, Stats::StatName a, Stats::StatName b,
+                          const Stats::StatNameTagVector& tags) const;
+
   void writeCategory(const ResponseStatInfo& info, Stats::StatName rq_group,
                      Stats::StatName rq_code, Stats::StatName category) const;
   void incCounter(Stats::Scope& scope, const Stats::StatNameVec& names) const;
@@ -115,6 +128,27 @@ private:
   mutable Thread::AtomicPtrArray<const uint8_t, NumHttpCodes,
                                  Thread::AtomicPtrAllocMode::DoNotDelete>
       rc_stat_names_;
+
+  const Stats::StatName vhost_vcluster_;
+  const Stats::StatName vhost_route_;
+  const Stats::StatName upstream_rq_;
+  const Stats::StatName upstream_rq_xx_;
+  const Stats::StatName from_zone_tag_;
+  const Stats::StatName to_zone_tag_;
+  const Stats::StatName response_code_tag_;
+  const Stats::StatName response_code_class_tag_;
+  const Stats::StatName vhost_tag_;
+  const Stats::StatName vcluster_tag_;
+  const Stats::StatName route_tag_;
+  mutable Thread::AtomicPtrArray<const uint8_t, NumHttpCodes,
+                                 Thread::AtomicPtrAllocMode::DoNotDelete>
+      rc_only_stats_name_;
+
+  const Stats::StatName code_xx_1_;
+  const Stats::StatName code_xx_2_;
+  const Stats::StatName code_xx_3_;
+  const Stats::StatName code_xx_4_;
+  const Stats::StatName code_xx_5_;
 };
 
 /**

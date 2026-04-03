@@ -26,8 +26,8 @@ MetricHelper::MetricHelper(StatName name, StatName tag_extracted_name,
   names[1] = tag_extracted_name;
   int index = 1;
   for (auto& stat_name_tag : stat_name_tags) {
-    names[++index] = stat_name_tag.first;
-    names[++index] = stat_name_tag.second;
+    names[++index] = stat_name_tag.name_;
+    names[++index] = stat_name_tag.value_;
   }
   symbol_table.populateList(names.begin(), num_names, stat_names_);
 }

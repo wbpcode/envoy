@@ -160,21 +160,67 @@ std::vector<CounterSharedPtr> ThreadLocalStoreImpl::counters() const {
 
 ScopeSharedPtr ThreadLocalStoreImpl::ScopeImpl::createScope(const std::string& name, bool evictable,
                                                             const ScopeStatsLimitSettings& limits,
-                                                            StatsMatcherSharedPtr matcher) {
+                                                            StatsMatcherSharedPtr matcher,
+                                                            TagViewVectorOptConstRef tags) {
   StatNameManagedStorage stat_name_storage(Utility::sanitizeStatsName(name), symbolTable());
-  return scopeFromStatName(stat_name_storage.statName(), evictable, limits, std::move(matcher));
+  SymbolTable::StoragePtr joined =
+      symbolTable().join({prefix_.statName(), stat_name_storage.statName()});
+  StatsMatcherSharedPtr child_matcher = matcher ? std::move(matcher) : scope_matcher_;
+
+  // Build the child scope's tag pool and tag vector. All StatNames are interned into child_pool
+  // so the child scope is lifetime-independent of this scope and any caller-provided pool.
+  std::unique_ptr<StatNamePool> child_pool;
+  StatNameTagVector child_tags;
+  const bool has_tags = !scope_tags_.empty() || tags.has_value();
+  if (has_tags) {
+    child_pool = std::make_unique<StatNamePool>(symbolTable());
+    for (const auto& tag : scope_tags_) {
+      child_tags.push_back(
+          StatNameTag{child_pool->add(tag.name_), child_pool->add(tag.value_), tag.ignore_name_});
+    }
+    if (tags.has_value()) {
+      for (const auto& tag : tags.ref()) {
+        child_tags.push_back(
+            StatNameTag{child_pool->add(tag.name_), child_pool->add(tag.value_), tag.ignore_name_});
+      }
+    }
+  }
+
+  auto new_scope = std::make_shared<ScopeImpl>(parent_, StatName(joined.get()), evictable, limits,
+                                               std::move(child_matcher), std::move(child_pool),
+                                               std::move(child_tags));
+  parent_.addScope(new_scope);
+  return new_scope;
 }
 
-ScopeSharedPtr
-ThreadLocalStoreImpl::ScopeImpl::scopeFromStatName(StatName name, bool evictable,
-                                                   const ScopeStatsLimitSettings& limits,
-                                                   StatsMatcherSharedPtr matcher) {
+ScopeSharedPtr ThreadLocalStoreImpl::ScopeImpl::scopeFromStatName(
+    StatName name, bool evictable, const ScopeStatsLimitSettings& limits,
+    StatsMatcherSharedPtr matcher, StatNameTagVectorOptConstRef tags) {
   SymbolTable::StoragePtr joined = symbolTable().join({prefix_.statName(), name});
-  // Use explicit matcher if provided; otherwise inherit scope_matcher_ (which may be null,
-  // meaning the store-level matcher is used).
   StatsMatcherSharedPtr child_matcher = matcher ? std::move(matcher) : scope_matcher_;
+
+  // Build the child scope's tag pool and tag vector. All StatNames are interned into child_pool
+  // so the child scope is lifetime-independent of this scope and any caller-provided pool.
+  std::unique_ptr<StatNamePool> child_pool;
+  StatNameTagVector child_tags;
+  const bool has_tags = !scope_tags_.empty() || tags.has_value();
+  if (has_tags) {
+    child_pool = std::make_unique<StatNamePool>(symbolTable());
+    for (const auto& tag : scope_tags_) {
+      child_tags.push_back(
+          StatNameTag{child_pool->add(tag.name_), child_pool->add(tag.value_), tag.ignore_name_});
+    }
+    if (tags.has_value()) {
+      for (const auto& tag : tags->get()) {
+        child_tags.push_back(
+            StatNameTag{child_pool->add(tag.name_), child_pool->add(tag.value_), tag.ignore_name_});
+      }
+    }
+  }
+
   auto new_scope = std::make_shared<ScopeImpl>(parent_, StatName(joined.get()), evictable, limits,
-                                               std::move(child_matcher));
+                                               std::move(child_matcher), std::move(child_pool),
+                                               std::move(child_tags));
   parent_.addScope(new_scope);
   return new_scope;
 }
@@ -409,10 +455,13 @@ void ThreadLocalStoreImpl::clearHistogramsFromCaches() {
 
 ThreadLocalStoreImpl::ScopeImpl::ScopeImpl(ThreadLocalStoreImpl& parent, StatName prefix,
                                            bool evictable, const ScopeStatsLimitSettings& limits,
-                                           StatsMatcherSharedPtr scope_matcher)
+                                           StatsMatcherSharedPtr scope_matcher,
+                                           std::unique_ptr<StatNamePool> scope_tags_pool,
+                                           StatNameTagVector scope_tags)
     : scope_id_(parent.next_scope_id_++), parent_(parent), evictable_(evictable), limits_(limits),
       scope_matcher_(std::move(scope_matcher)), prefix_(prefix, parent.alloc_.symbolTable()),
-      central_cache_(new CentralCacheEntry(parent.alloc_.symbolTable())) {
+      central_cache_(new CentralCacheEntry(parent.alloc_.symbolTable())),
+      scope_tags_pool_(std::move(scope_tags_pool)), scope_tags_(std::move(scope_tags)) {
   parent_.ensureOverflowStats(limits_);
 }
 
@@ -574,8 +623,11 @@ Counter& ThreadLocalStoreImpl::ScopeImpl::counterFromStatNameWithTags(
     return parent_.null_counter_;
   }
 
-  // Determine the final name based on the prefix and the passed name.
-  TagUtility::TagStatNameJoiner joiner(prefix_.statName(), name, stat_name_tags, symbolTable());
+  // Determine the final name based on the prefix, scope tags, stat name, and stat tags.
+  StatNameTagVectorOptConstRef scope_tags_ref =
+      scope_tags_.empty() ? absl::nullopt : StatNameTagVectorOptConstRef(std::cref(scope_tags_));
+  TagUtility::TagStatNameJoiner joiner(prefix_.statName(), scope_tags_ref, name, stat_name_tags,
+                                       symbolTable());
   Stats::StatName final_stat_name = joiner.nameWithTags();
 
   StatsMatcher::FastResult fast_reject_result = scopeFastRejects(final_stat_name);
@@ -595,7 +647,7 @@ Counter& ThreadLocalStoreImpl::ScopeImpl::counterFromStatNameWithTags(
 
   const CentralCacheEntrySharedPtr& central_cache = centralCacheNoThreadAnalysis();
   return safeMakeStat<Counter>(
-      final_stat_name, joiner.tagExtractedName(), stat_name_tags, central_cache->counters_,
+      final_stat_name, joiner.tagExtractedName(), joiner.effectiveTags(), central_cache->counters_,
       fast_reject_result, central_cache->rejected_stats_,
       [](Allocator& allocator, StatName name, StatName tag_extracted_name,
          const StatNameTagVector& tags) -> CounterSharedPtr {
@@ -629,7 +681,10 @@ Gauge& ThreadLocalStoreImpl::ScopeImpl::gaugeFromStatNameWithTags(
 
   // See comments in counter(). There is no super clean way (via templates or otherwise) to
   // share this code so I'm leaving it largely duplicated for now.
-  TagUtility::TagStatNameJoiner joiner(prefix_.statName(), name, stat_name_tags, symbolTable());
+  StatNameTagVectorOptConstRef scope_tags_ref =
+      scope_tags_.empty() ? absl::nullopt : StatNameTagVectorOptConstRef(std::cref(scope_tags_));
+  TagUtility::TagStatNameJoiner joiner(prefix_.statName(), scope_tags_ref, name, stat_name_tags,
+                                       symbolTable());
   StatName final_stat_name = joiner.nameWithTags();
 
   StatsMatcher::FastResult fast_reject_result;
@@ -652,7 +707,7 @@ Gauge& ThreadLocalStoreImpl::ScopeImpl::gaugeFromStatNameWithTags(
 
   const CentralCacheEntrySharedPtr& central_cache = centralCacheNoThreadAnalysis();
   Gauge& gauge = safeMakeStat<Gauge>(
-      final_stat_name, joiner.tagExtractedName(), stat_name_tags, central_cache->gauges_,
+      final_stat_name, joiner.tagExtractedName(), joiner.effectiveTags(), central_cache->gauges_,
       fast_reject_result, central_cache->rejected_stats_,
       [import_mode](Allocator& allocator, StatName name, StatName tag_extracted_name,
                     const StatNameTagVector& tags) -> GaugeSharedPtr {
@@ -673,7 +728,10 @@ Histogram& ThreadLocalStoreImpl::ScopeImpl::histogramFromStatNameWithTags(
 
   // See comments in counter(). There is no super clean way (via templates or otherwise) to
   // share this code so I'm leaving it largely duplicated for now.
-  TagUtility::TagStatNameJoiner joiner(prefix_.statName(), name, stat_name_tags, symbolTable());
+  StatNameTagVectorOptConstRef scope_tags_ref =
+      scope_tags_.empty() ? absl::nullopt : StatNameTagVectorOptConstRef(std::cref(scope_tags_));
+  TagUtility::TagStatNameJoiner joiner(prefix_.statName(), scope_tags_ref, name, stat_name_tags,
+                                       symbolTable());
   StatName final_stat_name = joiner.nameWithTags();
 
   StatsMatcher::FastResult fast_reject_result = scopeFastRejects(final_stat_name);
@@ -707,7 +765,7 @@ Histogram& ThreadLocalStoreImpl::ScopeImpl::histogramFromStatNameWithTags(
                                                effectiveMatcher())) {
     return parent_.null_histogram_;
   } else {
-    StatNameTagHelper tag_helper(parent_, joiner.tagExtractedName(), stat_name_tags);
+    StatNameTagHelper tag_helper(parent_, joiner.tagExtractedName(), joiner.effectiveTags());
 
     ConstSupportedBuckets* buckets = nullptr;
     const auto string_stat_name = symbolTable().toString(final_stat_name);
@@ -755,8 +813,11 @@ TextReadout& ThreadLocalStoreImpl::ScopeImpl::textReadoutFromStatNameWithTags(
     return parent_.null_text_readout_;
   }
 
-  // Determine the final name based on the prefix and the passed name.
-  TagUtility::TagStatNameJoiner joiner(prefix_.statName(), name, stat_name_tags, symbolTable());
+  // Determine the final name based on the prefix, scope tags, stat name, and stat tags.
+  StatNameTagVectorOptConstRef scope_tags_ref =
+      scope_tags_.empty() ? absl::nullopt : StatNameTagVectorOptConstRef(std::cref(scope_tags_));
+  TagUtility::TagStatNameJoiner joiner(prefix_.statName(), scope_tags_ref, name, stat_name_tags,
+                                       symbolTable());
   Stats::StatName final_stat_name = joiner.nameWithTags();
 
   StatsMatcher::FastResult fast_reject_result = scopeFastRejects(final_stat_name);
@@ -776,8 +837,8 @@ TextReadout& ThreadLocalStoreImpl::ScopeImpl::textReadoutFromStatNameWithTags(
 
   const CentralCacheEntrySharedPtr& central_cache = centralCacheNoThreadAnalysis();
   return safeMakeStat<TextReadout>(
-      final_stat_name, joiner.tagExtractedName(), stat_name_tags, central_cache->text_readouts_,
-      fast_reject_result, central_cache->rejected_stats_,
+      final_stat_name, joiner.tagExtractedName(), joiner.effectiveTags(),
+      central_cache->text_readouts_, fast_reject_result, central_cache->rejected_stats_,
       [](Allocator& allocator, StatName name, StatName tag_extracted_name,
          const StatNameTagVector& tags) -> TextReadoutSharedPtr {
         return allocator.makeTextReadout(name, tag_extracted_name, tags);

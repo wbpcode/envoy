@@ -441,12 +441,22 @@ generateStatsScope(const envoy::config::cluster::v3::Cluster& config,
                           status.message());
     }
   }
+  const absl::string_view cluster_name = (!config.alt_stat_name().empty() && use_alt_stat_name)
+                                             ? config.alt_stat_name()
+                                             : config.name();
 
-  return stats.createScope(
-      fmt::format("cluster.{}.", (!config.alt_stat_name().empty() && use_alt_stat_name)
-                                     ? config.alt_stat_name()
-                                     : config.name()),
-      false, {}, std::move(scope_matcher));
+  if (Runtime::runtimeFeatureEnabled(
+          "envoy.reloadable_features.stats_typed_tags_no_regex_extraction")) {
+    // Pass the cluster name as a scope-level tag with ignore_name_=true so that the flat stat
+    // name remains "cluster.<name>.<stat>" (value-only, no tag name segment).
+    Stats::TagViewVector scope_tags{
+        {Config::TagNames::get().CLUSTER_NAME, cluster_name, /*ignore_name_=*/true}};
+    return stats.createScope("cluster.", false, {}, std::move(scope_matcher),
+                             Stats::TagViewVectorOptConstRef(std::cref(scope_tags)));
+  }
+
+  return stats.createScope(fmt::format("cluster.{}.", cluster_name), false, {},
+                           std::move(scope_matcher));
 }
 
 // TODO(pianiststickman): this implementation takes a lock on the hot path and puts a copy of the

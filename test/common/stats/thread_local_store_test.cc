@@ -1007,10 +1007,10 @@ TEST_F(StatsThreadLocalStoreTest, ExtractAndAppendTagsFixedValue) {
   store_->extractAndAppendTags(pool.add("c1"), pool, tags);
 
   ASSERT_EQ(2, tags.size());
-  EXPECT_EQ("a", symbol_table_.toString(tags[0].first));
-  EXPECT_EQ("b", symbol_table_.toString(tags[0].second));
-  EXPECT_EQ("foo", symbol_table_.toString(tags[1].first));
-  EXPECT_EQ("bar", symbol_table_.toString(tags[1].second));
+  EXPECT_EQ("a", symbol_table_.toString(tags[0].name_));
+  EXPECT_EQ("b", symbol_table_.toString(tags[0].value_));
+  EXPECT_EQ("foo", symbol_table_.toString(tags[1].name_));
+  EXPECT_EQ("bar", symbol_table_.toString(tags[1].value_));
   EXPECT_THAT(store_->fixedTags(), UnorderedElementsAre(Tag{"foo", "bar"}));
 }
 
@@ -1030,8 +1030,8 @@ TEST_F(StatsThreadLocalStoreTest, ExtractAndAppendTagsRegexValueNoMatch) {
   store_->extractAndAppendTags(pool.add("c1"), pool, tags);
 
   ASSERT_EQ(1, tags.size());
-  EXPECT_EQ("a", symbol_table_.toString(tags[0].first));
-  EXPECT_EQ("b", symbol_table_.toString(tags[0].second));
+  EXPECT_EQ("a", symbol_table_.toString(tags[0].name_));
+  EXPECT_EQ("b", symbol_table_.toString(tags[0].value_));
 }
 
 TEST_F(StatsThreadLocalStoreTest, ExtractAndAppendTagsRegexValueWithMatch) {
@@ -1050,10 +1050,10 @@ TEST_F(StatsThreadLocalStoreTest, ExtractAndAppendTagsRegexValueWithMatch) {
   store_->extractAndAppendTags(pool.add("foo.bar"), pool, tags);
 
   ASSERT_EQ(2, tags.size());
-  EXPECT_EQ("a", symbol_table_.toString(tags[0].first));
-  EXPECT_EQ("b", symbol_table_.toString(tags[0].second));
-  EXPECT_EQ("foo_tag", symbol_table_.toString(tags[1].first));
-  EXPECT_EQ("bar", symbol_table_.toString(tags[1].second));
+  EXPECT_EQ("a", symbol_table_.toString(tags[0].name_));
+  EXPECT_EQ("b", symbol_table_.toString(tags[0].value_));
+  EXPECT_EQ("foo_tag", symbol_table_.toString(tags[1].name_));
+  EXPECT_EQ("bar", symbol_table_.toString(tags[1].value_));
 }
 
 TEST_F(StatsThreadLocalStoreTest, ExtractAndAppendTagsRegexBuiltinExpression) {
@@ -1068,10 +1068,10 @@ TEST_F(StatsThreadLocalStoreTest, ExtractAndAppendTagsRegexBuiltinExpression) {
   store_->extractAndAppendTags(pool.add("cluster.foo.bar"), pool, tags);
 
   ASSERT_EQ(2, tags.size());
-  EXPECT_EQ("a", symbol_table_.toString(tags[0].first));
-  EXPECT_EQ("b", symbol_table_.toString(tags[0].second));
-  EXPECT_EQ("envoy.cluster_name", symbol_table_.toString(tags[1].first));
-  EXPECT_EQ("foo", symbol_table_.toString(tags[1].second));
+  EXPECT_EQ("a", symbol_table_.toString(tags[0].name_));
+  EXPECT_EQ("b", symbol_table_.toString(tags[0].value_));
+  EXPECT_EQ("envoy.cluster_name", symbol_table_.toString(tags[1].name_));
+  EXPECT_EQ("foo", symbol_table_.toString(tags[1].value_));
 }
 
 class LookupWithStatNameTest : public ThreadLocalStoreNoMocksMixin, public testing::Test {};

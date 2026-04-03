@@ -179,8 +179,9 @@ public:
    */
   ScopeSharedPtr createScope(const std::string& name, bool evictable = false,
                              const ScopeStatsLimitSettings& limits = {},
-                             StatsMatcherSharedPtr matcher = nullptr) {
-    return rootScope()->createScope(name, evictable, limits, std::move(matcher));
+                             StatsMatcherSharedPtr matcher = nullptr,
+                             TagViewVectorOptConstRef tags = {}) {
+    return rootScope()->createScope(name, evictable, limits, std::move(matcher), tags);
   }
 
   /**

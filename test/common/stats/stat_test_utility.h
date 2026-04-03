@@ -112,7 +112,9 @@ public:
   TagVector fixed_tags_;
 
 protected:
-  ScopeSharedPtr makeScope(StatName name, StatsMatcherSharedPtr matcher = nullptr) override;
+  ScopeSharedPtr makeScope(StatName name, StatsMatcherSharedPtr matcher = nullptr,
+                           std::unique_ptr<StatNamePool> scope_tags_pool = nullptr,
+                           StatNameTagVector scope_tags = {}) override;
 
 private:
   friend class TestScope;
@@ -128,7 +130,9 @@ class TestScope : public IsolatedScopeImpl {
 public:
   TestScope(const std::string& prefix, TestStore& store);
   TestScope(StatName prefix, TestStore& store);
-  TestScope(StatName prefix, TestStore& store, StatsMatcherSharedPtr matcher);
+  // Constructor used by TestStore::makeScope — takes ownership of the pool backing scope_tags.
+  TestScope(StatName prefix, TestStore& store, StatsMatcherSharedPtr matcher,
+            std::unique_ptr<StatNamePool> scope_tags_pool, StatNameTagVector scope_tags);
 
   // Override the Stats::Store methods for name-based lookup of stats, to use
   // and update the string-maps in this class. Note that IsolatedStoreImpl

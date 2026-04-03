@@ -129,10 +129,21 @@ OnDemandStats OnDemandConfig::generateStats(Stats::Scope& scope) {
   return {ON_DEMAND_TCP_PROXY_STATS(POOL_COUNTER(scope))};
 }
 
+Stats::ScopeSharedPtr createStatsScope(Stats::Scope& parent_scope, absl::string_view stat_prefix) {
+  if (Runtime::runtimeFeatureEnabled(
+          "envoy.reloadable_features.stats_typed_tags_no_regex_extraction")) {
+    Stats::TagViewVector tags{
+        {Envoy::Config::TagNames::get().TCP_PREFIX, stat_prefix, /*ignore_name_=*/true}};
+    return parent_scope.createScope("tcp.", false, {}, nullptr,
+                                    Stats::TagViewVectorOptConstRef(std::cref(tags)));
+  }
+  return parent_scope.createScope(absl::StrCat("tcp.", stat_prefix));
+}
+
 Config::SharedConfig::SharedConfig(
     const envoy::extensions::filters::network::tcp_proxy::v3::TcpProxy& config,
     Server::Configuration::FactoryContext& context)
-    : stats_scope_(context.scope().createScope(fmt::format("tcp.{}", config.stat_prefix()))),
+    : stats_scope_(createStatsScope(context.scope(), config.stat_prefix())),
       stats_(generateStats(*stats_scope_)),
       flush_access_log_on_start_(config.access_log_options().flush_access_log_on_start()),
       proxy_protocol_tlv_merge_policy_(config.proxy_protocol_tlv_merge_policy()) {

@@ -8,6 +8,7 @@
 
 #include "source/common/common/enum_to_int.h"
 #include "source/common/common/utility.h"
+#include "source/common/config/well_known_names.h"
 #include "source/common/http/headers.h"
 #include "source/common/http/utility.h"
 
@@ -32,7 +33,18 @@ CodeStatsImpl::CodeStatsImpl(Stats::SymbolTable& symbol_table)
       upstream_rq_completed_(stat_name_pool_.add("upstream_rq_completed")),
       upstream_rq_time_(stat_name_pool_.add("upstream_rq_time")),
       vcluster_(stat_name_pool_.add("vcluster")), vhost_(stat_name_pool_.add("vhost")),
-      route_(stat_name_pool_.add("route")), zone_(stat_name_pool_.add("zone")) {
+      route_(stat_name_pool_.add("route")), zone_(stat_name_pool_.add("zone")),
+      vhost_vcluster_(stat_name_pool_.add("vhost_vcluster")),
+      vhost_route_(stat_name_pool_.add("vhost_route")),
+      upstream_rq_(stat_name_pool_.add("upstream_rq")),
+      upstream_rq_xx_(stat_name_pool_.add("upstream_rq_xx")),
+      from_zone_tag_(stat_name_pool_.add("envoy.from_zone")),
+      to_zone_tag_(stat_name_pool_.add("envoy.to_zone")),
+      response_code_tag_(stat_name_pool_.add(Config::TagNames::get().RESPONSE_CODE)),
+      response_code_class_tag_(stat_name_pool_.add(Config::TagNames::get().RESPONSE_CODE_CLASS)),
+      vhost_tag_(stat_name_pool_.add("envoy.virtual_host")),
+      vcluster_tag_(stat_name_pool_.add("envoy.virtual_cluster")),
+      route_tag_(stat_name_pool_.add("envoy.route")) {
 
   // Pre-allocate response codes 200, 404, and 503, as those seem quite likely.
   // We don't pre-allocate all the HTTP codes because the first 127 allocations
@@ -116,6 +128,68 @@ void CodeStatsImpl::chargeResponseStat(const ResponseStatInfo& info,
                {vhost_, info.request_vhost_name_, route_, info.request_route_name_, rq_group});
     incCounter(info.global_scope_,
                {vhost_, info.request_vhost_name_, route_, info.request_route_name_, rq_code});
+  }
+
+  // Handle per zone stats.
+  if (!info.from_zone_.empty() && !info.to_zone_.empty()) {
+    incCounter(info.cluster_scope_,
+               {info.prefix_, zone_, info.from_zone_, info.to_zone_, upstream_rq_completed_});
+    incCounter(info.cluster_scope_,
+               {info.prefix_, zone_, info.from_zone_, info.to_zone_, rq_group});
+    incCounter(info.cluster_scope_, {info.prefix_, zone_, info.from_zone_, info.to_zone_, rq_code});
+  }
+}
+
+void CodeStatsImpl::chargeResponseStatWithTags(const ResponseStatInfo& info,
+                                               bool exclude_http_code_stats) const {
+  const Code code = static_cast<Code>(info.response_status_code_);
+
+  ASSERT(&info.cluster_scope_.symbolTable() == &symbol_table_);
+  chargeBasicResponseStatWithTags(info.cluster_scope_, info.prefix_, code, exclude_http_code_stats);
+
+  const Stats::StatName code_group = codeGroup(code);
+  const Stats::StatName code_stat_name = codeStatName(code);
+
+  // If the response is from a canary, also create canary stats.
+  if (info.upstream_canary_) {
+    writeCategoryWithTags(info, code_group, code_stat_name, canary_);
+  }
+
+  // Split stats into external vs. internal.
+  if (info.internal_request_) {
+    writeCategoryWithTags(info, code_group, code_stat_name, internal_);
+  } else {
+    writeCategoryWithTags(info, code_group, code_stat_name, external_);
+  }
+
+  // Handle request virtual cluster.
+  if (!info.request_vcluster_name_.empty()) {
+    incCounterWithTags(info.global_scope_, vhost_vcluster_, upstream_rq_completed_,
+                       {{vhost_tag_, info.request_vhost_name_, true},
+                        {vcluster_tag_, info.request_vcluster_name_, true}});
+    incCounterWithTags(info.global_scope_, vhost_vcluster_, upstream_rq_xx_,
+                       {{vhost_tag_, info.request_vhost_name_, true},
+                        {vcluster_tag_, info.request_vcluster_name_, true},
+                        {response_code_class_tag_, code_group, true}});
+    incCounterWithTags(info.global_scope_, vhost_vcluster_, upstream_rq_,
+                       {{vhost_tag_, info.request_vhost_name_, true},
+                        {vcluster_tag_, info.request_vcluster_name_, true},
+                        {response_code_tag_, code_stat_name, true}});
+  }
+
+  // Handle route level stats.
+  if (!info.request_route_name_.empty()) {
+    incCounterWithTags(info.global_scope_, vhost_route_, upstream_rq_completed_,
+                       {{vhost_tag_, info.request_vhost_name_, true},
+                        {route_tag_, info.request_route_name_, true}});
+    incCounterWithTags(info.global_scope_, vhost_route_, upstream_rq_xx_,
+                       {{vhost_tag_, info.request_vhost_name_, true},
+                        {route_tag_, info.request_route_name_, true},
+                        {response_code_class_tag_, code_group, true}});
+    incCounterWithTags(info.global_scope_, vhost_route_, upstream_rq_,
+                       {{vhost_tag_, info.request_vhost_name_, true},
+                        {route_tag_, info.request_route_name_, true},
+                        {response_code_tag_, code_stat_name, true}});
   }
 
   // Handle per zone stats.

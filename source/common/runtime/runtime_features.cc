@@ -218,6 +218,10 @@ FALSE_RUNTIME_GUARD(envoy_reloadable_features_http2_use_oghttp2);
 // This is the legacy behavior. When disabled which is the default, metrics appear with the
 // standard envoy_ prefix followed by the namespace.
 FALSE_RUNTIME_GUARD(envoy_reloadable_features_dynamic_modules_strip_custom_stat_prefix);
+// When enabled, regex/token-based tag extraction via TagProducer is skipped. Stats must carry
+// their tags explicitly via scope-level or stat-level StatNameTagVector. Disable only after all
+// well-known tag call sites have been migrated to the typed stats system.
+FALSE_RUNTIME_GUARD(envoy_reloadable_features_stats_typed_tags_no_regex_extraction);
 // TODO(haoyuewang): Flip true after prod testing.
 FALSE_RUNTIME_GUARD(envoy_reloadable_features_quic_disable_data_read_immediately);
 
