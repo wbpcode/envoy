@@ -131,9 +131,9 @@ protected:
    * Scope::createScope, without needing to override those. makeScope is usually
    * implemented by "return std::make_shared<YourScopeType>(name, *this)".
    *
-   * @param name the fully qualified stat name -- no further prefixing needed.
+   * @param names the fully qualified stat name -- no further prefixing needed.
    */
-  virtual ScopeSharedPtr makeScope(StatName name, StatsMatcherSharedPtr matcher = nullptr);
+  virtual ScopeSharedPtr makeScope(StatNameSpan names, StatsMatcherSharedPtr matcher = nullptr);
 
 private:
   /**
@@ -159,9 +159,9 @@ private:
     IsolatedStatsCache(HistogramAllocator alloc) : histogram_alloc_(alloc) {}
     IsolatedStatsCache(TextReadoutAllocator alloc) : text_readout_alloc_(alloc) {}
 
-    OptRef<Base> get(StatName prefix, StatName basename, StatNameTagVectorOptConstRef tags,
+    OptRef<Base> get(StatNameSpan names, StatNameTagVectorOptConstRef tags,
                      SymbolTable& symbol_table, OptRef<const StatsMatcher> matcher = {}) {
-      TagUtility::TagStatNameJoiner joiner(prefix, basename, tags, symbol_table);
+      TagUtility::TagStatNameJoiner joiner(names, tags, symbol_table);
       StatName name = joiner.nameWithTags();
 
       // If we have a matcher and it rejects this stat, we return nullopt.
@@ -179,10 +179,10 @@ private:
       return *new_stat;
     }
 
-    OptRef<Base> get(StatName prefix, StatName basename, StatNameTagVectorOptConstRef tags,
+    OptRef<Base> get(StatNameSpan names, StatNameTagVectorOptConstRef tags,
                      SymbolTable& symbol_table, Gauge::ImportMode import_mode,
                      OptRef<const StatsMatcher> matcher = {}) {
-      TagUtility::TagStatNameJoiner joiner(prefix, basename, tags, symbol_table);
+      TagUtility::TagStatNameJoiner joiner(names, tags, symbol_table);
       StatName name = joiner.nameWithTags();
 
       // If we have a matcher and it rejects this stat, we return nullopt.
@@ -201,10 +201,10 @@ private:
       return *new_stat;
     }
 
-    OptRef<Base> get(StatName prefix, StatName basename, StatNameTagVectorOptConstRef tags,
+    OptRef<Base> get(StatNameSpan names, StatNameTagVectorOptConstRef tags,
                      SymbolTable& symbol_table, Histogram::Unit unit,
                      OptRef<const StatsMatcher> matcher = {}) {
-      TagUtility::TagStatNameJoiner joiner(prefix, basename, tags, symbol_table);
+      TagUtility::TagStatNameJoiner joiner(names, tags, symbol_table);
       StatName name = joiner.nameWithTags();
 
       // If we have a matcher and it rejects this stat, we return nullopt.
@@ -222,10 +222,10 @@ private:
       return *new_stat;
     }
 
-    OptRef<Base> get(StatName prefix, StatName basename, StatNameTagVectorOptConstRef tags,
+    OptRef<Base> get(StatNameSpan names, StatNameTagVectorOptConstRef tags,
                      SymbolTable& symbol_table, TextReadout::Type type,
                      OptRef<const StatsMatcher> matcher = {}) {
-      TagUtility::TagStatNameJoiner joiner(prefix, basename, tags, symbol_table);
+      TagUtility::TagStatNameJoiner joiner(names, tags, symbol_table);
       StatName name = joiner.nameWithTags();
 
       // If we have a matcher and it rejects this stat, we return nullopt.
@@ -317,23 +317,35 @@ private:
 
 class IsolatedScopeImpl : public Scope {
 public:
-  IsolatedScopeImpl(const std::string& prefix, IsolatedStoreImpl& store,
+  IsolatedScopeImpl(StatNameSpan prefix, IsolatedStoreImpl& store,
                     StatsMatcherSharedPtr matcher = nullptr)
-      : prefix_(prefix, store.symbolTable()), store_(store), scope_matcher_(std::move(matcher)) {}
+      : store_(store), scope_matcher_(std::move(matcher)) {
+    store_.symbolTable().populateList(prefix.data(), prefix.size(), prefix_list_);
+    prefix_list_.iterate([this](StatName name) -> bool {
+      prefix_vector_.push_back(name);
+      return true;
+    });
+  }
 
-  IsolatedScopeImpl(StatName prefix, IsolatedStoreImpl& store,
-                    StatsMatcherSharedPtr matcher = nullptr)
-      : prefix_(prefix, store.symbolTable()), store_(store), scope_matcher_(std::move(matcher)) {}
-
-  ~IsolatedScopeImpl() override { prefix_.free(store_.symbolTable()); }
+  ~IsolatedScopeImpl() override {
+    prefix_vector_.clear();
+    prefix_list_.clear(store_.symbolTable());
+  }
 
   // Stats::Scope
   SymbolTable& symbolTable() override { return store_.symbolTable(); }
   const SymbolTable& constSymbolTable() const override { return store_.symbolTable(); }
   Counter& counterFromStatNameWithTags(const StatName& name,
                                        StatNameTagVectorOptConstRef tags) override {
+    return Scope::counterFromStatNameWithTags({name}, tags);
+  }
+  Counter& counterFromStatNameWithTags(StatNameSpan name,
+                                       StatNameTagVectorOptConstRef tags) override {
+    StatNameVec name_vec(prefix_vector_);
+    name_vec.insert(name_vec.end(), name.begin(), name.end());
+
     const OptRef<const StatsMatcher> matcher = makeOptRefFromPtr(scope_matcher_.get());
-    return store_.counters_.get(prefix(), name, tags, symbolTable(), matcher)
+    return store_.counters_.get(name_vec, tags, symbolTable(), matcher)
         .value_or(store_.null_counter_);
   }
   ScopeSharedPtr createScope(const std::string& name, bool evictable = false,
@@ -342,10 +354,20 @@ public:
   ScopeSharedPtr scopeFromStatName(StatName name, bool evictable = false,
                                    const ScopeStatsLimitSettings& limits = {},
                                    StatsMatcherSharedPtr matcher = nullptr) override;
+  ScopeSharedPtr scopeFromStatName(StatNameSpan names, bool evictable = false,
+                                   const ScopeStatsLimitSettings& limits = {},
+                                   StatsMatcherSharedPtr matcher = nullptr) override;
   Gauge& gaugeFromStatNameWithTags(const StatName& name, StatNameTagVectorOptConstRef tags,
                                    Gauge::ImportMode import_mode) override {
+    return Scope::gaugeFromStatNameWithTags({name}, tags, import_mode);
+  }
+  Gauge& gaugeFromStatNameWithTags(StatNameSpan name, StatNameTagVectorOptConstRef tags,
+                                   Gauge::ImportMode import_mode) override {
+    StatNameVec name_vec(prefix_vector_);
+    name_vec.insert(name_vec.end(), name.begin(), name.end());
+
     const OptRef<const StatsMatcher> matcher = makeOptRefFromPtr(scope_matcher_.get());
-    auto gauge = store_.gauges_.get(prefix(), name, tags, symbolTable(), import_mode, matcher);
+    auto gauge = store_.gauges_.get(name_vec, tags, symbolTable(), import_mode, matcher);
     if (!gauge.has_value()) {
       return store_.null_gauge_;
     }
@@ -354,15 +376,29 @@ public:
   }
   Histogram& histogramFromStatNameWithTags(const StatName& name, StatNameTagVectorOptConstRef tags,
                                            Histogram::Unit unit) override {
+    return Scope::histogramFromStatNameWithTags({name}, tags, unit);
+  }
+  Histogram& histogramFromStatNameWithTags(StatNameSpan name, StatNameTagVectorOptConstRef tags,
+                                           Histogram::Unit unit) override {
+    StatNameVec name_vec(prefix_vector_);
+    name_vec.insert(name_vec.end(), name.begin(), name.end());
+
     const OptRef<const StatsMatcher> matcher = makeOptRefFromPtr(scope_matcher_.get());
-    return store_.histograms_.get(prefix(), name, tags, symbolTable(), unit, matcher)
+    return store_.histograms_.get(name_vec, tags, symbolTable(), unit, matcher)
         .value_or(store_.null_histogram_);
   }
   TextReadout& textReadoutFromStatNameWithTags(const StatName& name,
                                                StatNameTagVectorOptConstRef tags) override {
+    return Scope::textReadoutFromStatNameWithTags({name}, tags);
+  }
+  TextReadout& textReadoutFromStatNameWithTags(StatNameSpan name,
+                                               StatNameTagVectorOptConstRef tags) override {
+    StatNameVec name_vec(prefix_vector_);
+    name_vec.insert(name_vec.end(), name.begin(), name.end());
+
     const OptRef<const StatsMatcher> matcher = makeOptRefFromPtr(scope_matcher_.get());
     return store_.text_readouts_
-        .get(prefix(), name, tags, symbolTable(), TextReadout::Type::Default, matcher)
+        .get(name_vec, tags, symbolTable(), TextReadout::Type::Default, matcher)
         .value_or(store_.null_text_readout_);
   }
   CounterOptConstRef findCounter(StatName name) const override {
@@ -406,7 +442,7 @@ public:
     return textReadoutFromStatName(storage.statName());
   }
 
-  StatName prefix() const override { return prefix_.statName(); }
+  StatNameSpan prefix() const override { return prefix_vector_; }
   IsolatedStoreImpl& store() override { return store_; }
   const IsolatedStoreImpl& constStore() const override { return store_; }
 
@@ -428,7 +464,7 @@ private:
     // TODO(jmarantz): In the scope of this limited implementation, it would be
     // faster to match on the StatName prefix. This would be possible if
     // SymbolTable exposed a split() method.
-    std::string prefix_str = constSymbolTable().toString(prefix_.statName());
+    std::string prefix_str = constSymbolTable().toString(prefix());
     if (!prefix_str.empty() && !absl::EndsWith(prefix_str, ".")) {
       prefix_str += ".";
     }
@@ -437,7 +473,8 @@ private:
     };
   }
 
-  StatNameStorage prefix_;
+  StatNameList prefix_list_;
+  StatNameVec prefix_vector_;
   IsolatedStoreImpl& store_;
   StatsMatcherSharedPtr scope_matcher_;
 };

@@ -270,6 +270,15 @@ std::vector<absl::string_view> SymbolTable::decodeStrings(StatName stat_name) co
   return strings;
 }
 
+void SymbolTable::decodeStrings(StatName stat_name, std::vector<absl::string_view>& out) const {
+  Thread::LockGuard lock(lock_);
+  Encoding::decodeTokens(
+      stat_name,
+      [this, &out](Symbol symbol)
+          ABSL_NO_THREAD_SAFETY_ANALYSIS { out.push_back(fromSymbol(symbol)); },
+      [&out](absl::string_view str) { out.push_back(str); });
+}
+
 void SymbolTable::Encoding::moveToMemBlock(MemBlockBuilder<uint8_t>& mem_block) {
   appendEncoding(data_bytes_required_, mem_block);
   mem_block.appendBlock(mem_block_);
@@ -338,6 +347,15 @@ uint64_t SymbolTable::numSymbols() const {
 
 std::string SymbolTable::toString(const StatName& stat_name) const {
   return absl::StrJoin(decodeStrings(stat_name), ".");
+}
+
+std::string SymbolTable::toString(StatNameSpan stat_names) const {
+  std::vector<absl::string_view> tokens;
+  tokens.reserve(8);
+  for (const StatName& stat_name : stat_names) {
+    decodeStrings(stat_name, tokens);
+  }
+  return absl::StrJoin(tokens, ".");
 }
 
 void SymbolTable::incRefCount(const StatName& stat_name) {
@@ -681,7 +699,7 @@ void StatNameStorageSet::free(SymbolTable& symbol_table) {
   }
 }
 
-SymbolTable::StoragePtr SymbolTable::join(const StatNameVec& stat_names) const {
+SymbolTable::StoragePtr SymbolTable::join(StatNameSpan stat_names) const {
   size_t num_bytes = 0;
   for (StatName stat_name : stat_names) {
     if (!stat_name.empty()) {

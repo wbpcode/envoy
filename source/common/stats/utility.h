@@ -95,6 +95,19 @@ absl::optional<StatName> findTag(const Metric& metric, StatName find_tag_name);
 ScopeSharedPtr scopeFromStatNames(Scope& scope, const StatNameVec& names);
 
 /**
+ * Creates a nested scope from a vector of StatNames which are used to create the
+ * name.
+ *
+ * See also scopeFromElements, which is slightly slower but allows
+ * passing DynamicName(string)s as names.
+ *
+ * @param scope The scope in which to create the counter.
+ * @param elements The vector scope prefix.
+ * @return A scope named using the joined elements.
+ */
+ScopeSharedPtr scopeFromStatNames(Scope& scope, absl::Span<const absl::string_view> names);
+
+/**
  * Creates a counter from a vector of tokens which are used to create the
  * name. The tokens can be specified as DynamicName or StatName. For
  * tokens specified as DynamicName, a dynamic StatName will be created. See

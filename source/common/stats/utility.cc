@@ -6,6 +6,7 @@
 #include "absl/strings/match.h"
 #include "absl/strings/str_replace.h"
 #include "absl/types/optional.h"
+#include "symbol_table.h"
 
 namespace Envoy {
 namespace Stats {
@@ -73,8 +74,21 @@ struct ElementVisitor {
 namespace Utility {
 
 ScopeSharedPtr scopeFromStatNames(Scope& scope, const StatNameVec& elements) {
-  SymbolTable::StoragePtr joined = scope.symbolTable().join(elements);
-  return scope.scopeFromStatName(StatName(joined.get()));
+  return scope.scopeFromStatName(elements);
+}
+
+ScopeSharedPtr scopeFromStatNames(Scope& scope, absl::Span<const absl::string_view> names) {
+  absl::InlinedVector<StatNameManagedStorage, 8> storage;
+  StatNameVec stat_names;
+  stat_names.reserve(names.size());
+  storage.reserve(names.size());
+
+  for (absl::string_view name : names) {
+    storage.emplace_back(name, scope.symbolTable());
+    stat_names.push_back(storage.back().statName());
+  }
+
+  return scope.scopeFromStatName(stat_names);
 }
 
 Counter& counterFromElements(Scope& scope, const ElementVec& elements,

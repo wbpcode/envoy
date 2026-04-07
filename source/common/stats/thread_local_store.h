@@ -289,7 +289,7 @@ private:
   using CentralCacheEntrySharedPtr = RefcountPtr<CentralCacheEntry>;
 
   struct ScopeImpl : public Scope {
-    ScopeImpl(ThreadLocalStoreImpl& parent, StatName prefix, bool evictable,
+    ScopeImpl(ThreadLocalStoreImpl& parent, StatNameSpan prefix, bool evictable,
               const ScopeStatsLimitSettings& limits = {},
               StatsMatcherSharedPtr scope_matcher = nullptr);
     ~ScopeImpl() override;
@@ -297,17 +297,28 @@ private:
     // Stats::Scope
     Counter& counterFromStatNameWithTags(const StatName& name,
                                          StatNameTagVectorOptConstRef tags) override;
+    Counter& counterFromStatNameWithTags(StatNameSpan name,
+                                         StatNameTagVectorOptConstRef tags) override;
     Gauge& gaugeFromStatNameWithTags(const StatName& name, StatNameTagVectorOptConstRef tags,
+                                     Gauge::ImportMode import_mode) override;
+    Gauge& gaugeFromStatNameWithTags(StatNameSpan name, StatNameTagVectorOptConstRef tags,
                                      Gauge::ImportMode import_mode) override;
     Histogram& histogramFromStatNameWithTags(const StatName& name,
                                              StatNameTagVectorOptConstRef tags,
                                              Histogram::Unit unit) override;
+    Histogram& histogramFromStatNameWithTags(StatNameSpan name, StatNameTagVectorOptConstRef tags,
+                                             Histogram::Unit unit) override;
     TextReadout& textReadoutFromStatNameWithTags(const StatName& name,
+                                                 StatNameTagVectorOptConstRef tags) override;
+    TextReadout& textReadoutFromStatNameWithTags(StatNameSpan name,
                                                  StatNameTagVectorOptConstRef tags) override;
     ScopeSharedPtr createScope(const std::string& name, bool evictable = false,
                                const ScopeStatsLimitSettings& limits = {},
                                StatsMatcherSharedPtr matcher = nullptr) override;
     ScopeSharedPtr scopeFromStatName(StatName name, bool evictable = false,
+                                     const ScopeStatsLimitSettings& limits = {},
+                                     StatsMatcherSharedPtr matcher = nullptr) override;
+    ScopeSharedPtr scopeFromStatName(StatNameSpan name, bool evictable = false,
                                      const ScopeStatsLimitSettings& limits = {},
                                      StatsMatcherSharedPtr matcher = nullptr) override;
     const SymbolTable& constSymbolTable() const final { return parent_.constSymbolTable(); }
@@ -435,7 +446,7 @@ private:
       return std::cref(*iter->second);
     }
 
-    StatName prefix() const override { return prefix_.statName(); }
+    StatNameSpan prefix() const override { return prefix_vector_; }
 
     // Returns the central cache, asserting that the parent lock is held.
     //
@@ -479,7 +490,9 @@ private:
     StatsMatcherSharedPtr scope_matcher_;
 
   private:
-    StatNameStorage prefix_;
+    StatNameList prefix_list_;
+    StatNameVec prefix_vector_;
+
     mutable CentralCacheEntrySharedPtr central_cache_ ABSL_GUARDED_BY(parent_.lock_);
   };
 

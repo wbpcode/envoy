@@ -24,6 +24,21 @@ TagStatNameJoiner::TagStatNameJoiner(StatName prefix, StatName stat_name,
   }
 }
 
+TagStatNameJoiner::TagStatNameJoiner(StatNameSpan stat_names,
+                                     StatNameTagVectorOptConstRef stat_name_tags,
+                                     SymbolTable& symbol_table) {
+  prefix_storage_ = symbol_table.join(stat_names);
+  tag_extracted_name_ = StatName(prefix_storage_.get());
+
+  if (stat_name_tags) {
+    full_name_storage_ =
+        joinNameAndTags(StatName(prefix_storage_.get()), *stat_name_tags, symbol_table);
+    name_with_tags_ = StatName(full_name_storage_.get());
+  } else {
+    name_with_tags_ = StatName(prefix_storage_.get());
+  }
+}
+
 SymbolTable::StoragePtr TagStatNameJoiner::joinNameAndTags(StatName name,
                                                            const StatNameTagVector& tags,
                                                            SymbolTable& symbol_table) {

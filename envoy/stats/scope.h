@@ -42,6 +42,8 @@ struct ScopeStatsLimitSettings {
 
 template <class StatType> using IterateFn = std::function<bool(const RefcountPtr<StatType>&)>;
 
+using StatNameSpan = absl::Span<const StatName>;
+
 /**
  * A named scope for stats. Scopes are a grouping of stats that can be acted on
  * as a unit if needed (for example to free/delete all of them).
@@ -110,6 +112,9 @@ public:
   virtual ScopeSharedPtr scopeFromStatName(StatName name, bool evictable = false,
                                            const ScopeStatsLimitSettings& limits = {},
                                            StatsMatcherSharedPtr matcher = nullptr) PURE;
+  virtual ScopeSharedPtr scopeFromStatName(StatNameSpan name, bool evictable = false,
+                                           const ScopeStatsLimitSettings& limits = {},
+                                           StatsMatcherSharedPtr matcher = nullptr) PURE;
 
   /**
    * Creates a Counter from the stat name. Tag extraction will be performed on the name.
@@ -119,6 +124,10 @@ public:
   Counter& counterFromStatName(const StatName& name) {
     return counterFromStatNameWithTags(name, absl::nullopt);
   }
+  Counter& counterFromStatName(StatNameSpan name) {
+    return counterFromStatNameWithTags(name, absl::nullopt);
+  }
+
   /**
    * Creates a Counter from the stat name and tags. If tags are not provided, tag extraction
    * will be performed on the name.
@@ -127,6 +136,8 @@ public:
    * @return a counter within the scope's namespace.
    */
   virtual Counter& counterFromStatNameWithTags(const StatName& name,
+                                               StatNameTagVectorOptConstRef tags) PURE;
+  virtual Counter& counterFromStatNameWithTags(StatNameSpan name,
                                                StatNameTagVectorOptConstRef tags) PURE;
 
   /**
@@ -145,6 +156,9 @@ public:
   Gauge& gaugeFromStatName(const StatName& name, Gauge::ImportMode import_mode) {
     return gaugeFromStatNameWithTags(name, absl::nullopt, import_mode);
   }
+  Gauge& gaugeFromStatName(StatNameSpan name, Gauge::ImportMode import_mode) {
+    return gaugeFromStatNameWithTags(name, absl::nullopt, import_mode);
+  }
 
   /**
    * Creates a Gauge from the stat name and tags. If tags are not provided, tag extraction
@@ -155,6 +169,8 @@ public:
    * @return a gauge within the scope's namespace.
    */
   virtual Gauge& gaugeFromStatNameWithTags(const StatName& name, StatNameTagVectorOptConstRef tags,
+                                           Gauge::ImportMode import_mode) PURE;
+  virtual Gauge& gaugeFromStatNameWithTags(StatNameSpan name, StatNameTagVectorOptConstRef tags,
                                            Gauge::ImportMode import_mode) PURE;
 
   /**
@@ -174,6 +190,9 @@ public:
   Histogram& histogramFromStatName(const StatName& name, Histogram::Unit unit) {
     return histogramFromStatNameWithTags(name, absl::nullopt, unit);
   }
+  Histogram& histogramFromStatName(StatNameSpan name, Histogram::Unit unit) {
+    return histogramFromStatNameWithTags(name, absl::nullopt, unit);
+  }
 
   /**
    * Creates a Histogram from the stat name and tags. If tags are not provided, tag extraction
@@ -184,6 +203,9 @@ public:
    * @return a histogram within the scope's namespace with a particular value type.
    */
   virtual Histogram& histogramFromStatNameWithTags(const StatName& name,
+                                                   StatNameTagVectorOptConstRef tags,
+                                                   Histogram::Unit unit) PURE;
+  virtual Histogram& histogramFromStatNameWithTags(StatNameSpan name,
                                                    StatNameTagVectorOptConstRef tags,
                                                    Histogram::Unit unit) PURE;
 
@@ -203,6 +225,9 @@ public:
   TextReadout& textReadoutFromStatName(const StatName& name) {
     return textReadoutFromStatNameWithTags(name, absl::nullopt);
   }
+  TextReadout& textReadoutFromStatName(StatNameSpan name) {
+    return textReadoutFromStatNameWithTags(name, absl::nullopt);
+  }
 
   /**
    * Creates a TextReadout from the stat name and tags. If tags are not provided, tag extraction
@@ -212,6 +237,8 @@ public:
    * @return a text readout within the scope's namespace.
    */
   virtual TextReadout& textReadoutFromStatNameWithTags(const StatName& name,
+                                                       StatNameTagVectorOptConstRef tags) PURE;
+  virtual TextReadout& textReadoutFromStatNameWithTags(StatNameSpan name,
                                                        StatNameTagVectorOptConstRef tags) PURE;
 
   /**
@@ -288,12 +315,9 @@ public:
   virtual bool iterate(const IterateFn<TextReadout>& fn) const PURE;
 
   /**
-   * @return the aggregated prefix for this scope. A trailing dot is not
-   * included, even if one was supplied when creating the scope. If this is a
-   * nested scope, it will include names from every level. E.g.
-   *     store.createScope("foo").createScope("bar").prefix() will be the StatName "foo.bar"
+   * @return the scope's namespace prefix.
    */
-  virtual StatName prefix() const PURE;
+  virtual StatNameSpan prefix() const PURE;
 
   /**
    * @return a reference to the Store object that owns this scope.

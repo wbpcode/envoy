@@ -8,6 +8,8 @@
 #include "source/common/stats/histogram_impl.h"
 #include "source/common/stats/utility.h"
 
+#include "symbol_table.h"
+
 namespace Envoy {
 namespace Stats {
 
@@ -51,8 +53,7 @@ IsolatedStoreImpl::IsolatedStoreImpl(SymbolTable& symbol_table)
 
 ScopeSharedPtr IsolatedStoreImpl::rootScope() {
   if (lazy_default_scope_ == nullptr) {
-    StatNameManagedStorage name_storage("", symbolTable());
-    lazy_default_scope_ = makeScope(name_storage.statName());
+    lazy_default_scope_ = makeScope({});
   }
   return lazy_default_scope_;
 }
@@ -66,6 +67,10 @@ IsolatedStoreImpl::~IsolatedStoreImpl() = default;
 ScopeSharedPtr IsolatedScopeImpl::createScope(const std::string& name, bool,
                                               const ScopeStatsLimitSettings& limits,
                                               StatsMatcherSharedPtr matcher) {
+  if (name.empty()) {
+    return scopeFromStatName(StatNameSpan{}, false, limits, std::move(matcher));
+  }
+
   StatNameManagedStorage stat_name_storage(Utility::sanitizeStatsName(name), symbolTable());
   return scopeFromStatName(stat_name_storage.statName(), false, limits, std::move(matcher));
 }
@@ -73,17 +78,23 @@ ScopeSharedPtr IsolatedScopeImpl::createScope(const std::string& name, bool,
 ScopeSharedPtr IsolatedScopeImpl::scopeFromStatName(StatName name, bool,
                                                     const ScopeStatsLimitSettings&,
                                                     StatsMatcherSharedPtr matcher) {
-  SymbolTable::StoragePtr prefix_name_storage = symbolTable().join({prefix(), name});
-  // Use explicit matcher if provided; otherwise inherit scope_matcher_.
+  return scopeFromStatName(StatNameSpan{name}, false, {}, std::move(matcher));
+}
+
+ScopeSharedPtr IsolatedScopeImpl::scopeFromStatName(StatNameSpan names, bool,
+                                                    const ScopeStatsLimitSettings&,
+                                                    StatsMatcherSharedPtr matcher) {
+  StatNameVec name_vec(prefix_vector_);
+  name_vec.insert(name_vec.end(), names.begin(), names.end());
+
   StatsMatcherSharedPtr child_matcher = matcher ? std::move(matcher) : scope_matcher_;
-  ScopeSharedPtr scope =
-      store_.makeScope(StatName(prefix_name_storage.get()), std::move(child_matcher));
+  ScopeSharedPtr scope = store_.makeScope(name_vec, std::move(child_matcher));
   addScopeToStore(scope);
   return scope;
 }
 
-ScopeSharedPtr IsolatedStoreImpl::makeScope(StatName name, StatsMatcherSharedPtr matcher) {
-  return std::make_shared<IsolatedScopeImpl>(name, *this, std::move(matcher));
+ScopeSharedPtr IsolatedStoreImpl::makeScope(StatNameSpan names, StatsMatcherSharedPtr matcher) {
+  return std::make_shared<IsolatedScopeImpl>(names, *this, std::move(matcher));
 }
 
 } // namespace Stats

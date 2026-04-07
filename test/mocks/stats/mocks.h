@@ -305,6 +305,11 @@ public:
                                    StatsMatcherSharedPtr = nullptr) override {
     return createScope_(symbolTable().toString(name));
   }
+  ScopeSharedPtr scopeFromStatName(StatNameSpan names, bool, const ScopeStatsLimitSettings&,
+                                   StatsMatcherSharedPtr = nullptr) override {
+    SymbolTable::StoragePtr joined = symbolTable().join(StatNameVec(names.begin(), names.end()));
+    return createScope_(symbolTable().toString(StatName(joined.get())));
+  }
 
   MOCK_METHOD(ScopeSharedPtr, createScope_, (const std::string& name));
   MOCK_METHOD(CounterOptConstRef, findCounter, (StatName), (const));

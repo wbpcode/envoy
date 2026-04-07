@@ -94,7 +94,22 @@ public:
         store_);
   }
 
+  ScopeSharedPtr scopeFromStatName(StatNameSpan names, bool evictable,
+                                   const ScopeStatsLimitSettings& limits,
+                                   StatsMatcherSharedPtr matcher = nullptr) override {
+    Thread::LockGuard lock(lock_);
+    return std::make_shared<TestScopeWrapper>(
+        lock_, wrapped_scope_->scopeFromStatName(names, evictable, limits, std::move(matcher)),
+        store_);
+  }
+
   Counter& counterFromStatNameWithTags(const StatName& name,
+                                       StatNameTagVectorOptConstRef tags) override {
+    Thread::LockGuard lock(lock_);
+    return wrapped_scope_->counterFromStatNameWithTags(name, tags);
+  }
+
+  Counter& counterFromStatNameWithTags(StatNameSpan name,
                                        StatNameTagVectorOptConstRef tags) override {
     Thread::LockGuard lock(lock_);
     return wrapped_scope_->counterFromStatNameWithTags(name, tags);
@@ -106,13 +121,31 @@ public:
     return wrapped_scope_->gaugeFromStatNameWithTags(name, tags, import_mode);
   }
 
+  Gauge& gaugeFromStatNameWithTags(StatNameSpan name, StatNameTagVectorOptConstRef tags,
+                                   Gauge::ImportMode import_mode) override {
+    Thread::LockGuard lock(lock_);
+    return wrapped_scope_->gaugeFromStatNameWithTags(name, tags, import_mode);
+  }
+
   Histogram& histogramFromStatNameWithTags(const StatName& name, StatNameTagVectorOptConstRef tags,
                                            Histogram::Unit unit) override {
     Thread::LockGuard lock(lock_);
     return wrapped_scope_->histogramFromStatNameWithTags(name, tags, unit);
   }
 
+  Histogram& histogramFromStatNameWithTags(StatNameSpan name, StatNameTagVectorOptConstRef tags,
+                                           Histogram::Unit unit) override {
+    Thread::LockGuard lock(lock_);
+    return wrapped_scope_->histogramFromStatNameWithTags(name, tags, unit);
+  }
+
   TextReadout& textReadoutFromStatNameWithTags(const StatName& name,
+                                               StatNameTagVectorOptConstRef tags) override {
+    Thread::LockGuard lock(lock_);
+    return wrapped_scope_->textReadoutFromStatNameWithTags(name, tags);
+  }
+
+  TextReadout& textReadoutFromStatNameWithTags(StatNameSpan name,
                                                StatNameTagVectorOptConstRef tags) override {
     Thread::LockGuard lock(lock_);
     return wrapped_scope_->textReadoutFromStatNameWithTags(name, tags);

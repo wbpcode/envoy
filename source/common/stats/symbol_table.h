@@ -43,6 +43,8 @@ using Symbol = uint32_t;
 /** Transient representations of a vector of 32-bit symbols */
 using SymbolVec = std::vector<Symbol>;
 
+using StatNameSpan = absl::Span<const StatName>;
+
 /**
  * SymbolTableImpl manages a namespace optimized for stats, which are typically
  * composed of arrays of "."-separated tokens, with a significant overlap
@@ -219,6 +221,17 @@ public:
   std::string toString(const StatName& stat_name) const;
 
   /**
+   * Decodes a vector of symbols back into its period-delimited stat name. If
+   * decoding fails on any part of the symbol_vec, we release_assert and crash,
+   * since this should never happen, and we don't want to continue running
+   * with a corrupt stats set.
+   *
+   * @param stat_names the stat names.
+   * @return std::string stringified stat_names, joined by ".".
+   */
+  std::string toString(StatNameSpan stat_names) const;
+
+  /**
    * @return uint64_t the number of symbols in the symbol table.
    */
   uint64_t numSymbols() const;
@@ -260,7 +273,7 @@ public:
    * @param stat_names the names to join.
    * @return Storage allocated for the joined name.
    */
-  StoragePtr join(const StatNameVec& stat_names) const;
+  StoragePtr join(StatNameSpan stat_names) const;
 
   /**
    * Populates a StatNameList from a list of encodings. This is not done at
@@ -419,6 +432,19 @@ private:
    * @return std::string the retrieved stat name.
    */
   std::vector<absl::string_view> decodeStrings(StatName stat_name) const;
+
+  /**
+   * Decodes a stat name into a string. Note that some of the strings may have periods in them, in
+   * the case where StatNameDynamicStorage was used.
+   *
+   * If decoding fails on any part of the encoding, we RELEASE_ASSERT and crash,
+   * since this should never happen, and we don't want to continue running with
+   * corrupt stat names.
+   *
+   * @param stat_name the encoded stat name.
+   * @param out the string to write the decoded stat name into.
+   */
+  void decodeStrings(StatName stat_name, std::vector<absl::string_view>& out) const;
 
   /**
    * Convenience function for encode(), symbolizing one string segment at a time.
