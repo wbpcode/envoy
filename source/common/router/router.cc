@@ -815,6 +815,8 @@ bool Filter::continueDecodeHeaders(Upstream::ThreadLocalCluster* cluster,
       createRetryState(*getEffectiveRetryPolicy(), headers, *cluster_, config_->factory_context_,
                        callbacks_->dispatcher(), route_entry_->priority());
 
+  absl::InlinedVector<std::reference_wrapper<const ShadowPolicy>, 4> active_shadow_policies;
+
   // Determine which shadow policies to use. It's possible that we don't do any shadowing due to
   // runtime keys. Also the method CONNECT doesn't support shadowing.
   auto method = headers.getMethodValue();
@@ -828,8 +830,7 @@ bool Filter::continueDecodeHeaders(Upstream::ThreadLocalCluster* cluster,
     for (const auto& shadow_policy : policies_to_evaluate) {
       const auto& policy_ref = *shadow_policy;
       if (FilterUtility::shouldShadow(policy_ref, config_->runtime_, callbacks_->streamId())) {
-        active_shadow_policies_.push_back(std::cref(policy_ref));
-        shadow_headers_ = Http::createHeaderMap<Http::RequestHeaderMapImpl>(*downstream_headers_);
+        active_shadow_policies.push_back(std::cref(policy_ref));
       }
     }
   }
@@ -852,14 +853,14 @@ bool Filter::continueDecodeHeaders(Upstream::ThreadLocalCluster* cluster,
   LinkedList::moveIntoList(std::move(upstream_request), upstream_requests_);
   upstream_requests_.front()->acceptHeadersFromRouter(end_stream);
   // Start the shadow streams.
-  for (const auto& shadow_policy_wrapper : active_shadow_policies_) {
+  for (const auto& shadow_policy_wrapper : active_shadow_policies) {
     const auto& shadow_policy = shadow_policy_wrapper.get();
     const absl::optional<absl::string_view> shadow_cluster_name =
         getShadowCluster(shadow_policy, *downstream_headers_);
     if (!shadow_cluster_name.has_value()) {
       continue;
     }
-    auto shadow_headers = Http::createHeaderMap<Http::RequestHeaderMapImpl>(*shadow_headers_);
+    auto shadow_headers = Http::createHeaderMap<Http::RequestHeaderMapImpl>(*downstream_headers_);
     applyShadowPolicyHeaders(shadow_policy, *shadow_headers);
     const auto options =
         Http::AsyncClient::RequestOptions()
@@ -883,9 +884,7 @@ bool Filter::continueDecodeHeaders(Upstream::ThreadLocalCluster* cluster,
     if (end_stream) {
       // This is a header-only request, and can be dispatched immediately to the shadow
       // without waiting.
-      Http::RequestMessagePtr request(new Http::RequestMessageImpl(
-          Http::createHeaderMap<Http::RequestHeaderMapImpl>(*shadow_headers_)));
-      applyShadowPolicyHeaders(shadow_policy, request->headers());
+      Http::RequestMessagePtr request(new Http::RequestMessageImpl(std::move(shadow_headers)));
       config_->shadowWriter().shadow(std::string(shadow_cluster_name.value()), std::move(request),
                                      options);
     } else {
@@ -1091,10 +1090,6 @@ Http::FilterDataStatus Filter::decodeData(Buffer::Instance& data, bool end_strea
 Http::FilterTrailersStatus Filter::decodeTrailers(Http::RequestTrailerMap& trailers) {
   ENVOY_STREAM_LOG(debug, "router decoding trailers:\n{}", *callbacks_, trailers);
 
-  if (shadow_headers_) {
-    shadow_trailers_ = Http::createHeaderMap<Http::RequestTrailerMapImpl>(trailers);
-  }
-
   // upstream_requests_.size() cannot be > 1 because that only happens when a per
   // try timeout occurs with hedge_on_per_try_timeout enabled but the per
   // try timeout timer is not started until onRequestComplete(). It could be zero
@@ -1109,7 +1104,7 @@ Http::FilterTrailersStatus Filter::decodeTrailers(Http::RequestTrailerMap& trail
     shadow_stream->removeDestructorCallback();
     shadow_stream->removeWatermarkCallbacks();
     shadow_stream->captureAndSendTrailers(
-        Http::createHeaderMap<Http::RequestTrailerMapImpl>(*shadow_trailers_));
+        Http::createHeaderMap<Http::RequestTrailerMapImpl>(trailers));
   }
   shadow_streams_.clear();
 
