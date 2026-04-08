@@ -37,6 +37,7 @@
 #include "test/server/utility.h"
 #include "test/test_common/network_utility.h"
 #include "test/test_common/registry.h"
+#include "test/test_common/test_runtime.h"
 #include "test/test_common/utility.h"
 
 #include "absl/strings/escaping.h"
@@ -3523,8 +3524,11 @@ filter_chains:
   EXPECT_NE("", scope.counterFromString("bar").name());
 }
 
-// Listener has metadata but no stats matcher: all stats are created normally.
-TEST_P(ListenerManagerImplTest, StatsMatcherMetadataButNoMatcher) {
+TEST_P(ListenerManagerImplTest, StatsMatcherMetadataButNoMatcherAndDisableStrictCheck) {
+  TestScopedRuntime scoped_runtime;
+  scoped_runtime.mergeValues(
+      {{"envoy.reloadable_features.strict_stats_matcher_unpacked", "false"}});
+
   const std::string yaml = R"EOF(
 stat_prefix: test_prefix
 address:
@@ -3552,6 +3556,29 @@ filter_chains:
   // it doesn't cause any problems if it does.
   EXPECT_NE("", scope.counterFromString("foo").name());
   EXPECT_NE("", scope.counterFromString("bar").name());
+}
+
+// Listener has metadata but no stats matcher, this should be rejected.
+TEST_P(ListenerManagerImplTest, StatsMatcherMetadataButNoMatcher) {
+  const std::string yaml = R"EOF(
+stat_prefix: test_prefix
+address:
+  socket_address:
+    address: "::1"
+    port_value: 10000
+metadata:
+  typed_filter_metadata:
+    envoy.stats_matcher:
+      "@type": type.googleapis.com/google.protobuf.Struct
+      value:
+        fields:
+          foo:
+            string_value: "bar"
+filter_chains:
+- filters: []
+  )EOF";
+
+  EXPECT_THROW(addOrUpdateListener(parseListenerFromV3Yaml(yaml)), EnvoyException);
 }
 
 // Invalid stats matcher configuration will be rejected.

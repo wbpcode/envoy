@@ -439,6 +439,10 @@ new_features:
     the provided :ref:`StatsMatcher <envoy_v3_api_msg_config.metrics.v3.StatsMatcher>` replaces
     the global stats matcher for that listener's stats scope, allowing fine-grained control over
     which listener stats are created.
+    If the value of ``envoy.stats_matcher`` is set but does not contain a valid ``StatsMatcher``
+    message, this will be treated as an invalid configuration and the listener will fail to start.
+    This strict validation can be disabled temporarily by setting the runtime guard
+    ``envoy.reloadable_features.strict_stats_matcher_unpacked`` to ``false``.
 - area: tls
   change: |
     Added support for fetching certificates on-demand via SDS in the upstream TLS transport socket
