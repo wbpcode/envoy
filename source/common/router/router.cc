@@ -816,6 +816,7 @@ bool Filter::continueDecodeHeaders(Upstream::ThreadLocalCluster* cluster,
                        callbacks_->dispatcher(), route_entry_->priority());
 
   absl::InlinedVector<std::reference_wrapper<const ShadowPolicy>, 4> active_shadow_policies;
+  std::unique_ptr<Http::RequestHeaderMapImpl> original_shadow_headers;
 
   // Determine which shadow policies to use. It's possible that we don't do any shadowing due to
   // runtime keys. Also the method CONNECT doesn't support shadowing.
@@ -831,6 +832,9 @@ bool Filter::continueDecodeHeaders(Upstream::ThreadLocalCluster* cluster,
       const auto& policy_ref = *shadow_policy;
       if (FilterUtility::shouldShadow(policy_ref, config_->runtime_, callbacks_->streamId())) {
         active_shadow_policies.push_back(std::cref(policy_ref));
+        if (original_shadow_headers == nullptr) {
+          original_shadow_headers = Http::createHeaderMap<Http::RequestHeaderMapImpl>(headers);
+        }
       }
     }
   }
@@ -853,14 +857,21 @@ bool Filter::continueDecodeHeaders(Upstream::ThreadLocalCluster* cluster,
   LinkedList::moveIntoList(std::move(upstream_request), upstream_requests_);
   upstream_requests_.front()->acceptHeadersFromRouter(end_stream);
   // Start the shadow streams.
-  for (const auto& shadow_policy_wrapper : active_shadow_policies) {
-    const auto& shadow_policy = shadow_policy_wrapper.get();
+  for (size_t i = 0; i < active_shadow_policies.size(); ++i) {
+    const auto& shadow_policy = active_shadow_policies[i].get();
     const absl::optional<absl::string_view> shadow_cluster_name =
         getShadowCluster(shadow_policy, *downstream_headers_);
     if (!shadow_cluster_name.has_value()) {
       continue;
     }
-    auto shadow_headers = Http::createHeaderMap<Http::RequestHeaderMapImpl>(*downstream_headers_);
+    std::unique_ptr<Http::RequestHeaderMapImpl> shadow_headers;
+    if (i == active_shadow_policies.size() - 1) {
+      // For the last shadow policy, we can reuse the original headers to save a copy because
+      // copy whole headers map is not cheap.
+      shadow_headers = std::move(original_shadow_headers);
+    } else {
+      shadow_headers = Http::createHeaderMap<Http::RequestHeaderMapImpl>(*original_shadow_headers);
+    }
     applyShadowPolicyHeaders(shadow_policy, *shadow_headers);
     const auto options =
         Http::AsyncClient::RequestOptions()
