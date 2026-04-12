@@ -4,18 +4,35 @@
 
 #include "source/common/http/utility.h"
 #include "source/common/network/utility.h"
+#include "source/common/runtime/runtime_features.h"
+#include "source/common/stats/tag_utility.h"
 
 #include "absl/memory/memory.h"
+#include "absl/strings/match.h"
 
 namespace Envoy {
 namespace Extensions {
 namespace HttpFilters {
 namespace Geoip {
 
+Stats::ScopeSharedPtr createGeoipScope(Stats::Scope& scope, absl::string_view parent_stat_prefix) {
+  if (Runtime::runtimeFeatureEnabled("envoy.reloadable_features.no_stats_tag_extraction")) {
+    Stats::StatElementViewVec elements;
+    if (!parent_stat_prefix.empty()) {
+      Stats::TagUtility::populateParentStatPrefix(parent_stat_prefix, elements);
+    }
+    elements.push_back(Stats::StatElementView{.value_ = "geoip"});
+    return scope.createScope(elements);
+  }
+  return scope.createScope(absl::StrCat(parent_stat_prefix, "geoip."));
+}
+
 GeoipFilterConfig::GeoipFilterConfig(
     const envoy::extensions::filters::http::geoip::v3::Geoip& config,
     const std::string& stat_prefix, Stats::Scope& scope)
-    : scope_(scope), stat_name_set_(scope.symbolTable().makeSet("Geoip")),
+    : scope_(createGeoipScope(scope, stat_prefix)),
+      stat_name_set_(scope.symbolTable().makeSet("Geoip")), parent_stat_prefix_(stat_prefix),
+      geoip_(stat_name_set_->add("geoip")),
       stats_prefix_(stat_name_set_->add(stat_prefix + "geoip")), use_xff_(config.has_xff_config()),
       xff_num_trusted_hops_(config.has_xff_config() ? config.xff_config().xff_num_trusted_hops()
                                                     : 0),
@@ -27,8 +44,7 @@ GeoipFilterConfig::GeoipFilterConfig(
 }
 
 void GeoipFilterConfig::incCounter(Stats::StatName name) {
-  Stats::SymbolTable::StoragePtr storage = scope_.symbolTable().join({stats_prefix_, name});
-  scope_.counterFromStatName(Stats::StatName(storage.get())).inc();
+  scope_->counterFromStatName(name).inc();
 }
 
 GeoipFilter::GeoipFilter(GeoipFilterConfigSharedPtr config, Geolocation::DriverSharedPtr driver)

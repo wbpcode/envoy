@@ -41,6 +41,7 @@
 #include "source/common/common/fmt.h"
 #include "source/common/common/utility.h"
 #include "source/common/config/utility.h"
+#include "source/common/config/well_known_names.h"
 #include "source/common/http/http1/codec_stats.h"
 #include "source/common/http/http2/codec_stats.h"
 #include "source/common/http/utility.h"
@@ -58,6 +59,7 @@
 #include "source/common/runtime/runtime_impl.h"
 #include "source/common/stats/deferred_creation.h"
 #include "source/common/stats/stats_matcher_impl.h"
+#include "source/common/stats/utility.h"
 #include "source/common/upstream/cluster_factory_impl.h"
 #include "source/common/upstream/health_checker_impl.h"
 #include "source/common/upstream/locality_pool.h"
@@ -442,11 +444,19 @@ generateStatsScope(const envoy::config::cluster::v3::Cluster& config,
     }
   }
 
-  return stats.createScope(
-      fmt::format("cluster.{}.", (!config.alt_stat_name().empty() && use_alt_stat_name)
-                                     ? config.alt_stat_name()
-                                     : config.name()),
-      false, {}, std::move(scope_matcher));
+  absl::string_view stat_name_view = (!config.alt_stat_name().empty() && use_alt_stat_name)
+                                         ? config.alt_stat_name()
+                                         : config.name();
+  if (Runtime::runtimeFeatureEnabled("envoy.reloadable_features.no_stats_tag_extraction")) {
+    return stats.rootScope()->createScope(
+        {Stats::StatElementView{.value_ = "cluster"},
+         Stats::StatElementView{.value_ = stat_name_view,
+                                .name_ = Config::TagNames::get().CLUSTER_NAME,
+                                .ignore_name_ = true}},
+        false, {}, std::move(scope_matcher));
+  }
+  return stats.createScope(fmt::format("cluster.{}.", stat_name_view), false, {},
+                           std::move(scope_matcher));
 }
 
 // TODO(pianiststickman): this implementation takes a lock on the hot path and puts a copy of the

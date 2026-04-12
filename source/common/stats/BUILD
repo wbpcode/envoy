@@ -42,6 +42,17 @@ envoy_cc_library(
 )
 
 envoy_cc_library(
+    name = "context_lib",
+    srcs = ["context_impl.cc"],
+    hdrs = ["context_impl.h"],
+    deps = [
+        "//envoy/stats:context_interface",
+        "//source/common/config:well_known_names",
+        "//source/common/stats:symbol_table_lib",
+    ],
+)
+
+envoy_cc_library(
     name = "custom_stat_namespaces_lib",
     srcs = ["custom_stat_namespaces_impl.cc"],
     hdrs = ["custom_stat_namespaces_impl.h"],

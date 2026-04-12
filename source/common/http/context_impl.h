@@ -20,7 +20,7 @@ public:
     return default_tracing_config_;
   }
 
-  CodeStats& codeStats() override { return code_stats_; }
+  CodeStats& codeStats() override;
 
   void setDefaultTracingConfig(const envoy::config::trace::v3::Tracing& tracing_config) {
     default_tracing_config_ = tracing_config;
@@ -32,7 +32,9 @@ public:
   }
 
 private:
+  const bool no_tags_extraction_{false};
   CodeStatsImpl code_stats_;
+  ElementCodeStatsImpl element_code_stats_;
   UserAgentContext user_agent_context_;
   const Stats::StatName async_client_stat_prefix_;
   envoy::config::trace::v3::Tracing default_tracing_config_;

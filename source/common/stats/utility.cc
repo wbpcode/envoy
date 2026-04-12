@@ -1,6 +1,5 @@
 #include "source/common/stats/utility.h"
 
-#include <algorithm>
 #include <string>
 
 #include "absl/strings/match.h"

@@ -35,7 +35,7 @@ namespace Stats {
 class ThreadLocalHistogramImpl : public HistogramImplHelper {
 public:
   ThreadLocalHistogramImpl(StatName name, Histogram::Unit unit, StatName tag_extracted_name,
-                           const StatNameTagVector& stat_name_tags, SymbolTable& symbol_table,
+                           StatNameTagSpan stat_name_tags, SymbolTable& symbol_table,
                            absl::optional<uint32_t> bins);
   ~ThreadLocalHistogramImpl() override;
 
@@ -85,7 +85,7 @@ class ThreadLocalStoreImpl;
 class ParentHistogramImpl : public MetricImpl<ParentHistogram> {
 public:
   ParentHistogramImpl(StatName name, Histogram::Unit unit, ThreadLocalStoreImpl& parent,
-                      StatName tag_extracted_name, const StatNameTagVector& stat_name_tags,
+                      StatName tag_extracted_name, StatNameTagSpan stat_name_tags,
                       ConstSupportedBuckets& supported_buckets, absl::optional<uint32_t> bins,
                       uint64_t id);
   ~ParentHistogramImpl() override;
@@ -331,6 +331,34 @@ private:
       return textReadoutFromStatName(storage.statName());
     }
 
+    // Senseless implementations of the element-based API.
+    ScopeSharedPtr createScope(StatElementSpan, bool, const ScopeStatsLimitSettings&,
+                               StatsMatcherSharedPtr) override {
+      RELEASE_ASSERT(false, "Element-based API not supported in IsolatedScopeImpl");
+      return nullptr;
+    }
+    ScopeSharedPtr createScope(StatElementViewSpan, bool, const ScopeStatsLimitSettings&,
+                               StatsMatcherSharedPtr) override {
+      RELEASE_ASSERT(false, "Element-based API not supported in IsolatedScopeImpl");
+      return nullptr;
+    }
+    Counter& getOrCreateCounter(StatElementSpan) override {
+      RELEASE_ASSERT(false, "Element-based API not supported in IsolatedScopeImpl");
+      return parent_.null_counter_;
+    }
+    Gauge& getOrCreateGauge(StatElementSpan, Gauge::ImportMode) override {
+      RELEASE_ASSERT(false, "Element-based API not supported in IsolatedScopeImpl");
+      return parent_.null_gauge_;
+    }
+    Histogram& getOrCreateHistogram(StatElementSpan, Histogram::Unit) override {
+      RELEASE_ASSERT(false, "Element-based API not supported in IsolatedScopeImpl");
+      return parent_.null_histogram_;
+    }
+    TextReadout& getOrCreateTextReadout(StatElementSpan) override {
+      RELEASE_ASSERT(false, "Element-based API not supported in IsolatedScopeImpl");
+      return parent_.null_text_readout_;
+    }
+
     template <class StatMap, class StatFn> bool iterHelper(StatFn fn, const StatMap& map) const {
       for (auto& iter : map) {
         if (!fn(iter.second)) {
@@ -387,7 +415,7 @@ private:
 
     template <class StatType>
     using MakeStatFn = std::function<RefcountPtr<StatType>(
-        Allocator&, StatName name, StatName tag_extracted_name, const StatNameTagVector& tags)>;
+        Allocator&, StatName name, StatName tag_extracted_name, StatNameTagSpan tags)>;
 
     /**
      * Makes a stat either by looking it up in the central cache,
@@ -404,7 +432,7 @@ private:
      */
     template <class StatType>
     StatType& safeMakeStat(StatName full_stat_name, StatName name_no_tags,
-                           const absl::optional<StatNameTagVector>& stat_name_tags,
+                           absl::optional<StatNameTagSpan> stat_name_tags,
                            StatNameHashMap<RefcountPtr<StatType>>& central_cache_map,
                            StatsMatcher::FastResult fast_reject_result,
                            StatNameStorageSet& central_rejected_stats,
@@ -478,9 +506,65 @@ private:
     const ScopeStatsLimitSettings limits_;
     StatsMatcherSharedPtr scope_matcher_;
 
-  private:
     StatNameStorage prefix_;
     mutable CentralCacheEntrySharedPtr central_cache_ ABSL_GUARDED_BY(parent_.lock_);
+  };
+
+  /**
+   * A scope implementation that carries a set of StatElement objects encoding both a name
+   * context and a set of tags that are applied to every metric created within the scope.
+   *
+   * All StatName values referenced by the StatElement span must remain valid for the lifetime
+   * of the scope; the supplied StatNamePool is used to own that storage.
+   */
+  class ElementScopeImpl : public ScopeImpl {
+  public:
+    /**
+     * @param pool the StatNamePool that will own the StatName storage for all prefix elements.
+     * @param prefix_elements the StatElement vector encoding the scope prefix and scope-level
+     * tags.
+     * @param store the parent store for this scope, which provides the symbol table and metric
+     * storage.
+     * @param matcher an optional StatsMatcher to apply to all metrics created within this scope.
+     */
+    ElementScopeImpl(std::unique_ptr<StatNamePool> pool, StatElementVec&& prefix_elements,
+                     ThreadLocalStoreImpl& store, bool evictable,
+                     const ScopeStatsLimitSettings& limits = {},
+                     StatsMatcherSharedPtr matcher = nullptr);
+
+    ScopeSharedPtr createScope(const std::string& name, bool evictable = false,
+                               const ScopeStatsLimitSettings& limits = {},
+                               StatsMatcherSharedPtr matcher = nullptr) override;
+    ScopeSharedPtr createScope(StatElementSpan names, bool evictable,
+                               const ScopeStatsLimitSettings& limits,
+                               StatsMatcherSharedPtr matcher) override;
+    ScopeSharedPtr createScope(StatElementViewSpan names, bool evictable,
+                               const ScopeStatsLimitSettings& limits,
+                               StatsMatcherSharedPtr matcher) override;
+    ScopeSharedPtr scopeFromStatName(StatName name, bool evictable = false,
+                                     const ScopeStatsLimitSettings& limits = {},
+                                     StatsMatcherSharedPtr matcher = nullptr) override;
+
+    // Stats::Scope – element-based API (real implementations).
+    Counter& getOrCreateCounter(StatElementSpan names) override;
+    Gauge& getOrCreateGauge(StatElementSpan names, Gauge::ImportMode import_mode) override;
+    Histogram& getOrCreateHistogram(StatElementSpan names, Histogram::Unit unit) override;
+    TextReadout& getOrCreateTextReadout(StatElementSpan names) override;
+
+    // Stats::Scope – single-name API (delegated to the element-based API above).
+    Counter& counterFromStatNameWithTags(const StatName& name,
+                                         StatNameTagVectorOptConstRef tags) override;
+    Gauge& gaugeFromStatNameWithTags(const StatName& name, StatNameTagVectorOptConstRef tags,
+                                     Gauge::ImportMode import_mode) override;
+    Histogram& histogramFromStatNameWithTags(const StatName& name,
+                                             StatNameTagVectorOptConstRef tags,
+                                             Histogram::Unit unit) override;
+    TextReadout& textReadoutFromStatNameWithTags(const StatName& name,
+                                                 StatNameTagVectorOptConstRef tags) override;
+
+  private:
+    std::unique_ptr<StatNamePool> pool_;
+    StatElementVec prefix_elements_;
   };
 
   struct TlsCache : public ThreadLocal::ThreadLocalObject {

@@ -28,6 +28,7 @@
 #include "envoy/server/overload/overload_manager.h"
 #include "envoy/server/process_context.h"
 #include "envoy/singleton/manager.h"
+#include "envoy/stats/context.h"
 #include "envoy/stats/scope.h"
 #include "envoy/thread_local/thread_local.h"
 #include "envoy/tracing/tracer.h"
@@ -177,6 +178,11 @@ public:
    * @return Router::Context& the server-wide router context.
    */
   virtual Router::Context& routerContext() PURE;
+
+  /**
+   * @return Stats::Context& the server-wide stats context.
+   */
+  virtual Stats::Context& statsContext() PURE;
 
   /**
    * @return ProcessContextOptRef an optional reference to the

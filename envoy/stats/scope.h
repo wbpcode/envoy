@@ -112,6 +112,27 @@ public:
                                            StatsMatcherSharedPtr matcher = nullptr) PURE;
 
   /**
+   * Allocate a new scope. NOTE: The implementation should correctly handle overlapping scopes
+   * that point to the same reference counted backing stats. This allows a new scope to be
+   * gracefully swapped in while an old scope with the same name is being destroyed.
+   *
+   * @param names StatElementSpan that supplies the scope's namespace prefix and optionally
+   * tags.
+   * @param evictable whether unused metrics can be deleted from the scope caches. This requires
+   * that the metrics are not stored by reference.
+   * @param limits metric limits for counters, gauges and histograms allowed in this scope.
+   * @param matcher optional per-scope stats matcher; replaces the store-level matcher when set.
+   * NOTE: If the scope specific matcher is set, then the sub scope will inherit the same matcher
+   * unless another matcher is explicitly set.
+   */
+  virtual ScopeSharedPtr createScope(StatElementSpan /*names*/, bool /*evictable*/ = false,
+                                     const ScopeStatsLimitSettings& /*limits*/ = {},
+                                     StatsMatcherSharedPtr /*matcher*/ = nullptr) PURE;
+  virtual ScopeSharedPtr createScope(StatElementViewSpan /*names*/, bool /*evictable*/ = false,
+                                     const ScopeStatsLimitSettings& /*limits*/ = {},
+                                     StatsMatcherSharedPtr /*matcher*/ = nullptr) PURE;
+
+  /**
    * Creates a Counter from the stat name. Tag extraction will be performed on the name.
    * @param name The name of the stat, obtained from the SymbolTable.
    * @return a counter within the scope's namespace.
@@ -130,6 +151,13 @@ public:
                                                StatNameTagVectorOptConstRef tags) PURE;
 
   /**
+   * Creates or retrieves a Counter from the stat names.
+   * @param names StatElementSpan that supplies the stat name and optionally tags.
+   * @return a counter within the scope's namespace.
+   */
+  virtual Counter& getOrCreateCounter(StatElementSpan /*names*/) PURE;
+
+  /**
    * TODO(#6667): this variant is deprecated: use counterFromStatName.
    * @param name The name, expressed as a string.
    * @return a counter within the scope's namespace.
@@ -145,6 +173,15 @@ public:
   Gauge& gaugeFromStatName(const StatName& name, Gauge::ImportMode import_mode) {
     return gaugeFromStatNameWithTags(name, absl::nullopt, import_mode);
   }
+
+  /**
+   * Creates or retrieves a Gauge from the stat names.
+   * @param names StatElementSpan that supplies the stat name and optionally tags.
+   * @param import_mode Whether hot-restart should accumulate this value.
+   * @return a gauge within the scope's namespace.
+   */
+  virtual Gauge& getOrCreateGauge(StatElementSpan /*names*/,
+                                  Gauge::ImportMode /*import_mode*/) PURE;
 
   /**
    * Creates a Gauge from the stat name and tags. If tags are not provided, tag extraction
@@ -176,6 +213,14 @@ public:
   }
 
   /**
+   * Creates or retrieves a Histogram from the stat names.
+   * @param names StatElementSpan that supplies the stat name and optionally tags.
+   * @param unit The unit of measurement.
+   * @return a histogram within the scope's namespace with a particular value type.
+   */
+  virtual Histogram& getOrCreateHistogram(StatElementSpan /*names*/, Histogram::Unit /*unit*/) PURE;
+
+  /**
    * Creates a Histogram from the stat name and tags. If tags are not provided, tag extraction
    * will be performed on the name.
    * @param name The name of the stat, obtained from the SymbolTable.
@@ -203,6 +248,13 @@ public:
   TextReadout& textReadoutFromStatName(const StatName& name) {
     return textReadoutFromStatNameWithTags(name, absl::nullopt);
   }
+
+  /**
+   * Creates or retrieves a TextReadout from the stat names.
+   * @param names StatElementSpan that supplies the stat name and optionally tags.
+   * @return a text readout within the scope's namespace.
+   */
+  virtual TextReadout& getOrCreateTextReadout(StatElementSpan /*names*/) PURE;
 
   /**
    * Creates a TextReadout from the stat name and tags. If tags are not provided, tag extraction

@@ -8,6 +8,8 @@
 #include "source/common/listener_manager/listener_info_impl.h"
 #include "source/common/network/resolver_impl.h"
 #include "source/common/protobuf/utility.h"
+#include "source/common/runtime/runtime_features.h"
+#include "source/common/stats/utility.h"
 #include "source/extensions/filters/network/http_connection_manager/config.h"
 
 namespace Envoy {
@@ -15,12 +17,27 @@ namespace Extensions {
 namespace ApiListeners {
 namespace DefaultApiListener {
 
+namespace {
+
+Stats::ScopeSharedPtr createApiListenerScope(Stats::Store& stats, const std::string& name) {
+  if (Runtime::runtimeFeatureEnabled("envoy.reloadable_features.no_stats_tag_extraction")) {
+    return stats.createScope(
+        {Stats::StatElementView{.value_ = "listener.api"},
+         Stats::StatElementView{.value_ = name,
+                                .name_ = Envoy::Config::TagNames::get().LISTENER_ADDRESS,
+                                .ignore_name_ = true}});
+  }
+  return stats.createScope(fmt::format("listener.api.{}.", name));
+}
+
+} // namespace
+
 ApiListenerImplBase::ApiListenerImplBase(Network::Address::InstanceConstSharedPtr&& address,
                                          const envoy::config::listener::v3::Listener& config,
                                          Server::Instance& server, const std::string& name)
     : config_(config), name_(name), address_(std::move(address)),
       factory_context_(server, *this, server.stats().createScope(""),
-                       server.stats().createScope(fmt::format("listener.api.{}.", name_)),
+                       createApiListenerScope(server.stats(), name),
                        std::make_shared<Server::ListenerInfoImpl>(config)) {}
 
 void ApiListenerImplBase::SyntheticReadCallbacks::SyntheticConnection::raiseConnectionEvent(

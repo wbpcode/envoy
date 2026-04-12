@@ -47,8 +47,8 @@ RdsRouteConfigSubscription::RdsRouteConfigSubscription(
     absl::Status& creation_status)
     : Rds::RdsRouteConfigSubscription(std::move(config_update), std::move(resource_decoder),
                                       rds.config_source(), rds.route_config_name(),
-                                      manager_identifier, factory_context, stat_prefix + "rds.",
-                                      "RDS", route_config_provider_manager, creation_status),
+                                      manager_identifier, factory_context, stat_prefix, "RDS",
+                                      route_config_provider_manager, creation_status),
       config_update_info_(static_cast<RouteConfigUpdateReceiver*>(
           Rds::RdsRouteConfigSubscription::config_update_info_.get())) {}
 

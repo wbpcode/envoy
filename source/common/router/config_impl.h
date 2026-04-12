@@ -25,6 +25,7 @@
 #include "source/common/common/packed_struct.h"
 #include "source/common/config/datasource.h"
 #include "source/common/config/metadata.h"
+#include "source/common/config/well_known_names.h"
 #include "source/common/http/hash_policy.h"
 #include "source/common/http/header_mutation.h"
 #include "source/common/http/header_utility.h"
@@ -36,6 +37,7 @@
 #include "source/common/router/retry_policy_impl.h"
 #include "source/common/router/router_ratelimit.h"
 #include "source/common/router/tls_context_match_criteria_impl.h"
+#include "source/common/runtime/runtime_features.h"
 #include "source/common/stats/symbol_table.h"
 
 #include "absl/container/flat_hash_set.h"
@@ -326,15 +328,15 @@ private:
 
   struct VirtualClusterEntry : public StatNameProvider, public VirtualClusterBase {
     VirtualClusterEntry(const envoy::config::route::v3::VirtualCluster& virtual_cluster,
-                        Stats::Scope& scope, Server::Configuration::CommonFactoryContext& context,
+                        Stats::Scope& scope, Server::Configuration::ServerFactoryContext& context,
                         const VirtualClusterStatNames& stat_names);
     std::vector<Http::HeaderUtility::HeaderDataPtr> headers_;
   };
 
   struct CatchAllVirtualCluster : public VirtualClusterBase {
-    CatchAllVirtualCluster(Stats::Scope& scope, const VirtualClusterStatNames& stat_names)
-        : VirtualClusterBase(absl::nullopt, stat_names.other_,
-                             scope.scopeFromStatName(stat_names.other_), stat_names) {}
+    CatchAllVirtualCluster(Stats::Scope& scope,
+                           Server::Configuration::ServerFactoryContext& context,
+                           const VirtualClusterStatNames& stat_names);
   };
 
   const std::string name_;

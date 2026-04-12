@@ -59,6 +59,16 @@ struct ExtAuthzFilterStats {
   ALL_EXT_AUTHZ_FILTER_STATS(GENERATE_COUNTER_STRUCT)
 };
 
+/**
+ * Wrapper struct for ext_authz filter stat names.
+ */
+struct ExtAuthzFilterStatNames {
+  explicit ExtAuthzFilterStatNames(Envoy::Stats::SymbolTable& symbol_table)
+      : pool_(symbol_table) ALL_EXT_AUTHZ_FILTER_STATS(GENERATE_STAT_NAME_INIT) {}
+  Envoy::Stats::StatNamePool pool_;
+  ALL_EXT_AUTHZ_FILTER_STATS(GENERATE_STAT_NAME_STRUCT)
+};
+
 class ExtAuthzLoggingInfo : public Envoy::StreamInfo::FilterState::Object {
 public:
   explicit ExtAuthzLoggingInfo(const absl::optional<Envoy::Protobuf::Struct> filter_metadata)
@@ -213,7 +223,29 @@ public:
   const ExtAuthzFilterStats& stats() const { return stats_; }
 
   void incCounter(Stats::Scope& scope, Stats::StatName name) {
+    if (no_tag_extraction_) {
+      return;
+    }
+
     scope.counterFromStatName(name).inc();
+  }
+  void incCounterBasedOnElement(Stats::Scope& scope, Stats::StatName name) {
+    if (!no_tag_extraction_) {
+      return;
+    }
+    scope
+        .getOrCreateCounter({Stats::StatElement{
+                                 .value_ = ext_authz_,
+                             },
+                             Stats::StatElement{
+                                 .value_ = ext_authz_prefix_,
+                                 .name_ = ext_authz_prefix_tag_,
+                                 .ignore_name_ = true,
+                             },
+                             Stats::StatElement{
+                                 .value_ = name,
+                             }})
+        .inc();
   }
 
   bool includePeerCertificate() const { return include_peer_certificate_; }
@@ -247,6 +279,11 @@ private:
 
   ExtAuthzFilterStats generateStats(const std::string& prefix,
                                     const std::string& filter_stats_prefix, Stats::Scope& scope) {
+    if (no_tag_extraction_) {
+      ASSERT(filter_scope_ != nullptr);
+      return {ALL_EXT_AUTHZ_FILTER_STATS(POOL_COUNTER(*filter_scope_))};
+    }
+
     const std::string final_prefix = absl::StrCat(prefix, "ext_authz.", filter_stats_prefix);
     return {ALL_EXT_AUTHZ_FILTER_STATS(POOL_COUNTER_PREFIX(scope, final_prefix))};
   }
@@ -297,6 +334,9 @@ private:
   const bool include_tls_session_;
   const bool charge_cluster_response_stats_;
 
+  const bool no_tag_extraction_{false};
+  Stats::ScopeSharedPtr filter_scope_;
+
   // The stats for the filter.
   ExtAuthzFilterStats stats_;
 
@@ -311,6 +351,15 @@ public:
   const Stats::StatName ext_authz_error_;
   const Stats::StatName ext_authz_invalid_;
   const Stats::StatName ext_authz_failure_mode_allowed_;
+
+  const Stats::StatName ok_;
+  const Stats::StatName denied_;
+  const Stats::StatName error_;
+  const Stats::StatName invalid_;
+  const Stats::StatName failure_mode_allowed_;
+  const Stats::StatName ext_authz_prefix_tag_;
+  const Stats::StatName ext_authz_prefix_;
+  const Stats::StatName ext_authz_;
 };
 
 using FilterConfigSharedPtr = std::shared_ptr<FilterConfig>;

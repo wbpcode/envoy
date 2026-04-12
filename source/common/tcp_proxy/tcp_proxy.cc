@@ -36,6 +36,7 @@
 #include "source/common/network/upstream_socket_options_filter_state.h"
 #include "source/common/router/metadatamatchcriteria_impl.h"
 #include "source/common/router/shadow_writer_impl.h"
+#include "source/common/runtime/runtime_features.h"
 #include "source/common/stream_info/stream_id_provider_impl.h"
 #include "source/common/stream_info/uint64_accessor_impl.h"
 #include "source/common/tracing/http_tracer_impl.h"
@@ -44,6 +45,26 @@
 
 namespace Envoy {
 namespace TcpProxy {
+
+namespace {
+
+Stats::ScopeSharedPtr createTcpProxyScope(Stats::Scope& scope, const std::string& name) {
+  if (Runtime::runtimeFeatureEnabled("envoy.reloadable_features.no_stats_tag_extraction")) {
+    return scope.createScope({
+        Stats::StatElementView{
+            .value_ = "tcp",
+        },
+        Stats::StatElementView{
+            .value_ = name,
+            .name_ = Envoy::Config::TagNames::get().TCP_PREFIX,
+            .ignore_name_ = true,
+        },
+    });
+  }
+  return scope.createScope(fmt::format("tcp.{}", name));
+}
+
+} // namespace
 
 // Type alias for UpstreamConnectMode to simplify usage throughout this file.
 using UpstreamConnectMode = envoy::extensions::filters::network::tcp_proxy::v3::UpstreamConnectMode;
@@ -132,7 +153,7 @@ OnDemandStats OnDemandConfig::generateStats(Stats::Scope& scope) {
 Config::SharedConfig::SharedConfig(
     const envoy::extensions::filters::network::tcp_proxy::v3::TcpProxy& config,
     Server::Configuration::FactoryContext& context)
-    : stats_scope_(context.scope().createScope(fmt::format("tcp.{}", config.stat_prefix()))),
+    : stats_scope_(createTcpProxyScope(context.scope(), config.stat_prefix())),
       stats_(generateStats(*stats_scope_)),
       flush_access_log_on_start_(config.access_log_options().flush_access_log_on_start()),
       proxy_protocol_tlv_merge_policy_(config.proxy_protocol_tlv_merge_policy()) {

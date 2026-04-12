@@ -33,6 +33,7 @@
 #include "source/common/protobuf/utility.h"
 #include "source/common/runtime/runtime_features.h"
 #include "source/common/stats/stats_matcher_impl.h"
+#include "source/common/stats/utility.h"
 #include "source/server/configuration_impl.h"
 #include "source/server/drain_manager_impl.h"
 #include "source/server/transport_socket_config_impl.h"
@@ -289,6 +290,27 @@ generateListenerStatsScope(const envoy::config::listener::v3::Listener& config,
   }
 
   Stats::ScopeSharedPtr scope = stats.createScope("", false, {}, scope_matcher);
+
+  if (Runtime::runtimeFeatureEnabled("envoy.reloadable_features.no_stats_tag_extraction")) {
+    const std::string stat_prefix = listenerStatsScope(config);
+    if (stat_prefix == "admin") {
+      Stats::ScopeSharedPtr listener_scope =
+          stats.createScope("listener.admin.", false, {}, scope_matcher);
+      return std::make_pair(std::move(scope), std::move(listener_scope));
+    }
+
+    Stats::ScopeSharedPtr listener_scope = stats.createScope(
+        {
+            Stats::StatElementView{.value_ = "listener"},
+            Stats::StatElementView{
+                .value_ = stat_prefix,
+                .name_ = Config::TagNames::get().LISTENER_ADDRESS,
+                .ignore_name_ = true,
+            },
+        },
+        false, {}, scope_matcher);
+    return std::make_pair(std::move(scope), std::move(listener_scope));
+  }
   Stats::ScopeSharedPtr listener_scope = stats.createScope(
       fmt::format("listener.{}.", listenerStatsScope(config)), false, {}, std::move(scope_matcher));
 

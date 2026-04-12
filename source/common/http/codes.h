@@ -117,6 +117,58 @@ private:
       rc_stat_names_;
 };
 
+class ElementCodeStatsImpl : public CodeStats {
+public:
+  explicit ElementCodeStatsImpl(Stats::SymbolTable& symbol_table);
+
+  // CodeStats
+  void chargeBasicResponseStat(Stats::Scope& scope, Stats::StatName prefix, Code response_code,
+                               bool exclude_http_code_stats) const override;
+  void chargeResponseStat(const ResponseStatInfo& info,
+                          bool exclude_http_code_stats) const override;
+  void chargeResponseTiming(const ResponseTimingInfo& info) const override;
+
+private:
+  Stats::StatName codeGroupStatName(Code response_code) const;
+  Stats::StatName codeStatName(Code response_code) const;
+  void incResponseCodeCounter(Stats::Scope& scope, Stats::StatElementVec& elements,
+                              Stats::StatName code_class, Stats::StatName code,
+                              bool exclude_http_code_stats = false) const;
+
+  mutable Stats::StatNamePool stat_name_pool_;
+  Stats::SymbolTable& symbol_table_;
+
+  const Stats::StatName canary_;
+  const Stats::StatName empty_;
+  const Stats::StatName external_;
+  const Stats::StatName internal_;
+  const Stats::StatName upstream_rq_;
+  const Stats::StatName upstream_rq_unknown_;
+  const Stats::StatName upstream_rq_completed_;
+  const Stats::StatName upstream_rq_time_;
+  const Stats::StatName vcluster_;
+  const Stats::StatName vhost_;
+  const Stats::StatName route_;
+  const Stats::StatName zone_;
+  const Stats::StatName code_class_1_;
+  const Stats::StatName code_class_2_;
+  const Stats::StatName code_class_3_;
+  const Stats::StatName code_class_4_;
+  const Stats::StatName code_class_5_;
+  const Stats::StatName xx_;
+  const Stats::StatName virtual_cluster_tag_name_;
+  const Stats::StatName virtual_host_tag_name_;
+  const Stats::StatName response_code_class_tag_name_;
+  const Stats::StatName response_code_tag_name_;
+  const Stats::StatName route_tag_name_;
+
+  static constexpr uint32_t NumHttpCodes = 500;
+  static constexpr uint32_t HttpCodeOffset = 100;
+  mutable Thread::AtomicPtrArray<const uint8_t, NumHttpCodes,
+                                 Thread::AtomicPtrAllocMode::DoNotDelete>
+      code_stat_names_;
+};
+
 /**
  * General utility routines for HTTP codes.
  */

@@ -436,6 +436,7 @@ envoy_cc_library(
         "//source/common/secret:secret_manager_impl_lib",
         "//source/common/signal:fatal_error_handler_lib",
         "//source/common/singleton:manager_impl_lib",
+        "//source/common/stats:context_lib",
         "//source/common/stats:tag_producer_lib",
         "//source/common/stats:thread_local_store_lib",
         "//source/common/tls:context_lib",

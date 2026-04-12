@@ -61,7 +61,7 @@ public:
             config.rate_limited_as_resource_exhausted()
                 ? absl::make_optional(Grpc::Status::WellKnownGrpcStatus::ResourceExhausted)
                 : absl::nullopt),
-        http_context_(context.httpContext()),
+        http_context_(context.httpContext()), stats_context_(context.statsContext()),
         stat_names_(scope.symbolTable(), config.stat_prefix()),
         rate_limited_status_(toErrorCode(config.rate_limited_status().code())),
         status_on_error_(toRatelimitServerErrorCode(config.status_on_error().code())),
@@ -79,7 +79,9 @@ public:
                                        ? absl::optional<Envoy::Runtime::FractionalPercent>(
                                              Envoy::Runtime::FractionalPercent(
                                                  config.failure_mode_deny_percent(), runtime_))
-                                       : absl::nullopt) {
+                                       : absl::nullopt),
+        no_tag_extraction_(
+            Runtime::runtimeFeatureEnabled("envoy.reloadable_features.no_stats_tag_extraction")) {
     absl::StatusOr<Router::HeaderParserPtr> response_headers_parser_or_ =
         Envoy::Router::HeaderParser::configure(config.response_headers_to_add());
     SET_AND_RETURN_IF_NOT_OK(response_headers_parser_or_.status(), creation_status);
@@ -125,6 +127,9 @@ public:
                                             on_stream_done);
   }
 
+  void incCounter(Stats::Scope& scope, Stats::StatName name) const;
+  bool noTagExtraction() const { return no_tag_extraction_; }
+
 private:
   static FilterRequestType stringToType(const std::string& request_type) {
     if (request_type == "internal") {
@@ -164,6 +169,7 @@ private:
   const bool disable_x_envoy_ratelimited_header_;
   const absl::optional<Grpc::Status::GrpcStatus> rate_limited_grpc_status_;
   Http::Context& http_context_;
+  Stats::Context& stats_context_;
   Filters::Common::RateLimit::StatNames stat_names_;
   const Http::Code rate_limited_status_;
   Router::HeaderParserPtr response_headers_parser_;
@@ -172,6 +178,7 @@ private:
   const absl::optional<Envoy::Runtime::FractionalPercent> filter_enforced_;
   const absl::optional<Envoy::Runtime::FractionalPercent> failure_mode_deny_percent_;
   std::unique_ptr<RateLimitConfig> rate_limit_config_;
+  const bool no_tag_extraction_{false};
 };
 
 using FilterConfigSharedPtr = std::shared_ptr<FilterConfig>;

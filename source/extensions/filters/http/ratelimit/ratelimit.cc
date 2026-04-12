@@ -13,6 +13,7 @@
 #include "source/common/http/codes.h"
 #include "source/common/http/header_utility.h"
 #include "source/common/router/config_impl.h"
+#include "source/common/stats/context_impl.h"
 #include "source/common/stream_info/uint32_accessor_impl.h"
 #include "source/extensions/filters/http/ratelimit/ratelimit_headers.h"
 
@@ -232,13 +233,25 @@ void Filter::complete(Filters::Common::RateLimit::LimitStatus status,
 
   switch (status) {
   case Filters::Common::RateLimit::LimitStatus::OK:
+    if (config_->noTagExtraction()) {
+      config_->incCounter(cluster_->statsScope(), stat_names.short_ok_);
+      break;
+    }
     cluster_->statsScope().counterFromStatName(stat_names.ok_).inc();
     break;
   case Filters::Common::RateLimit::LimitStatus::Error:
     ENVOY_LOG(debug, "rate limit status, status={}", static_cast<int>(status));
+    if (config_->noTagExtraction()) {
+      config_->incCounter(cluster_->statsScope(), stat_names.short_error_);
+      break;
+    }
     cluster_->statsScope().counterFromStatName(stat_names.error_).inc();
     break;
   case Filters::Common::RateLimit::LimitStatus::OverLimit:
+    if (config_->noTagExtraction()) {
+      config_->incCounter(cluster_->statsScope(), stat_names.short_over_limit_);
+      break;
+    }
     cluster_->statsScope().counterFromStatName(stat_names.over_limit_).inc();
     Http::CodeStats::ResponseStatInfo info{config_->scope(),
                                            cluster_->statsScope(),
@@ -284,7 +297,11 @@ void Filter::complete(Filters::Common::RateLimit::LimitStatus status,
         config_->rateLimitedGrpcStatus(), RcDetails::get().RateLimited);
   } else if (status == Filters::Common::RateLimit::LimitStatus::Error) {
     if (config_->failureModeAllow()) {
-      cluster_->statsScope().counterFromStatName(stat_names.failure_mode_allowed_).inc();
+      if (config_->noTagExtraction()) {
+        config_->incCounter(cluster_->statsScope(), stat_names.short_failure_mode_allowed_);
+      } else {
+        cluster_->statsScope().counterFromStatName(stat_names.failure_mode_allowed_).inc();
+      }
       if (!initiating_call_) {
         appendRequestHeaders(req_headers_to_add);
         callbacks_->continueDecoding();
@@ -394,6 +411,26 @@ bool FilterConfig::enforced() const {
     return filter_enforced_->enabled();
   }
   return runtime_.snapshot().featureEnabled("ratelimit.http_filter_enforcing", 100);
+}
+
+void FilterConfig::incCounter(Stats::Scope& scope, Stats::StatName name) const {
+  if (!no_tag_extraction_) {
+    return;
+  }
+
+  scope
+      .getOrCreateCounter({Stats::StatElement{
+                               .value_ = stat_names_.ratelimit_,
+                           },
+                           Stats::StatElement{
+                               .value_ = stat_names_.stat_prefix_,
+                               .name_ = stats_context_.wellKnownTagStatNames().ratelimit_prefix_,
+                               .ignore_name_ = true,
+                           },
+                           Stats::StatElement{
+                               .value_ = name,
+                           }})
+      .inc();
 }
 
 } // namespace RateLimitFilter

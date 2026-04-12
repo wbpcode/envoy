@@ -25,6 +25,7 @@
 #include "source/common/runtime/runtime_impl.h"
 #include "source/common/secret/secret_manager_impl.h"
 #include "source/common/singleton/manager_impl.h"
+#include "source/common/stats/context_impl.h"
 #include "source/common/thread_local/thread_local_impl.h"
 #include "source/server/config_validation/admin.h"
 #include "source/server/config_validation/api.h"
@@ -114,6 +115,7 @@ public:
   Grpc::Context& grpcContext() override { return grpc_context_; }
   Http::Context& httpContext() override { return http_context_; }
   Router::Context& routerContext() override { return router_context_; }
+  Stats::Context& statsContext() override { return stats_context_; }
   ProcessContextOptRef processContext() override { return api_->processContext(); }
   ThreadLocal::Instance& threadLocal() override { return thread_local_; }
   LocalInfo::LocalInfo& localInfo() const override { return *local_info_; }
@@ -199,6 +201,7 @@ private:
   Grpc::ContextImpl grpc_context_;
   Http::ContextImpl http_context_;
   Router::ContextImpl router_context_;
+  Stats::ContextImpl stats_context_;
   Event::TimeSystem& time_system_;
   ServerFactoryContextImpl server_contexts_;
   Quic::QuicStatNames quic_stat_names_;

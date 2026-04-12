@@ -299,5 +299,283 @@ const char* CodeUtility::toString(Code code) {
   return "Unknown";
 }
 
+ElementCodeStatsImpl::ElementCodeStatsImpl(Stats::SymbolTable& symbol_table)
+    : stat_name_pool_(symbol_table), symbol_table_(symbol_table),
+      canary_(stat_name_pool_.add("canary")), empty_(Stats::StatName{}),
+      external_(stat_name_pool_.add("external")), internal_(stat_name_pool_.add("internal")),
+      upstream_rq_(stat_name_pool_.add("upstream_rq")),
+      upstream_rq_unknown_(stat_name_pool_.add("upstream_rq_unknown")),
+      upstream_rq_completed_(stat_name_pool_.add("upstream_rq_completed")),
+      upstream_rq_time_(stat_name_pool_.add("upstream_rq_time")),
+      vcluster_(stat_name_pool_.add("vcluster")), vhost_(stat_name_pool_.add("vhost")),
+      route_(stat_name_pool_.add("route")), zone_(stat_name_pool_.add("zone")),
+      code_class_1_(stat_name_pool_.add("1")), code_class_2_(stat_name_pool_.add("2")),
+      code_class_3_(stat_name_pool_.add("3")), code_class_4_(stat_name_pool_.add("4")),
+      code_class_5_(stat_name_pool_.add("5")), xx_(stat_name_pool_.add("xx")),
+      virtual_cluster_tag_name_(stat_name_pool_.add("envoy.virtual_cluster")),
+      virtual_host_tag_name_(stat_name_pool_.add("envoy.virtual_host")),
+      response_code_class_tag_name_(stat_name_pool_.add("envoy.response_code_class")),
+      response_code_tag_name_(stat_name_pool_.add("envoy.response_code")),
+      route_tag_name_(stat_name_pool_.add("envoy.route")) {}
+
+Stats::StatName ElementCodeStatsImpl::codeGroupStatName(Code response_code) const {
+  switch (enumToInt(response_code) / 100) {
+  case 1:
+    return code_class_1_;
+  case 2:
+    return code_class_2_;
+  case 3:
+    return code_class_3_;
+  case 4:
+    return code_class_4_;
+  case 5:
+    return code_class_5_;
+
+  default:
+    return empty_; // Unknown codes do not go into a group.
+  }
+}
+
+Stats::StatName ElementCodeStatsImpl::codeStatName(Code response_code) const {
+  const uint32_t rc_index = static_cast<uint32_t>(response_code) - HttpCodeOffset;
+  if (rc_index >= NumHttpCodes) {
+    return empty_;
+  }
+  return Stats::StatName(code_stat_names_.get(rc_index, [this, response_code]() -> const uint8_t* {
+    return stat_name_pool_.addReturningStorage(absl::StrCat(enumToInt(response_code)));
+  }));
+}
+
+void ElementCodeStatsImpl::incResponseCodeCounter(Stats::Scope& scope,
+                                                  Stats::StatElementVec& elements,
+                                                  Stats::StatName code_class, Stats::StatName code,
+                                                  bool exclude_http_code_stats) const {
+  {
+    elements.emplace_back(upstream_rq_completed_);
+    scope.getOrCreateCounter(elements).inc();
+    elements.pop_back();
+  }
+
+  if (exclude_http_code_stats) {
+    return;
+  }
+
+  if (code_class.empty() || code.empty()) {
+    elements.emplace_back(upstream_rq_unknown_);
+    scope.getOrCreateCounter(elements).inc();
+    elements.pop_back(); // Recover the vector for future use.
+    return;
+  }
+  {
+    elements.emplace_back(upstream_rq_);
+    elements.emplace_back(Stats::StatElement{
+        .value_ = code_class, .name_ = response_code_class_tag_name_, .ignore_name_ = true});
+    elements.emplace_back(xx_);
+    scope.getOrCreateCounter(elements).inc();
+    elements.resize(elements.size() - 3); // Recover the vector for future use.
+  }
+  {
+    elements.emplace_back(upstream_rq_);
+    elements.emplace_back(
+        Stats::StatElement{.value_ = code, .name_ = response_code_tag_name_, .ignore_name_ = true});
+    scope.getOrCreateCounter(elements).inc();
+    elements.resize(elements.size() - 2); // Recover the vector for future use.
+  }
+}
+
+void ElementCodeStatsImpl::chargeBasicResponseStat(Stats::Scope& scope, Stats::StatName prefix,
+                                                   Code response_code,
+                                                   bool exclude_http_code_stats) const {
+  ASSERT(&symbol_table_ == &scope.symbolTable());
+
+  Stats::StatElementVec elements;
+  if (!prefix.empty()) {
+    elements.emplace_back(prefix);
+  }
+
+  incResponseCodeCounter(scope, elements, codeGroupStatName(response_code),
+                         codeStatName(response_code), exclude_http_code_stats);
+}
+
+void ElementCodeStatsImpl::chargeResponseStat(const ResponseStatInfo& info,
+                                              bool exclude_http_code_stats) const {
+  ASSERT(&info.cluster_scope_.symbolTable() == &symbol_table_);
+
+  const Code raw_code = static_cast<Code>(info.response_status_code_);
+
+  // TODO(wbpcode): should we apply this exclude_http_code_stats flag to all the stats or
+  // just the basic response stat?
+  chargeBasicResponseStat(info.cluster_scope_, info.prefix_, raw_code, exclude_http_code_stats);
+
+  const Stats::StatName code_group = codeGroupStatName(raw_code);
+  const Stats::StatName code = codeStatName(raw_code);
+
+  // This will reserve 8 elements on the stack which should be enough for all the stats we want
+  // to create in this function.
+  // If we need more in the future, we can expand the reserved size to 12.
+  Stats::StatElementVec elements;
+
+  // TODO(wbpcode): In the previous implementation, the prefix from caller will be ignored
+  // in the vhost/vcluster/route stats. We will keep the same behavior for now.
+
+  // Handle request virtual cluster.
+  if (!info.request_vcluster_name_.empty()) {
+    elements.emplace_back(vhost_);
+    elements.emplace_back(Stats::StatElement{
+        .value_ = info.request_vhost_name_,
+        .name_ = virtual_host_tag_name_,
+        .ignore_name_ = true,
+    });
+    elements.emplace_back(vcluster_);
+    elements.emplace_back(Stats::StatElement{
+        .value_ = info.request_vcluster_name_,
+        .name_ = virtual_cluster_tag_name_,
+        .ignore_name_ = true,
+    });
+    incResponseCodeCounter(info.global_scope_, elements, code_group, code);
+    elements.resize(elements.size() - 4);
+  }
+
+  // Handle route level stats.
+  if (!info.request_route_name_.empty()) {
+    elements.emplace_back(vhost_);
+    elements.emplace_back(Stats::StatElement{
+        .value_ = info.request_vhost_name_,
+        .name_ = virtual_host_tag_name_,
+        .ignore_name_ = true,
+    });
+    elements.emplace_back(route_);
+    elements.emplace_back(Stats::StatElement{
+        .value_ = info.request_route_name_,
+        .name_ = route_tag_name_,
+        .ignore_name_ = true,
+    });
+    incResponseCodeCounter(info.global_scope_, elements, code_group, code);
+    elements.resize(elements.size() - 4);
+  }
+
+  if (!info.prefix_.empty()) {
+    elements.emplace_back(info.prefix_);
+  }
+
+  // If the response is from a canary, also create canary stats.
+  if (info.upstream_canary_) {
+    elements.emplace_back(canary_);
+    incResponseCodeCounter(info.cluster_scope_, elements, code_group, code);
+    elements.pop_back();
+  }
+
+  // Split stats into external vs. internal.
+  if (info.internal_request_) {
+    elements.emplace_back(internal_);
+    incResponseCodeCounter(info.cluster_scope_, elements, code_group, code);
+    elements.pop_back();
+  } else {
+    elements.emplace_back(external_);
+    incResponseCodeCounter(info.cluster_scope_, elements, code_group, code);
+    elements.pop_back();
+  }
+
+  // Handle per zone stats.
+  if (!info.from_zone_.empty() && !info.to_zone_.empty()) {
+    elements.emplace_back(zone_);
+    // TODO(wbpcode): Make from_zone and to_zone as tag for better aggregation on metrics backend.
+    elements.emplace_back(info.from_zone_);
+    elements.emplace_back(info.to_zone_);
+    incResponseCodeCounter(info.cluster_scope_, elements, code_group, code);
+    elements.resize(elements.size() - 3);
+  }
+}
+
+void ElementCodeStatsImpl::chargeResponseTiming(const ResponseTimingInfo& info) const {
+  const uint64_t count = info.response_time_.count();
+
+  // TODO(wbpcode): In the previous implementation, the prefix from caller will be ignored
+  // in the vhost/vcluster/route stats. We will keep the same behavior for now.
+
+  if (!info.request_vcluster_name_.empty()) {
+    info.global_scope_
+        .getOrCreateHistogram(
+            {
+                Stats::StatElement{vhost_},
+                Stats::StatElement{
+                    .value_ = info.request_vhost_name_,
+                    .name_ = virtual_host_tag_name_,
+                    .ignore_name_ = true,
+                },
+                Stats::StatElement{vcluster_},
+                Stats::StatElement{
+                    .value_ = info.request_vcluster_name_,
+                    .name_ = virtual_cluster_tag_name_,
+                    .ignore_name_ = true,
+                },
+                Stats::StatElement{upstream_rq_time_},
+            },
+            Stats::Histogram::Unit::Milliseconds)
+        .recordValue(count);
+  }
+
+  if (!info.request_route_name_.empty()) {
+    info.global_scope_
+        .getOrCreateHistogram(
+            {
+                Stats::StatElement{vhost_},
+                Stats::StatElement{
+                    .value_ = info.request_vhost_name_,
+                    .name_ = virtual_host_tag_name_,
+                    .ignore_name_ = true,
+                },
+                Stats::StatElement{route_},
+                Stats::StatElement{
+                    .value_ = info.request_route_name_,
+                    .name_ = route_tag_name_,
+                    .ignore_name_ = true,
+                },
+                Stats::StatElement{upstream_rq_time_},
+            },
+            Stats::Histogram::Unit::Milliseconds)
+        .recordValue(count);
+  }
+
+  info.cluster_scope_
+      .getOrCreateHistogram(
+          {Stats::StatElement{info.prefix_}, Stats::StatElement{upstream_rq_time_}},
+          Stats::Histogram::Unit::Milliseconds)
+      .recordValue(count);
+
+  if (info.upstream_canary_) {
+    info.cluster_scope_
+        .getOrCreateHistogram({Stats::StatElement{info.prefix_}, Stats::StatElement{canary_},
+                               Stats::StatElement{upstream_rq_time_}},
+                              Stats::Histogram::Unit::Milliseconds)
+        .recordValue(count);
+  }
+
+  if (info.internal_request_) {
+    info.cluster_scope_
+        .getOrCreateHistogram({Stats::StatElement{info.prefix_}, Stats::StatElement{internal_},
+                               Stats::StatElement{upstream_rq_time_}},
+                              Stats::Histogram::Unit::Milliseconds)
+        .recordValue(count);
+  } else {
+    info.cluster_scope_
+        .getOrCreateHistogram({Stats::StatElement{info.prefix_}, Stats::StatElement{external_},
+                               Stats::StatElement{upstream_rq_time_}},
+                              Stats::Histogram::Unit::Milliseconds)
+        .recordValue(count);
+  }
+
+  // Handle per zone stats.
+  if (!info.from_zone_.empty() && !info.to_zone_.empty()) {
+    info.cluster_scope_
+        .getOrCreateHistogram({Stats::StatElement{info.prefix_}, Stats::StatElement{zone_},
+                               Stats::StatElement{info.from_zone_},
+                               Stats::StatElement{info.to_zone_},
+                               Stats::StatElement{upstream_rq_time_}},
+                              Stats::Histogram::Unit::Milliseconds)
+        .recordValue(count);
+  }
+}
+
 } // namespace Http
 } // namespace Envoy

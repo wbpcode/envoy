@@ -25,6 +25,8 @@
 #include "source/common/network/socket_option_factory.h"
 #include "source/common/network/utility.h"
 #include "source/common/protobuf/utility.h"
+#include "source/common/runtime/runtime_features.h"
+#include "source/common/stats/utility.h"
 
 #include "absl/synchronization/blocking_counter.h"
 
@@ -40,6 +42,14 @@
 namespace Envoy {
 namespace Server {
 namespace {
+
+Stats::ScopeSharedPtr createListenerManagerScope(Stats::Store& stats) {
+  if (Runtime::runtimeFeatureEnabled("envoy.reloadable_features.no_stats_tag_extraction")) {
+    const std::string sanitized_name = Stats::Utility::sanitizeStatsName("listener_manager.");
+    return stats.rootScope()->createScope({Stats::StatElementView{.value_ = sanitized_name}});
+  }
+  return stats.createScope("listener_manager.");
+}
 
 std::string toString(Network::Socket::Type socket_type) {
   switch (socket_type) {
@@ -410,7 +420,7 @@ ListenerManagerImpl::ListenerManagerImpl(Instance& server,
                                          bool enable_dispatcher_stats,
                                          Quic::QuicStatNames& quic_stat_names)
     : server_(server), factory_(std::move(factory)),
-      scope_(server.stats().createScope("listener_manager.")), stats_(generateStats(*scope_)),
+      scope_(createListenerManagerScope(server.stats())), stats_(generateStats(*scope_)),
       enable_dispatcher_stats_(enable_dispatcher_stats), quic_stat_names_(quic_stat_names) {
   if (!factory_) {
     factory_ = std::make_unique<ProdListenerComponentFactory>(server);

@@ -78,10 +78,9 @@ private:
   void incCounter(Stats::StatName name);
 
   const FilterRequestType request_type_;
-  Stats::Scope& scope_;
+  Stats::ScopeSharedPtr scope_;
   Runtime::Loader& runtime_;
   Stats::StatNameSetPtr stat_name_set_;
-  const Stats::StatName stats_prefix_;
   const Stats::StatName no_hit_;
   const Stats::StatName total_;
   const Stats::StatName unknown_tag_;

@@ -1,5 +1,7 @@
 #pragma once
 
+#include <string>
+
 #include "envoy/common/exception.h"
 #include "envoy/common/optref.h"
 #include "envoy/extensions/filters/http/geoip/v3/geoip.pb.h"
@@ -34,8 +36,10 @@ public:
 private:
   void incCounter(Stats::StatName name);
 
-  Stats::Scope& scope_;
+  Stats::ScopeSharedPtr scope_;
   Stats::StatNameSetPtr stat_name_set_;
+  const std::string parent_stat_prefix_;
+  const Stats::StatName geoip_;
   const Stats::StatName stats_prefix_;
   const Stats::StatName unknown_hit_;
   bool use_xff_;

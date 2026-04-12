@@ -158,6 +158,7 @@ envoy_cc_library(
         "//envoy/stats:stats_interface",
         "//source/common/common:enum_to_int",
         "//source/common/common:utility_lib",
+        "//source/common/runtime:runtime_features_lib",
         "//source/common/stats:symbol_table_lib",
     ],
 )
@@ -170,6 +171,7 @@ envoy_cc_library(
         ":codes_lib",
         ":user_agent_lib",
         "//envoy/http:context_interface",
+        "//source/common/runtime:runtime_features_lib",
     ],
 )
 

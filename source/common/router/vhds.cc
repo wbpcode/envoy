@@ -16,9 +16,33 @@
 #include "source/common/grpc/common.h"
 #include "source/common/protobuf/utility.h"
 #include "source/common/router/config_impl.h"
+#include "source/common/runtime/runtime_features.h"
+#include "source/common/stats/tag_utility.h"
+#include "source/common/stats/utility.h"
 
 namespace Envoy {
 namespace Router {
+
+namespace {
+
+Stats::ScopeSharedPtr createVhdsScope(Stats::Scope& scope, absl::string_view stat_prefix,
+                                      absl::string_view name) {
+  if (Runtime::runtimeFeatureEnabled("envoy.reloadable_features.no_stats_tag_extraction")) {
+    Stats::StatElementViewVec elements;
+    Stats::TagUtility::populateParentStatPrefix(stat_prefix, elements);
+    elements.emplace_back(absl::string_view("vhds"));
+    elements.emplace_back(name);
+    return scope.createScope(elements);
+  }
+  // Per our document, the final stats prefix should be:
+  // http.<stat_prefix>.vhds.<virtual_host_name>.*.
+  // But the previous implementation have a bug where the input the stat_prefix is not
+  // http.<stat_prefix>., but http.<stat_prefix>.rds.
+  // I think it's wrong but we will keep the same behavior for now to avoid breaking existing stats.
+  return scope.createScope(absl::StrCat(stat_prefix, "rds.vhds.", name, "."));
+}
+
+} // namespace
 
 absl::StatusOr<VhdsSubscriptionPtr> VhdsSubscription::createVhdsSubscription(
     RouteConfigUpdatePtr& config_update_info,
@@ -69,8 +93,8 @@ VhdsSubscription::VhdsSubscription(RouteConfigUpdatePtr& config_update_info,
     : Envoy::Config::SubscriptionBase<envoy::config::route::v3::VirtualHost>(
           factory_context.messageValidationContext().dynamicValidationVisitor(), "name"),
       config_update_info_(config_update_info),
-      scope_(factory_context.scope().createScope(
-          stat_prefix + "vhds." + config_update_info_->protobufConfigurationCast().name() + ".")),
+      scope_(createVhdsScope(factory_context.scope(), stat_prefix,
+                             config_update_info_->protobufConfigurationCast().name())),
       stats_({ALL_VHDS_STATS(POOL_COUNTER(*scope_))}),
       init_target_(fmt::format("VhdsConfigSubscription {}",
                                config_update_info_->protobufConfigurationCast().name()),

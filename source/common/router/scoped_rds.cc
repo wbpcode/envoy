@@ -15,13 +15,17 @@
 #include "source/common/common/utility.h"
 #include "source/common/config/api_version.h"
 #include "source/common/config/resource_name.h"
+#include "source/common/config/well_known_names.h"
 #include "source/common/config/xds_resource.h"
 #include "source/common/init/manager_impl.h"
 #include "source/common/init/watcher_impl.h"
 #include "source/common/protobuf/utility.h"
 #include "source/common/router/rds_impl.h"
 #include "source/common/router/scoped_config_impl.h"
+#include "source/common/runtime/runtime_features.h"
+#include "source/common/stats/tag_utility.h"
 
+#include "absl/strings/match.h"
 #include "absl/strings/str_join.h"
 
 // Types are deeply nested under Envoy::Config::ConfigProvider; use 'using-directives' across all
@@ -84,6 +88,24 @@ ScopeKeyBuilderPtr createScopeKeyBuilder(
 
 namespace {
 
+Stats::ScopeSharedPtr createScopedRdsScope(Stats::Scope& scope, absl::string_view stat_prefix,
+                                           absl::string_view name) {
+  if (Runtime::runtimeFeatureEnabled("envoy.reloadable_features.no_stats_tag_extraction")) {
+    Stats::StatElementViewVec elements;
+    Stats::TagUtility::populateParentStatPrefix(stat_prefix, elements);
+    elements.emplace_back(Stats::StatElementView{
+        .value_ = "scoped_rds",
+    });
+    elements.emplace_back(Stats::StatElementView{
+        .value_ = name,
+        .name_ = Envoy::Config::TagNames::get().SCOPED_RDS_CONFIG,
+        .ignore_name_ = true,
+    });
+    return scope.createScope(elements);
+  }
+  return scope.createScope(absl::StrCat(stat_prefix, "scoped_rds.", name, "."));
+}
+
 std::vector<ScopedRouteInfoConstSharedPtr>
 makeScopedRouteInfos(ProtobufTypes::ConstMessagePtrVector&& config_protos,
                      Server::Configuration::ServerFactoryContext& factory_context,
@@ -141,7 +163,7 @@ ScopedRdsConfigSubscription::ScopedRdsConfigSubscription(
       Envoy::Config::SubscriptionBase<envoy::config::route::v3::ScopedRouteConfiguration>(
           factory_context.messageValidationContext().dynamicValidationVisitor(), "name"),
       factory_context_(factory_context), name_(name),
-      scope_(factory_context.scope().createScope(stat_prefix + "scoped_rds." + name + ".")),
+      scope_(createScopedRdsScope(factory_context.scope(), stat_prefix, name)),
       stats_({ALL_SCOPED_RDS_STATS(POOL_COUNTER(*scope_), POOL_GAUGE(*scope_))}),
       rds_config_source_(std::move(rds_config_source)), stat_prefix_(stat_prefix),
       route_config_provider_manager_(route_config_provider_manager) {

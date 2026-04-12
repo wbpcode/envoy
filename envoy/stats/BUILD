@@ -17,6 +17,9 @@ envoy_cc_library(
 envoy_cc_library(
     name = "tag_interface",
     hdrs = ["tag.h"],
+    deps = [
+        "@abseil-cpp//absl/types:optional",
+    ],
 )
 
 # TODO(jmarantz): atomize the build rules to match the include files.
@@ -40,6 +43,11 @@ envoy_cc_library(
         "//envoy/common:time_interface",
         "@abseil-cpp//absl/container:inlined_vector",
     ],
+)
+
+envoy_cc_library(
+    name = "context_interface",
+    hdrs = ["context.h"],
 )
 
 envoy_cc_library(

@@ -2,6 +2,7 @@
 
 #include "envoy/router/context.h"
 #include "envoy/router/router.h"
+#include "envoy/stats/context.h"
 #include "envoy/stats/stats_macros.h"
 
 #include "source/common/common/assert.h"
@@ -57,6 +58,7 @@ private:
 class RouteStatsContextImpl : public RouteStatsContext {
 public:
   RouteStatsContextImpl(Stats::Scope& scope, const RouteStatNames& route_stat_names,
+                        const Stats::WellKnownTagStatNames& well_known_tag_stat_names,
                         const Stats::StatName& vhost_stat_name, const std::string& stat_prefix);
 
   ~RouteStatsContextImpl() override = default;

@@ -1,10 +1,36 @@
 #include "source/common/rds/rds_route_config_subscription.h"
 
 #include "source/common/common/logger.h"
+#include "source/common/config/well_known_names.h"
 #include "source/common/rds/util.h"
+#include "source/common/runtime/runtime_features.h"
+#include "source/common/stats/tag_utility.h"
+#include "source/common/stats/utility.h"
 
 namespace Envoy {
 namespace Rds {
+
+namespace {
+
+Stats::ScopeSharedPtr createRdsRouteConfigScope(Stats::Scope& scope, const std::string& stat_prefix,
+                                                const std::string& route_config_name) {
+  if (Runtime::runtimeFeatureEnabled("envoy.reloadable_features.no_stats_tag_extraction")) {
+    Stats::StatElementViewVec elements;
+    Stats::TagUtility::populateParentStatPrefix(stat_prefix, elements);
+    elements.emplace_back(Stats::StatElementView{
+        .value_ = "rds",
+    });
+    elements.emplace_back(Stats::StatElementView{
+        .value_ = route_config_name,
+        .name_ = Envoy::Config::TagNames::get().RDS_ROUTE_CONFIG,
+        .ignore_name_ = true,
+    });
+    return scope.createScope(elements);
+  }
+  return scope.createScope(absl::StrCat(stat_prefix, "rds.", route_config_name, "."));
+}
+
+} // namespace
 
 absl::StatusOr<std::unique_ptr<RdsRouteConfigSubscription>> RdsRouteConfigSubscription::create(
     RouteConfigUpdatePtr&& config_update,
@@ -31,7 +57,7 @@ RdsRouteConfigSubscription::RdsRouteConfigSubscription(
     const std::string& rds_type, RouteConfigProviderManager& route_config_provider_manager,
     absl::Status& creation_status)
     : route_config_name_(route_config_name),
-      scope_(factory_context.scope().createScope(stat_prefix + route_config_name_ + ".")),
+      scope_(createRdsRouteConfigScope(factory_context.scope(), stat_prefix, route_config_name_)),
       factory_context_(factory_context),
       parent_init_target_(
           fmt::format("RdsRouteConfigSubscription {} init {}", rds_type, route_config_name_),

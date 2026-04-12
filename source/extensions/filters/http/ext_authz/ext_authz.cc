@@ -11,8 +11,10 @@
 #include "source/common/common/enum_to_int.h"
 #include "source/common/common/macros.h"
 #include "source/common/common/matchers.h"
+#include "source/common/config/well_known_names.h"
 #include "source/common/http/utility.h"
 #include "source/common/router/config_impl.h"
+#include "source/common/stats/tag_utility.h"
 #include "source/extensions/filters/common/processing_effect/processing_effect.h"
 
 namespace Envoy {
@@ -72,6 +74,23 @@ const envoy::extensions::filters::http::ext_authz::v3::CheckSettings& defaultChe
 bool headersWithinLimits(const Http::HeaderMap& headers) {
   return headers.size() <= headers.maxHeadersCount() &&
          headers.byteSize() <= headers.maxHeadersKb() * 1024;
+}
+
+// TODO(wbpcode): create new scope bring additional memory overhead but make the code
+// cleaner. We should optimize this once the whole new stats system is ready.
+Stats::ScopeSharedPtr createFilterScope(Stats::Scope& scope, absl::string_view parent_stat_prefix,
+                                        absl::string_view prefix) {
+  Stats::StatElementViewVec elements;
+  Stats::TagUtility::populateParentStatPrefix(parent_stat_prefix, elements);
+  elements.emplace_back(Stats::StatElementView{.value_ = "ext_authz"});
+  if (!prefix.empty()) {
+    elements.emplace_back(Stats::StatElementView{
+        .value_ = prefix,
+        .name_ = Config::TagNames::get().EXT_AUTHZ_PREFIX,
+        .ignore_name_ = true,
+    });
+  }
+  return scope.createScope(elements);
 }
 
 } // namespace
@@ -135,13 +154,22 @@ FilterConfig::FilterConfig(const envoy::extensions::filters::http::ext_authz::v3
       include_tls_session_(config.include_tls_session()),
       charge_cluster_response_stats_(
           PROTOBUF_GET_WRAPPED_OR_DEFAULT(config, charge_cluster_response_stats, true)),
+      no_tag_extraction_(
+          Runtime::runtimeFeatureEnabled("envoy.reloadable_features.no_stats_tag_extraction")),
+      filter_scope_(no_tag_extraction_
+                        ? createFilterScope(scope, stats_prefix, config.stat_prefix())
+                        : nullptr),
       stats_(generateStats(stats_prefix, config.stat_prefix(), scope)),
       ext_authz_ok_(pool_.add(createPoolStatName(config.stat_prefix(), "ok"))),
       ext_authz_denied_(pool_.add(createPoolStatName(config.stat_prefix(), "denied"))),
       ext_authz_error_(pool_.add(createPoolStatName(config.stat_prefix(), "error"))),
       ext_authz_invalid_(pool_.add(createPoolStatName(config.stat_prefix(), "invalid"))),
       ext_authz_failure_mode_allowed_(
-          pool_.add(createPoolStatName(config.stat_prefix(), "failure_mode_allowed"))) {
+          pool_.add(createPoolStatName(config.stat_prefix(), "failure_mode_allowed"))),
+      ok_(pool_.add("ok")), denied_(pool_.add("denied")), error_(pool_.add("error")),
+      invalid_(pool_.add("invalid")), failure_mode_allowed_(pool_.add("failure_mode_allowed")),
+      ext_authz_prefix_tag_(pool_.add(Config::TagNames::get().EXT_AUTHZ_PREFIX)),
+      ext_authz_prefix_(pool_.add(config.stat_prefix())), ext_authz_(pool_.add("ext_authz")) {
   auto bootstrap = factory_context.bootstrap();
   auto labels_key_it =
       bootstrap.node().metadata().fields().find(config.bootstrap_metadata_labels_key());
@@ -958,6 +986,7 @@ void Filter::onComplete(Filters::Common::ExtAuthz::ResponsePtr&& response) {
 
     if (cluster_) {
       config_->incCounter(cluster_->statsScope(), config_->ext_authz_ok_);
+      config_->incCounterBasedOnElement(cluster_->statsScope(), config_->ok_);
     }
     stats_.ok_.inc();
     continueDecoding();
@@ -971,6 +1000,7 @@ void Filter::onComplete(Filters::Common::ExtAuthz::ResponsePtr&& response) {
 
     if (cluster_) {
       config_->incCounter(cluster_->statsScope(), config_->ext_authz_denied_);
+      config_->incCounterBasedOnElement(cluster_->statsScope(), config_->denied_);
       if (config_->chargeClusterResponseStats()) {
         Http::CodeStats::ResponseStatInfo info{config_->scope(),
                                                cluster_->statsScope(),
@@ -1044,6 +1074,7 @@ void Filter::onComplete(Filters::Common::ExtAuthz::ResponsePtr&& response) {
   case CheckStatus::Error: {
     if (cluster_) {
       config_->incCounter(cluster_->statsScope(), config_->ext_authz_error_);
+      config_->incCounterBasedOnElement(cluster_->statsScope(), config_->error_);
     }
     stats_.error_.inc();
 
@@ -1068,6 +1099,7 @@ void Filter::onComplete(Filters::Common::ExtAuthz::ResponsePtr&& response) {
       }
       if (cluster_) {
         config_->incCounter(cluster_->statsScope(), config_->ext_authz_failure_mode_allowed_);
+        config_->incCounterBasedOnElement(cluster_->statsScope(), config_->failure_mode_allowed_);
       }
       if (config_->failureModeAllowHeaderAdd()) {
         request_headers_->addReferenceKey(

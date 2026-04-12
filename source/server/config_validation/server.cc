@@ -63,7 +63,8 @@ ValidationInstance::ValidationInstance(
       access_log_manager_(options.fileFlushIntervalMsec(), options.fileFlushMinSizeKB(), *api_,
                           *dispatcher_, access_log_lock, store),
       grpc_context_(stats_store_.symbolTable()), http_context_(stats_store_.symbolTable()),
-      router_context_(stats_store_.symbolTable()), time_system_(time_system),
+      router_context_(stats_store_.symbolTable()), stats_context_(stats_store_.symbolTable()),
+      time_system_(time_system),
       server_contexts_(*this), quic_stat_names_(stats_store_.symbolTable()) {
 
   // Register the server factory context on the main thread.

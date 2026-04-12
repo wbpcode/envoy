@@ -6,8 +6,11 @@
 #include "envoy/stats/scope.h"
 
 #include "source/common/common/base64.h"
+#include "source/common/config/well_known_names.h"
 #include "source/common/grpc/async_client_impl.h"
 #include "source/common/protobuf/utility.h"
+#include "source/common/runtime/runtime_features.h"
+#include "source/common/stats/utility.h"
 
 #include "absl/strings/match.h"
 
@@ -20,6 +23,22 @@ namespace Grpc {
 namespace {
 
 constexpr uint64_t DefaultEntryIdleDuration{50000};
+
+Stats::ScopeSharedPtr createGoogleAsyncClientScope(Stats::Scope& scope, const std::string& name) {
+  if (Runtime::runtimeFeatureEnabled("envoy.reloadable_features.no_stats_tag_extraction")) {
+    return scope.createScope({
+        Stats::StatElementView{
+            .value_ = "grpc",
+        },
+        Stats::StatElementView{
+            .value_ = name,
+            .name_ = Config::TagNames::get().GOOGLE_GRPC_CLIENT_PREFIX,
+            .ignore_name_ = true,
+        },
+    });
+  }
+  return scope.createScope(fmt::format("grpc.{}.", name));
+}
 
 // Validates a string for gRPC header key compliance. This is a subset of legal HTTP characters.
 // See https://github.com/grpc/grpc/blob/master/doc/PROTOCOL-HTTP2.md
@@ -84,7 +103,7 @@ GoogleAsyncClientFactoryImpl::GoogleAsyncClientFactoryImpl(
     Stats::Scope& scope, Server::Configuration::CommonFactoryContext& context,
     const StatNames& stat_names, absl::Status& creation_status)
     : google_tls_slot_(google_tls_slot),
-      scope_(scope.createScope(fmt::format("grpc.{}.", config.google_grpc().stat_prefix()))),
+      scope_(createGoogleAsyncClientScope(scope, config.google_grpc().stat_prefix())),
       config_(config), factory_context_(context), stat_names_(stat_names) {
 #ifndef ENVOY_GOOGLE_GRPC
   UNREFERENCED_PARAMETER(google_tls_slot_);

@@ -47,6 +47,8 @@
 #include "source/common/router/matcher_visitor.h"
 #include "source/common/router/weighted_cluster_specifier.h"
 #include "source/common/runtime/runtime_features.h"
+#include "source/common/stats/context_impl.h"
+#include "source/common/stats/utility.h"
 #include "source/common/tracing/custom_tag_impl.h"
 #include "source/common/tracing/http_tracer_impl.h"
 #include "source/extensions/early_data/default_early_data_policy.h"
@@ -61,6 +63,47 @@
 
 namespace Envoy {
 namespace Router {
+namespace {
+
+// TODO(wbpcode): The previous implementation of stats scope creation is very tricky and hard
+// to understand.
+// but the core is to create a scope for vcluster entry with prefix
+// "vhost.<vhost_name>.vcluster.<vcluster_name>".
+// We should consider to refactor it to make it easier to understand and maintain.
+
+// This create scope with "vhost" prefix.
+Stats::ScopeSharedPtr createVirtualHostScope(Stats::Scope& scope, Stats::StatName vhost) {
+  if (Runtime::runtimeFeatureEnabled("envoy.reloadable_features.no_stats_tag_extraction")) {
+    return scope.createScope({Stats::StatElement{.value_ = vhost}});
+  }
+  return scope.scopeFromStatName(vhost);
+}
+
+// This create scope with "vhost.<vhost_name>.vcluster" prefix.
+Stats::ScopeSharedPtr createVirtualClusterScope(Stats::Scope& scope, Stats::StatName vhost_value,
+                                                Stats::StatName vhost_tag,
+                                                Stats::StatName vcluster) {
+  if (Runtime::runtimeFeatureEnabled("envoy.reloadable_features.no_stats_tag_extraction")) {
+    return scope.createScope(
+        {Stats::StatElement{.value_ = vhost_value, .name_ = vhost_tag, .ignore_name_ = true},
+         Stats::StatElement{.value_ = vcluster}});
+  }
+  return Stats::Utility::scopeFromStatNames(scope, {vhost_value, vcluster});
+}
+
+// This create scope with "vhost.<vhost_name>.vcluster.<vcluster_name>" prefix.
+Stats::ScopeSharedPtr createVirtualClusterEntryScope(Stats::Scope& scope,
+                                                     Stats::StatName vcluster_value,
+                                                     Stats::StatName vcluster_tag) {
+  if (Runtime::runtimeFeatureEnabled("envoy.reloadable_features.no_stats_tag_extraction")) {
+    return scope.createScope({Stats::StatElement{
+        .value_ = vcluster_value, .name_ = vcluster_tag, .ignore_name_ = true}});
+  }
+  return scope.scopeFromStatName(vcluster_value);
+}
+
+} // namespace
+
 class RouteCreator {
 public:
   static absl::StatusOr<RouteEntryImplBaseConstSharedPtr>
@@ -780,7 +823,8 @@ RouteEntryImplBase::RouteEntryImplBase(const CommonVirtualHostSharedPtr& vhost,
   if (!route.stat_prefix().empty()) {
     route_stats_context_ = std::make_unique<RouteStatsContextImpl>(
         factory_context.scope(), factory_context.routerContext().routeStatNames(),
-        vhost->statName(), route.stat_prefix());
+        factory_context.statsContext().wellKnownTagStatNames(), vhost->statName(),
+        route.stat_prefix());
   }
 
   if (route.route().has_early_data_policy()) {
@@ -1659,11 +1703,13 @@ CommonVirtualHostImpl::CommonVirtualHostImpl(
   }
 
   if (!virtual_host.virtual_clusters().empty()) {
-    vcluster_scope_ = Stats::Utility::scopeFromStatNames(
-        scope, {stat_name_storage_.statName(),
-                factory_context.routerContext().virtualClusterStatNames().vcluster_});
+    vcluster_scope_ = createVirtualClusterScope(
+        scope, stat_name_storage_.statName(),
+        factory_context.statsContext().wellKnownTagStatNames().virtual_host_,
+        factory_context.routerContext().virtualClusterStatNames().vcluster_);
     virtual_cluster_catch_all_ = std::make_unique<CatchAllVirtualCluster>(
-        *vcluster_scope_, factory_context.routerContext().virtualClusterStatNames());
+        *vcluster_scope_, factory_context,
+        factory_context.routerContext().virtualClusterStatNames());
     virtual_clusters_.reserve(virtual_host.virtual_clusters().size());
     for (const auto& virtual_cluster : virtual_host.virtual_clusters()) {
       if (virtual_cluster.headers().empty()) {
@@ -1685,12 +1731,24 @@ CommonVirtualHostImpl::CommonVirtualHostImpl(
   }
 }
 
+CommonVirtualHostImpl::CatchAllVirtualCluster::CatchAllVirtualCluster(
+    Stats::Scope& scope, Server::Configuration::ServerFactoryContext& context,
+    const VirtualClusterStatNames& stat_names)
+    : VirtualClusterBase(absl::nullopt, stat_names.other_,
+                         createVirtualClusterEntryScope(
+                             scope, stat_names.other_,
+                             context.statsContext().wellKnownTagStatNames().virtual_cluster_),
+                         stat_names) {}
+
 CommonVirtualHostImpl::VirtualClusterEntry::VirtualClusterEntry(
     const envoy::config::route::v3::VirtualCluster& virtual_cluster, Stats::Scope& scope,
-    Server::Configuration::CommonFactoryContext& context, const VirtualClusterStatNames& stat_names)
+    Server::Configuration::ServerFactoryContext& context, const VirtualClusterStatNames& stat_names)
     : StatNameProvider(virtual_cluster.name(), scope.symbolTable()),
       VirtualClusterBase(virtual_cluster.name(), stat_name_storage_.statName(),
-                         scope.scopeFromStatName(stat_name_storage_.statName()), stat_names) {
+                         createVirtualClusterEntryScope(
+                             scope, stat_name_storage_.statName(),
+                             context.statsContext().wellKnownTagStatNames().virtual_cluster_),
+                         stat_names) {
   ASSERT(!virtual_cluster.headers().empty());
   headers_ = Http::HeaderUtility::buildHeaderDataVector(virtual_cluster.headers(), context);
 }
@@ -1927,8 +1985,9 @@ RouteMatcher::RouteMatcher(const envoy::config::route::v3::RouteConfiguration& r
                            Server::Configuration::ServerFactoryContext& factory_context,
                            ProtobufMessage::ValidationVisitor& validator, bool validate_clusters,
                            absl::Status& creation_status)
-    : vhost_scope_(factory_context.scope().scopeFromStatName(
-          factory_context.routerContext().virtualClusterStatNames().vhost_)),
+    : vhost_scope_(
+          createVirtualHostScope(factory_context.scope(),
+                                 factory_context.routerContext().virtualClusterStatNames().vhost_)),
       ignore_port_in_host_matching_(route_config.ignore_port_in_host_matching()),
       vhost_header_(route_config.vhost_header()) {
   for (const auto& virtual_host_config : route_config.virtual_hosts()) {

@@ -5,13 +5,30 @@
 
 #include "source/common/http/header_map_impl.h"
 #include "source/common/http/headers.h"
+#include "source/common/runtime/runtime_features.h"
+#include "source/common/stats/tag_utility.h"
 
+#include "absl/strings/match.h"
+#include "absl/strings/str_cat.h"
 #include "absl/strings/str_join.h"
 
 namespace Envoy {
 namespace Extensions {
 namespace HttpFilters {
 namespace IpTagging {
+
+Stats::ScopeSharedPtr createIpTaggingScope(Stats::Scope& scope,
+                                           absl::string_view parent_stat_prefix) {
+  if (Runtime::runtimeFeatureEnabled("envoy.reloadable_features.no_stats_tag_extraction")) {
+    Stats::StatElementViewVec elements;
+    if (!parent_stat_prefix.empty()) {
+      Stats::TagUtility::populateParentStatPrefix(parent_stat_prefix, elements);
+    }
+    elements.push_back(Stats::StatElementView{.value_ = "ip_tagging"});
+    return scope.createScope(elements);
+  }
+  return scope.createScope(absl::StrCat(parent_stat_prefix, "ip_tagging."));
+}
 
 absl::StatusOr<IpTaggingFilterConfigSharedPtr> IpTaggingFilterConfig::create(
     const envoy::extensions::filters::http::ip_tagging::v3::IPTagging& config,
@@ -27,9 +44,9 @@ IpTaggingFilterConfig::IpTaggingFilterConfig(
     const envoy::extensions::filters::http::ip_tagging::v3::IPTagging& config,
     const std::string& stat_prefix, Stats::Scope& scope, Runtime::Loader& runtime,
     absl::Status& creation_status)
-    : request_type_(requestTypeEnum(config.request_type())), scope_(scope), runtime_(runtime),
+    : request_type_(requestTypeEnum(config.request_type())),
+      scope_(createIpTaggingScope(scope, stat_prefix)), runtime_(runtime),
       stat_name_set_(scope.symbolTable().makeSet("IpTagging")),
-      stats_prefix_(stat_name_set_->add(stat_prefix + "ip_tagging")),
       no_hit_(stat_name_set_->add("no_hit")), total_(stat_name_set_->add("total")),
       unknown_tag_(stat_name_set_->add("unknown_tag.hit")),
       ip_tag_header_(config.has_ip_tag_header() ? config.ip_tag_header().header() : ""),
@@ -74,8 +91,7 @@ IpTaggingFilterConfig::IpTaggingFilterConfig(
 }
 
 void IpTaggingFilterConfig::incCounter(Stats::StatName name) {
-  Stats::SymbolTable::StoragePtr storage = scope_.symbolTable().join({stats_prefix_, name});
-  scope_.counterFromStatName(Stats::StatName(storage.get())).inc();
+  scope_->counterFromStatName(name).inc();
 }
 
 IpTaggingFilter::IpTaggingFilter(IpTaggingFilterConfigSharedPtr config) : config_(config) {}
