@@ -1105,6 +1105,14 @@ Http::FilterDataStatus Filter::decodeData(Buffer::Instance& data, bool end_strea
 Http::FilterTrailersStatus Filter::decodeTrailers(Http::RequestTrailerMap& trailers) {
   ENVOY_STREAM_LOG(debug, "router decoding trailers:\n{}", *callbacks_, trailers);
 
+  for (auto* shadow_stream : shadow_streams_) {
+    shadow_stream->removeDestructorCallback();
+    shadow_stream->removeWatermarkCallbacks();
+    shadow_stream->captureAndSendTrailers(
+        Http::createHeaderMap<Http::RequestTrailerMapImpl>(trailers));
+  }
+  shadow_streams_.clear();
+
   // upstream_requests_.size() cannot be > 1 because that only happens when a per
   // try timeout occurs with hedge_on_per_try_timeout enabled but the per
   // try timeout timer is not started until onRequestComplete(). It could be zero
@@ -1115,13 +1123,6 @@ Http::FilterTrailersStatus Filter::decodeTrailers(Http::RequestTrailerMap& trail
   if (!upstream_requests_.empty()) {
     upstream_requests_.front()->acceptTrailersFromRouter(trailers);
   }
-  for (auto* shadow_stream : shadow_streams_) {
-    shadow_stream->removeDestructorCallback();
-    shadow_stream->removeWatermarkCallbacks();
-    shadow_stream->captureAndSendTrailers(
-        Http::createHeaderMap<Http::RequestTrailerMapImpl>(trailers));
-  }
-  shadow_streams_.clear();
 
   onRequestComplete();
   return Http::FilterTrailersStatus::StopIteration;
