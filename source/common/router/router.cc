@@ -1144,21 +1144,25 @@ Http::FilterTrailersStatus Filter::decodeTrailers(Http::RequestTrailerMap& trail
   if (!upstream_requests_.empty()) {
     upstream_requests_.front()->acceptTrailersFromRouter(trailers);
   }
-  for (size_t i = 0; i < shadow_streams_.size(); ++i) {
-    auto* shadow_stream = shadow_streams_[i];
+
+  size_t shadow_count = shadow_streams_.size();
+  size_t shadow_index = 0;
+  for (auto* shadow_stream : shadow_streams_) {
     shadow_stream->removeDestructorCallback();
     shadow_stream->removeWatermarkCallbacks();
 
-    ASSERT(shadow_trailer != nullptr);
     std::unique_ptr<Http::RequestTrailerMapImpl> shadow_trailer;
-    if (i == shadow_streams_.size() - 1) {
+    if (shadow_index == shadow_count - 1) {
       // For the last shadow stream, we can reuse the original trailers to save a copy because
       // copy whole trailers map is not cheap.
       shadow_trailer = std::move(original_shadow_trailer);
     } else {
       shadow_trailer = Http::createHeaderMap<Http::RequestTrailerMapImpl>(*original_shadow_trailer);
     }
+    ASSERT(shadow_trailer != nullptr);
     shadow_stream->captureAndSendTrailers(std::move(shadow_trailer));
+
+    ++shadow_index;
   }
   shadow_streams_.clear();
 
