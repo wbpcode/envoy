@@ -671,7 +671,9 @@ private:
   Network::TransportSocketOptionsConstSharedPtr transport_socket_options_;
   Network::Socket::OptionsSharedPtr upstream_options_;
   // Set of ongoing shadow streams which have not yet received end stream.
-  absl::flat_hash_set<Http::AsyncClient::OngoingRequest*> shadow_streams_;
+  // Inlined vector is used here under the assumption that most cases will have only single or
+  // double stream, and this avoids heap allocation in that case.
+  absl::InlinedVector<Http::AsyncClient::OngoingRequest*, 2> shadow_streams_;
 
   // Keep small members (bools and enums) at the end of class, to reduce alignment overhead.
   uint64_t request_body_buffer_limit_{std::numeric_limits<uint64_t>::max()};

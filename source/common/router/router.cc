@@ -837,12 +837,11 @@ bool Filter::continueDecodeHeaders(Upstream::ThreadLocalCluster* cluster,
       createRetryState(*getEffectiveRetryPolicy(), headers, *cluster_, config_->factory_context_,
                        callbacks_->dispatcher(), route_entry_->priority());
 
-  absl::InlinedVector<std::reference_wrapper<const ShadowPolicy>, 4> active_shadow_policies;
-  std::unique_ptr<Http::RequestHeaderMapImpl> original_shadow_headers;
+  absl::InlinedVector<std::reference_wrapper<const ShadowPolicy>, 2> active_shadow_policies;
 
   // Determine which shadow policies to use. It's possible that we don't do any shadowing due to
   // runtime keys. Also the method CONNECT doesn't support shadowing.
-  auto method = headers.getMethodValue();
+  const absl::string_view method = headers.getMethodValue();
   if (method != Http::Headers::get().MethodValues.Connect) {
     // Use cluster-level shadow policies if they are available (most specific wins).
     // If no cluster-level policies are configured, fall back to route-level policies.
@@ -854,11 +853,16 @@ bool Filter::continueDecodeHeaders(Upstream::ThreadLocalCluster* cluster,
       const auto& policy_ref = *shadow_policy;
       if (FilterUtility::shouldShadow(policy_ref, config_->runtime_, callbacks_->streamId())) {
         active_shadow_policies.push_back(std::cref(policy_ref));
-        if (original_shadow_headers == nullptr) {
-          original_shadow_headers = Http::createHeaderMap<Http::RequestHeaderMapImpl>(headers);
-        }
       }
     }
+  }
+
+  std::unique_ptr<Http::RequestHeaderMapImpl> original_shadow_headers;
+  if (!active_shadow_policies.empty()) {
+    // We need to make a copy of the original request headers to avoid the content of the headers
+    // being changed by UpstreamRequest::acceptHeadersFromRouter() and then being sent to the
+    // shadow clusters.
+    original_shadow_headers = Http::createHeaderMap<Http::RequestHeaderMapImpl>(headers);
   }
 
   ENVOY_STREAM_LOG(debug, "router decoding headers:\n{}", *callbacks_, headers);
@@ -879,7 +883,8 @@ bool Filter::continueDecodeHeaders(Upstream::ThreadLocalCluster* cluster,
   LinkedList::moveIntoList(std::move(upstream_request), upstream_requests_);
   upstream_requests_.front()->acceptHeadersFromRouter(end_stream);
   // Start the shadow streams.
-  for (size_t i = 0; i < active_shadow_policies.size(); ++i) {
+  const size_t num_shadow_policies = active_shadow_policies.size();
+  for (size_t i = 0; i < num_shadow_policies; ++i) {
     const auto& shadow_policy = active_shadow_policies[i].get();
     const absl::optional<absl::string_view> shadow_cluster_name =
         getShadowCluster(shadow_policy, *downstream_headers_);
@@ -887,7 +892,7 @@ bool Filter::continueDecodeHeaders(Upstream::ThreadLocalCluster* cluster,
       continue;
     }
     std::unique_ptr<Http::RequestHeaderMapImpl> shadow_headers;
-    if (i == active_shadow_policies.size() - 1) {
+    if (i == num_shadow_policies - 1) {
       // For the last shadow policy, we can reuse the original headers to save a copy because
       // copy whole headers map is not cheap.
       shadow_headers = std::move(original_shadow_headers);
@@ -924,9 +929,12 @@ bool Filter::continueDecodeHeaders(Upstream::ThreadLocalCluster* cluster,
       Http::AsyncClient::OngoingRequest* shadow_stream = config_->shadowWriter().streamingShadow(
           std::string(shadow_cluster_name.value()), std::move(shadow_headers), options);
       if (shadow_stream != nullptr) {
-        shadow_streams_.insert(shadow_stream);
-        shadow_stream->setDestructorCallback(
-            [this, shadow_stream]() { shadow_streams_.erase(shadow_stream); });
+        shadow_streams_.push_back(shadow_stream);
+        shadow_stream->setDestructorCallback([this, shadow_stream]() {
+          shadow_streams_.erase(
+              std::remove(shadow_streams_.begin(), shadow_streams_.end(), shadow_stream),
+              shadow_streams_.end());
+        });
         shadow_stream->setWatermarkCallbacks(watermark_callbacks_);
       }
     }
@@ -1145,14 +1153,15 @@ Http::FilterTrailersStatus Filter::decodeTrailers(Http::RequestTrailerMap& trail
     upstream_requests_.front()->acceptTrailersFromRouter(trailers);
   }
 
-  size_t shadow_count = shadow_streams_.size();
-  size_t shadow_index = 0;
-  for (auto* shadow_stream : shadow_streams_) {
+  const size_t shadow_count = shadow_streams_.size();
+  for (size_t i = 0; i < shadow_count; ++i) {
+    auto* shadow_stream = shadow_streams_[i];
+
     shadow_stream->removeDestructorCallback();
     shadow_stream->removeWatermarkCallbacks();
 
     std::unique_ptr<Http::RequestTrailerMapImpl> shadow_trailer;
-    if (shadow_index == shadow_count - 1) {
+    if (i == shadow_count - 1) {
       // For the last shadow stream, we can reuse the original trailers to save a copy because
       // copy whole trailers map is not cheap.
       shadow_trailer = std::move(original_shadow_trailer);
@@ -1161,8 +1170,6 @@ Http::FilterTrailersStatus Filter::decodeTrailers(Http::RequestTrailerMap& trail
     }
     ASSERT(shadow_trailer != nullptr);
     shadow_stream->captureAndSendTrailers(std::move(shadow_trailer));
-
-    ++shadow_index;
   }
   shadow_streams_.clear();
 
