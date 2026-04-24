@@ -931,9 +931,11 @@ bool Filter::continueDecodeHeaders(Upstream::ThreadLocalCluster* cluster,
       if (shadow_stream != nullptr) {
         shadow_streams_.push_back(shadow_stream);
         shadow_stream->setDestructorCallback([this, shadow_stream]() {
-          shadow_streams_.erase(
-              std::remove(shadow_streams_.begin(), shadow_streams_.end(), shadow_stream),
-              shadow_streams_.end());
+          auto it = std::find(shadow_streams_.begin(), shadow_streams_.end(), shadow_stream);
+          if (it != shadow_streams_.end()) {
+            *it = shadow_streams_.back();
+            shadow_streams_.pop_back();
+          }
         });
         shadow_stream->setWatermarkCallbacks(watermark_callbacks_);
       }
