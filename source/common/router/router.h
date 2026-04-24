@@ -37,6 +37,7 @@
 #include "source/common/upstream/load_balancer_context_base.h"
 #include "source/common/upstream/upstream_factory_context_impl.h"
 
+#include "absl/container/inlined_vector.h"
 #include "absl/strings/match.h"
 #include "absl/types/optional.h"
 
@@ -671,7 +672,7 @@ private:
 
   Network::TransportSocketOptionsConstSharedPtr transport_socket_options_;
   Network::Socket::OptionsSharedPtr upstream_options_;
-  // Set of ongoing shadow streams which have not yet received end stream.
+  // Ongoing shadow streams which have not yet received end stream.
   // Inlined vector is used here under the assumption that most cases will have only single or
   // double stream, and this avoids heap allocation in that case.
   absl::InlinedVector<Http::AsyncClient::OngoingRequest*, 2> shadow_streams_;
