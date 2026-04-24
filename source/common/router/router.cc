@@ -930,13 +930,8 @@ bool Filter::continueDecodeHeaders(Upstream::ThreadLocalCluster* cluster,
           std::string(shadow_cluster_name.value()), std::move(shadow_headers), options);
       if (shadow_stream != nullptr) {
         shadow_streams_.push_back(shadow_stream);
-        shadow_stream->setDestructorCallback([this, shadow_stream]() {
-          auto it = std::find(shadow_streams_.begin(), shadow_streams_.end(), shadow_stream);
-          if (it != shadow_streams_.end()) {
-            *it = shadow_streams_.back();
-            shadow_streams_.pop_back();
-          }
-        });
+        shadow_stream->setDestructorCallback(
+            [this, shadow_stream]() { removeShadowStream(shadow_stream); });
         shadow_stream->setWatermarkCallbacks(watermark_callbacks_);
       }
     }
@@ -992,6 +987,14 @@ std::unique_ptr<GenericConnPool> Filter::createConnPool(Upstream::ThreadLocalClu
 
   return factory->createGenericConnPool(host, cluster, upstream_protocol, route_entry_->priority(),
                                         callbacks_->streamInfo().protocol(), this, *message);
+}
+
+void Filter::removeShadowStream(Http::AsyncClient::OngoingRequest* shadow_stream) {
+  auto it = std::find(shadow_streams_.begin(), shadow_streams_.end(), shadow_stream);
+  if (it != shadow_streams_.end()) {
+    *it = shadow_streams_.back();
+    shadow_streams_.pop_back();
+  }
 }
 
 void Filter::sendNoHealthyUpstreamResponse(absl::string_view optional_details,

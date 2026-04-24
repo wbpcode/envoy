@@ -639,6 +639,7 @@ private:
   void maybeProcessOrcaLoadReport(const Envoy::Http::HeaderMap& headers_or_trailers,
                                   UpstreamRequest& upstream_request);
   bool isEarlyConnectData();
+  void removeShadowStream(Http::AsyncClient::OngoingRequest* shadow_stream);
 
   RetryStatePtr retry_state_;
   const FilterConfigSharedPtr config_;
