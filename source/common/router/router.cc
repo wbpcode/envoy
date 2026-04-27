@@ -929,6 +929,8 @@ bool Filter::continueDecodeHeaders(Upstream::ThreadLocalCluster* cluster,
       Http::AsyncClient::OngoingRequest* shadow_stream = config_->shadowWriter().streamingShadow(
           std::string(shadow_cluster_name.value()), std::move(shadow_headers), options);
       if (shadow_stream != nullptr) {
+        ASSERT(std::find(shadow_streams_.begin(), shadow_streams_.end(), shadow_stream) ==
+               shadow_streams_.end());
         shadow_streams_.push_back(shadow_stream);
         shadow_stream->setDestructorCallback(
             [this, shadow_stream]() { removeShadowStream(shadow_stream); });
