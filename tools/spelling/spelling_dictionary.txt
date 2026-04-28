@@ -89,6 +89,7 @@ ETX
 FS
 FIXME
 decrypted
+decrypts
 gperf
 HEXDIG
 HEXDIGIT
@@ -362,6 +363,7 @@ PERF
 PGV
 PID
 PKCE
+PKCS
 PKCS12
 PKTINFO
 PNG
