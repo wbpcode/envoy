@@ -6069,6 +6069,8 @@ TEST_P(RouterShadowingTest, NoShadowWhenRequestRejectedImmediately) {
   Http::TestRequestHeaderMapImpl headers;
   HttpTestUtility::addDefaultHeaders(headers);
   router_->decodeHeaders(headers, true);
+
+  router_->onDestroy();
 }
 
 TEST_P(RouterShadowingTest, ShadowRequestCarriesParentContext) {
