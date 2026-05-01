@@ -40,6 +40,12 @@ new_features:
   change: |
     Added ``envoy_dynamic_module_callback_is_validation_mode`` ABI callback that allows dynamic
     modules to check if the server is running in config validation mode.
+- area: stats
+  change: |
+    Added per-cluster and per-listener ``stats_matcher`` configuration that overrides the bootstrap
+    :ref:`stats_config <envoy_v3_api_field_config.bootstrap.v3.Bootstrap.stats_config>` matcher for
+    the specific cluster or listener. When this field is configured, legacy
+    ``envoy.stats_matcher`` metadata is ignored.
 - area: access_log
   change: |
     Supported the singleton stats scope in the :ref:`stats access logger <envoy_v3_api_msg_extensions.access_loggers.stats.v3.Config>`.
