@@ -90,11 +90,14 @@ private:
 
   using HostInfoMap = absl::flat_hash_map<std::string, HostInfo>;
 
+  class DFPHostSelectionHandle;
+
   class LoadBalancer : public Upstream::LoadBalancer,
                        public Extensions::Common::DynamicForwardProxy::DfpLb,
                        public Envoy::Http::ConnectionPool::ConnectionLifetimeCallbacks {
   public:
     LoadBalancer(const Cluster& cluster) : cluster_(cluster) {}
+    ~LoadBalancer() override;
 
     // DfpLb
     Upstream::HostConstSharedPtr findHostByName(const std::string& host) const override;
@@ -137,7 +140,7 @@ private:
     };
 
     absl::flat_hash_map<LookupKey, std::vector<ConnectionInfo>, LookupKeyHash> connection_info_map_;
-
+    absl::flat_hash_set<DFPHostSelectionHandle*> pending_host_selection_handles_;
     const Cluster& cluster_;
   };
 
@@ -150,19 +153,25 @@ private:
       : public Upstream::AsyncHostSelectionHandle,
         public Common::DynamicForwardProxy::DnsCache::LoadDnsCacheEntryCallbacks {
   public:
-    DFPHostSelectionHandle(Upstream::LoadBalancerContext* context, const Cluster& cluster,
-                           std::string hostname)
-        : context_(context), cluster_(cluster), hostname_(hostname) {};
+    DFPHostSelectionHandle(
+        Upstream::LoadBalancerContext* context, const Cluster& cluster, std::string hostname,
+        absl::flat_hash_set<DFPHostSelectionHandle*>& pending_host_selection_handles)
+        : context_(context), cluster_(cluster), hostname_(hostname),
+          pending_host_selection_handles_(pending_host_selection_handles) {};
 
     void cancel() override {
       // Cancels the DNS callback.
       handle_.reset();
+      // Removes itself from the pending host selection handles so that the cluster will not
+      // attempt to call onLoadDnsCacheComplete after cancellation.
+      pending_host_selection_handles_.erase(this);
     }
 
     void
     onLoadDnsCacheComplete(const Common::DynamicForwardProxy::DnsHostInfoSharedPtr& info) override {
       Upstream::HostConstSharedPtr host = cluster_.findHostByName(hostname_);
       std::string details = info->details();
+      pending_host_selection_handles_.erase(this);
       context_->onAsyncHostSelection(std::move(host), std::move(details));
     }
 
@@ -172,11 +181,14 @@ private:
     void setAutoDec(Upstream::ResourceAutoIncDecPtr&& dec) { auto_dec_ = std::move(dec); }
 
   private:
+    friend class LoadBalancer;
+
     Upstream::LoadBalancerContext* context_;
     Common::DynamicForwardProxy::DnsCache::LoadDnsCacheEntryHandlePtr handle_;
     Upstream::ResourceAutoIncDecPtr auto_dec_;
     const Cluster& cluster_;
     std::string hostname_;
+    absl::flat_hash_set<DFPHostSelectionHandle*>& pending_host_selection_handles_;
   };
 
   class LoadBalancerFactory : public Upstream::LoadBalancerFactory {
@@ -187,6 +199,8 @@ private:
     Upstream::LoadBalancerPtr create(Upstream::LoadBalancerParams) override {
       return std::make_unique<LoadBalancer>(cluster_);
     }
+    // The DFP load balancer does not need to be recreated on host changes.
+    bool recreateOnHostChange() const override { return false; }
 
   private:
     Cluster& cluster_;

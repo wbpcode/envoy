@@ -59,6 +59,11 @@ bug_fixes:
     resulting binary "plaintext" was written back into the ``Cookie:`` request header and tripped a
     ``HeaderString`` validation assert. Such plaintexts are now rejected and the original cookie value
     is preserved, matching the behavior already documented for the explicit decryption-failure case.
+- area: router
+  change: |
+    Fixed a lifetime bug in dynamic forward proxy async host selection when the cluster is removed
+    while lookup is still pending. Pending lookups are now cleaned up on DFP load balancer teardown,
+    and the router no longer resumes async completion through a stale cluster reference.
 
 removed_config_or_runtime:
 # *Normally occurs at the end of the* :ref:`deprecation period <deprecated>`

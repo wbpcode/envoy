@@ -315,6 +315,40 @@ TEST_F(ClusterTest, InvalidLbContext) {
   EXPECT_EQ(nullptr, lb_->chooseHost(nullptr).host);
 }
 
+TEST_F(ClusterTest, LoadBalancer_CleansUpPendingAsyncHostSelectionOnDestroy) {
+  initialize(default_yaml_config_, false);
+
+  NiceMock<Upstream::MockBasicResourceLimit> resource_limit;
+  auto* dns_cache_handle =
+      new NiceMock<Extensions::Common::DynamicForwardProxy::MockLoadDnsCacheEntryHandle>();
+
+  EXPECT_CALL(resource_limit, inc());
+  auto* dns_request = new Upstream::ResourceAutoIncDec(resource_limit);
+  EXPECT_CALL(resource_limit, dec());
+  EXPECT_CALL(*dns_cache_handle, onDestroy());
+  EXPECT_CALL(*dns_cache_manager_->dns_cache_, canCreateDnsRequest_())
+      .WillOnce(Return(dns_request));
+  EXPECT_CALL(*dns_cache_manager_->dns_cache_, loadDnsCacheEntry_("host1", 80, _, _))
+      .WillOnce(Invoke([dns_cache_handle](absl::string_view, uint16_t, bool,
+                                          Extensions::Common::DynamicForwardProxy::DnsCache::
+                                              LoadDnsCacheEntryCallbacks&) {
+        return Extensions::Common::DynamicForwardProxy::MockDnsCache::MockLoadDnsCacheEntryResult{
+            Extensions::Common::DynamicForwardProxy::DnsCache::LoadDnsCacheEntryStatus::Loading,
+            dns_cache_handle, absl::nullopt};
+      }));
+  EXPECT_CALL(lb_context_, onAsyncHostSelection(_, _))
+      .WillOnce([](Upstream::HostConstSharedPtr&& host, std::string&& details) {
+        EXPECT_EQ(host, nullptr);
+        EXPECT_EQ(details, "cluster/load balancer is destroyed");
+      });
+
+  auto host_selection = lb_->chooseHost(setHostAndReturnContext("host1"));
+  ASSERT_EQ(nullptr, host_selection.host);
+  ASSERT_NE(nullptr, host_selection.cancelable);
+
+  lb_.reset();
+}
+
 TEST_F(ClusterTest, FilterStateHostOverride) {
   initialize(default_yaml_config_, false);
   makeTestHost("host1:0", "1.2.3.4");

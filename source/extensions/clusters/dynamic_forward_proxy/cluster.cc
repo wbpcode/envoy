@@ -449,8 +449,8 @@ Cluster::LoadBalancer::chooseHost(Upstream::LoadBalancerContext* context) {
 
   // Attempt to load the host from cache. Generally this will result in async
   // resolution so create a DFPHostSelectionHandle to handle this.
-  std::unique_ptr<DFPHostSelectionHandle> cancelable =
-      std::make_unique<DFPHostSelectionHandle>(context, cluster_, hostname);
+  std::unique_ptr<DFPHostSelectionHandle> cancelable = std::make_unique<DFPHostSelectionHandle>(
+      context, cluster_, hostname, pending_host_selection_handles_);
   bool is_proxying = isProxying(context->requestStreamInfo());
   auto result = cluster_.dns_cache_->loadDnsCacheEntryWithForceRefresh(raw_host, port, is_proxying,
                                                                        force_refresh, *cancelable);
@@ -463,6 +463,7 @@ Cluster::LoadBalancer::chooseHost(Upstream::LoadBalancerContext* context) {
     // resolution is canceled by the stream.
     cancelable->setHandle(std::move(result.handle_));
     cancelable->setAutoDec(std::move(handle));
+    pending_host_selection_handles_.insert(cancelable.get());
     return Upstream::HostSelectionResponse{nullptr, std::move(cancelable)};
   case Common::DynamicForwardProxy::DnsCache::LoadDnsCacheEntryStatus::Overflow:
     // In the case of overflow, return immediate failure.
@@ -491,6 +492,16 @@ Upstream::HostConstSharedPtr Cluster::findHostByName(const std::string& host) co
       host_it->second.shared_host_info_->touch();
       return host_it->second.logical_host_;
     }
+  }
+}
+
+Cluster::LoadBalancer::~LoadBalancer() {
+  // Clean up pending host selection handles to avoid calling back into the load balancer after
+  // the cluster/load balancer is destroyed.
+  while (!pending_host_selection_handles_.empty()) {
+    auto handle = *pending_host_selection_handles_.begin();
+    handle->cancel();
+    handle->context_->onAsyncHostSelection(nullptr, "cluster/load balancer is destroyed");
   }
 }
 
