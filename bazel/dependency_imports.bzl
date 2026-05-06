@@ -71,7 +71,7 @@ def envoy_dependency_imports(
         ],
     )
     crate_universe_dependencies()
-    crates_repositories()
+    # crates_repositories()
     grcov_repository()
     shellcheck_dependencies()
     proxy_wasm_rust_sdk_dependencies()

@@ -28,6 +28,6 @@ load("//bazel:dependency_imports.bzl", "envoy_dependency_imports")
 
 envoy_dependency_imports()
 
-load("//bazel:dependency_imports_extra.bzl", "envoy_dependency_imports_extra")
+# load("//bazel:dependency_imports_extra.bzl", "envoy_dependency_imports_extra")
 
-envoy_dependency_imports_extra()
+# envoy_dependency_imports_extra()
