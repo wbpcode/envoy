@@ -56,7 +56,7 @@ void ReverseTunnelAcceptorExtension::onServerInitialized(Server::Instance&) {
   // Create thread-local slot for the dispatcher and socket manager.
   tls_slot_ = ThreadLocal::TypedSlot<UpstreamSocketThreadLocal>::makeUnique(context_.threadLocal());
 
-  const bool ping_failure_threshold = ping_failure_threshold_;
+  const uint32_t ping_failure_threshold = ping_failure_threshold_;
   const bool enable_tenant_isolation = enable_tenant_isolation_;
   // Set up the thread-local dispatcher and socket manager.
   tls_slot_->set(
