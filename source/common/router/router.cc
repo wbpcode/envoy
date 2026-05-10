@@ -903,7 +903,6 @@ bool Filter::continueDecodeHeaders(Upstream::ThreadLocalCluster* cluster,
       // For the last shadow policy, we can reuse the original headers to save a copy because
       // copy whole headers map is not cheap.
       shadow_headers = std::move(original_shadow_headers);
-      original_shadow_headers = nullptr;
     } else {
       ASSERT(original_shadow_headers != nullptr);
       // NOLINTNEXTLINE(bugprone-use-after-move)
@@ -1183,7 +1182,6 @@ Http::FilterTrailersStatus Filter::decodeTrailers(Http::RequestTrailerMap& trail
       // For the last shadow stream, we can reuse the original trailers to save a copy because
       // copy whole trailers map is not cheap.
       shadow_trailer = std::move(original_shadow_trailer);
-      original_shadow_trailer = nullptr;
     } else {
       ASSERT(original_shadow_trailer != nullptr);
       // NOLINTNEXTLINE(bugprone-use-after-move)
