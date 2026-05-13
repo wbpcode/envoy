@@ -166,6 +166,12 @@ new_features:
   change: |
     Added ``upstream.server_name`` CEL attribute returning the SNI from the established upstream
     TLS connection.
+- area: upstream
+  change: |
+    Added :ref:`stat_name <envoy_v3_api_field_config.endpoint.v3.Endpoint.stat_name>` to
+    :ref:`Endpoint <envoy_v3_api_msg_config.endpoint.v3.Endpoint>` so endpoints can override the
+    observability name used in per-endpoint stats and related logs. This allows clusters with
+    duplicate endpoint addresses to expose distinct per-endpoint observability output.
 
 - area: tls
   change: |
