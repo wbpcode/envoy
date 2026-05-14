@@ -1,7 +1,11 @@
 date: Pending
 
 behavior_changes:
-# *Changes that are expected to cause an incompatibility if applicable; deployment changes are likely required*
+- area: dns
+  change: |
+    Runtime guard ``envoy.reloadable_features.enable_new_dns_implementation`` is now enabled by
+    default. This activates the new DNS implementation, a merged implementation of strict and
+    logical DNS clusters. It can be temporarily reverted by setting the runtime guard to ``false``.
 
 minor_behavior_changes:
 # *Changes that may cause incompatibilities for some users, but should not for most*
@@ -95,11 +99,6 @@ bug_fixes:
 
 removed_config_or_runtime:
 # *Normally occurs at the end of the* :ref:`deprecation period <deprecated>`
-- area: dns
-  change: |
-    Runtime guard ``envoy.reloadable_features.enable_new_dns_implementation`` is now enabled by
-    default. This activates the new DNS implementation, a merged implementation of strict and
-    logical DNS clusters. It can be temporarily reverted by setting the runtime guard to ``false``.
 
 new_features:
 - area: router
