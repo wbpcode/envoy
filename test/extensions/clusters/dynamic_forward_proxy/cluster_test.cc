@@ -62,7 +62,7 @@ public:
     cluster_.reset(new Cluster(cluster_config, std::move(cache), config, factory_context,
                                this->get(), creation_status));
     THROW_IF_NOT_OK_REF(creation_status);
-    thread_aware_lb_ = std::make_unique<Cluster::ThreadAwareLoadBalancer>(*cluster_);
+    thread_aware_lb_ = std::make_unique<Cluster::ThreadAwareLoadBalancer>(cluster_);
     lb_factory_ = thread_aware_lb_->factory();
     refreshLb();
 
