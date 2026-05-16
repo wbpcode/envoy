@@ -575,7 +575,7 @@ private:
 
   std::unique_ptr<GenericConnPool>
   createConnPool(Upstream::ThreadLocalCluster& thread_local_cluster,
-                 Upstream::HostConstSharedPtr& host);
+                 const Upstream::HostConstSharedPtr& host);
   UpstreamRequestPtr createUpstreamRequest();
   absl::optional<absl::string_view> getShadowCluster(const ShadowPolicy& shadow_policy,
                                                      const Http::HeaderMap& headers) const;

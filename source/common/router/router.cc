@@ -778,7 +778,7 @@ void Filter::onAsyncHostSelection(Upstream::HostConstSharedPtr&& host, std::stri
   std::unique_ptr<Upstream::AsyncHostSelectionHandle> local_scope =
       std::move(host_selection_cancelable_);
 
-  // The cluster argument always be nullptr here to force refetching the cluster because
+  // The cluster argument should always be nullptr here to force refetching the cluster because
   // the cluster may have been updated during the asynchronous host selection.
   GenericConnPoolPtr generic_conn_pool =
       createConnPoolOrHandleFailure(std::move(host), nullptr, details, absl::nullopt);
@@ -960,7 +960,7 @@ bool Filter::continueDecodeHeaders(Http::RequestHeaderMap& headers, bool end_str
 }
 
 std::unique_ptr<GenericConnPool> Filter::createConnPool(Upstream::ThreadLocalCluster& cluster,
-                                                        Upstream::HostConstSharedPtr& host) {
+                                                        const Upstream::HostConstSharedPtr& host) {
   GenericConnPoolFactory* factory = nullptr;
   ProtobufTypes::MessagePtr message;
   if (cluster_->upstreamConfig().has_value()) {

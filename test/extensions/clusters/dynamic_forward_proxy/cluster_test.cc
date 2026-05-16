@@ -339,7 +339,7 @@ TEST_F(ClusterTest, LoadBalancer_CleansUpPendingAsyncHostSelectionOnDestroy) {
   EXPECT_CALL(lb_context_, onAsyncHostSelection(_, _))
       .WillOnce([](Upstream::HostConstSharedPtr&& host, std::string&& details) {
         EXPECT_EQ(host, nullptr);
-        EXPECT_EQ(details, "cluster/load balancer is destroyed");
+        EXPECT_EQ(details, "load_balancer_destroyed");
       });
 
   auto host_selection = lb_->chooseHost(setHostAndReturnContext("host1"));

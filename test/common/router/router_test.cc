@@ -1055,12 +1055,12 @@ TEST_F(RouterTest, AsyncHostSelectionClusterRemovedBeforeCompletion) {
   EXPECT_CALL(callbacks_.stream_info_,
               setResponseFlag(StreamInfo::CoreResponseFlag::NoHealthyUpstream));
 
-  router_->onAsyncHostSelection(nullptr, "cluster/load balancer is destroyed");
+  router_->onAsyncHostSelection(nullptr, "load_balancer_destroyed");
 
   EXPECT_TRUE(verifyHostUpstreamStats(0, 0));
   EXPECT_EQ(0U,
             callbacks_.route_->virtual_host_->virtual_cluster_.stats().upstream_rq_total_.value());
-  EXPECT_EQ(callbacks_.details(), "cluster/load balancer is destroyed");
+  EXPECT_EQ(callbacks_.details(), "load_balancer_destroyed");
 }
 
 TEST_F(RouterTest, RouterLoadShedTest) {
@@ -4136,12 +4136,12 @@ TEST_F(RouterTest, RetryAsyncHostSelectionClusterRemovedBeforeCompletion) {
   EXPECT_CALL(callbacks_.stream_info_,
               setResponseFlag(StreamInfo::CoreResponseFlag::NoHealthyUpstream));
 
-  router_->onAsyncHostSelection(nullptr, "cluster/load balancer is destroyed");
+  router_->onAsyncHostSelection(nullptr, "load_balancer_destroyed");
 
   EXPECT_TRUE(verifyHostUpstreamStats(0, 1));
   EXPECT_EQ(1U,
             callbacks_.route_->virtual_host_->virtual_cluster_.stats().upstream_rq_total_.value());
-  EXPECT_EQ(callbacks_.details(), "cluster/load balancer is destroyed");
+  EXPECT_EQ(callbacks_.details(), "load_balancer_destroyed");
 }
 
 TEST_F(RouterTest, RetryUpstreamReset) {
