@@ -116,11 +116,14 @@ public:
   const std::string& getPrefix() { return prefix_; }
 
 private:
+  // 16KiB intermediate buffer for flushing.
+  static constexpr uint32_t FLUSH_SLICE_SIZE_BYTES = (1024 * 16);
+
   struct TlsSink : public ThreadLocal::ThreadLocalObject, public Network::ConnectionCallbacks {
     TlsSink(TcpStatsdSink& parent, Event::Dispatcher& dispatcher);
     ~TlsSink() override;
 
-    void beginFlush(bool expect_empty_buffer);
+    void beginFlush(bool expect_empty_buffer, uint64_t slice_size = FLUSH_SLICE_SIZE_BYTES);
     void commonFlush(const std::string& name, uint64_t value, char stat_type);
     void flushCounter(const std::string& name, uint64_t delta);
     void flushGauge(const std::string& name, uint64_t value);
@@ -145,9 +148,6 @@ private:
 
   // Somewhat arbitrary 16MiB limit for buffered stats.
   static constexpr uint32_t MAX_BUFFERED_STATS_BYTES = (1024 * 1024 * 16);
-
-  // 16KiB intermediate buffer for flushing.
-  static constexpr uint32_t FLUSH_SLICE_SIZE_BYTES = (1024 * 16);
 
   // Prefix for all flushed stats.
   const std::string prefix_;
