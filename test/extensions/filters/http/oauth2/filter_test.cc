@@ -74,6 +74,8 @@ public:
   void onBeforeFinalizeUpstreamSpan(Envoy::Tracing::Span&,
                                     const Http::ResponseHeaderMap*) override {}
 
+  MOCK_METHOD(void, cancel, (), (override));
+
   MOCK_METHOD(void, asyncGetAccessToken,
               (const std::string&, const std::string&, const std::string&, const std::string&,
                Envoy::Extensions::HttpFilters::Oauth2::AuthType));
