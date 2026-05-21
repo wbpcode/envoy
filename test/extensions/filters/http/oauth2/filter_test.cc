@@ -497,6 +497,24 @@ TEST_F(OAuth2Test, DefaultAuthScope) {
             filter_->decodeHeaders(request_headers, false));
 }
 
+TEST_F(OAuth2Test, OnDestroyCancelsOAuthClient) {
+  Http::TestRequestHeaderMapImpl request_headers{
+      {Http::Headers::get().Host.get(), "traffic.example.com"},
+      {Http::Headers::get().Path.get(), "/anypath"},
+      {Http::Headers::get().Method.get(), Http::Headers::get().MethodValues.Options},
+      {Http::Headers::get().Cookie.get(), "OauthHMAC=some_oauth_hmac_value"},
+      {Http::Headers::get().Cookie.get(), "OauthExpires=some_oauth_expires_value"},
+      {Http::Headers::get().Cookie.get(), "RefreshToken=some_refresh_token_value"},
+      {Http::Headers::get().Cookie.get(), "OauthNonce.00000000075bcd15=some_oauth_nonce_value"},
+      {Http::Headers::get().Cookie.get(),
+       "CodeVerifier.00000000075bcd15=some_code_verifier_value"}};
+
+  EXPECT_EQ(Http::FilterHeadersStatus::Continue, filter_->decodeHeaders(request_headers, false));
+
+  EXPECT_CALL(*oauth_client_, cancel());
+  filter_->onDestroy();
+}
+
 // Verifies that the CSRF token cookie expiration (Max-Age) uses the custom
 // value from csrf_token_expires_in configuration.
 TEST_F(OAuth2Test, CustomCsrfTokenExpiresIn) {
