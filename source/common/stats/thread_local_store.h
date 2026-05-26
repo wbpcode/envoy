@@ -167,7 +167,7 @@ public:
   static const char IterateScopeSync[];
   static const char MainDispatcherCleanupSync[];
 
-  ThreadLocalStoreImpl(Allocator& alloc);
+  ThreadLocalStoreImpl(Allocator& alloc, bool use_element_scope = false);
   ~ThreadLocalStoreImpl() override;
   // Stats::Store
   NullCounterImpl& nullCounter() override { return null_counter_; }
@@ -176,6 +176,7 @@ public:
   ConstScopeSharedPtr constRootScope() const override { return default_scope_; }
   const SymbolTable& constSymbolTable() const override { return alloc_.constSymbolTable(); }
   SymbolTable& symbolTable() override { return alloc_.symbolTable(); }
+  bool useElementScope() const override { return use_element_scope_; }
 
   bool iterate(const IterateFn<Counter>& fn) const override { return iterHelper(fn); }
   bool iterate(const IterateFn<Gauge>& fn) const override { return iterHelper(fn); }
@@ -342,6 +343,53 @@ private:
     Histogram& getOrCreateHistogramBase(const TagUtility::TagStatNameJoiner& joiner,
                                         Histogram::Unit unit);
     TextReadout& getOrCreateTextReadoutBase(const TagUtility::TagStatNameJoiner& joiner);
+    // Legacy fallback for scope creation via the element API. Scopes can only store
+    // a flat StatName prefix, so tag metadata is dropped here — each element's `value`
+    // contributes as a plain path token, and the joined values form the scope's prefix.
+    ScopeSharedPtr createScope(StatElementSpan names, bool evictable = false,
+                               const ScopeStatsLimitSettings& limits = {},
+                               StatsMatcherSharedPtr matcher = nullptr) override {
+      auto joined = TagUtility::joinElementValues(names, symbolTable());
+      return scopeFromStatName(joined.name, evictable, limits, std::move(matcher));
+    }
+    ScopeSharedPtr createScope(StatElementViewSpan names, bool evictable = false,
+                               const ScopeStatsLimitSettings& limits = {},
+                               StatsMatcherSharedPtr matcher = nullptr) override {
+      return createScope(TagUtility::joinElementValues(names), evictable, limits,
+                         std::move(matcher));
+    }
+    // Legacy fallback for the element-based stat-creation API. Tag metadata on elements
+    // IS honored (unlike createScope above): the (StatName prefix, StatElementSpan, ...)
+    // joiner combines the scope's flat prefix with the tagged elements in a single pass,
+    // so callers see element-level tags on the resulting stat.
+    Counter& getOrCreateCounter(StatElementSpan names) override {
+      if (scopeRejectsAll()) {
+        return parent_.null_counter_;
+      }
+      const TagUtility::TagStatNameJoiner joiner(prefix_.statName(), names, symbolTable());
+      return getOrCreateCounterBase(joiner);
+    }
+    Gauge& getOrCreateGauge(StatElementSpan names, Gauge::ImportMode import_mode) override {
+      if (scopeRejectsAll() && import_mode != Gauge::ImportMode::HiddenAccumulate) {
+        return parent_.null_gauge_;
+      }
+      const TagUtility::TagStatNameJoiner joiner(prefix_.statName(), names, symbolTable());
+      return getOrCreateGaugeBase(joiner, import_mode);
+    }
+    Histogram& getOrCreateHistogram(StatElementSpan names, Histogram::Unit unit) override {
+      if (scopeRejectsAll()) {
+        return parent_.null_histogram_;
+      }
+      const TagUtility::TagStatNameJoiner joiner(prefix_.statName(), names, symbolTable());
+      return getOrCreateHistogramBase(joiner, unit);
+    }
+    TextReadout& getOrCreateTextReadout(StatElementSpan names) override {
+      if (scopeRejectsAll()) {
+        return parent_.null_text_readout_;
+      }
+      const TagUtility::TagStatNameJoiner joiner(prefix_.statName(), names, symbolTable());
+      return getOrCreateTextReadoutBase(joiner);
+    }
 
     template <class StatMap, class StatFn> bool iterHelper(StatFn fn, const StatMap& map) const {
       for (auto& iter : map) {
@@ -496,6 +544,46 @@ private:
     std::function<void()> cleanup_callback_;
   };
 
+  class ElementScopeImpl : public ScopeImpl {
+  public:
+    ElementScopeImpl(std::unique_ptr<StatNamePool> pool, StatElementVec&& prefix_elements,
+                     ThreadLocalStoreImpl& store, bool evictable,
+                     const ScopeStatsLimitSettings& limits = {},
+                     StatsMatcherSharedPtr matcher = nullptr);
+
+    ScopeSharedPtr createScope(const std::string& name, bool evictable = false,
+                               const ScopeStatsLimitSettings& limits = {},
+                               StatsMatcherSharedPtr matcher = nullptr) override;
+    ScopeSharedPtr createScope(StatElementSpan names, bool evictable = false,
+                               const ScopeStatsLimitSettings& limits = {},
+                               StatsMatcherSharedPtr matcher = nullptr) override;
+    ScopeSharedPtr createScope(StatElementViewSpan names, bool evictable = false,
+                               const ScopeStatsLimitSettings& limits = {},
+                               StatsMatcherSharedPtr matcher = nullptr) override;
+    ScopeSharedPtr scopeFromStatName(StatName name, bool evictable = false,
+                                     const ScopeStatsLimitSettings& limits = {},
+                                     StatsMatcherSharedPtr matcher = nullptr) override;
+
+    Counter& getOrCreateCounter(StatElementSpan names) override;
+    Gauge& getOrCreateGauge(StatElementSpan names, Gauge::ImportMode import_mode) override;
+    Histogram& getOrCreateHistogram(StatElementSpan names, Histogram::Unit unit) override;
+    TextReadout& getOrCreateTextReadout(StatElementSpan names) override;
+
+    Counter& counterFromStatNameWithTags(const StatName& name,
+                                         StatNameTagVectorOptConstRef tags) override;
+    Gauge& gaugeFromStatNameWithTags(const StatName& name, StatNameTagVectorOptConstRef tags,
+                                     Gauge::ImportMode import_mode) override;
+    Histogram& histogramFromStatNameWithTags(const StatName& name,
+                                             StatNameTagVectorOptConstRef tags,
+                                             Histogram::Unit unit) override;
+    TextReadout& textReadoutFromStatNameWithTags(const StatName& name,
+                                                 StatNameTagVectorOptConstRef tags) override;
+
+  private:
+    std::unique_ptr<StatNamePool> pool_;
+    StatElementVec prefix_elements_;
+  };
+
   struct TlsCache : public ThreadLocal::ThreadLocalObject {
     TlsCacheEntry& insertScope(uint64_t scope_id);
     void eraseScopes(const std::vector<uint64_t>& scope_ids);
@@ -601,6 +689,7 @@ private:
   uint64_t next_histogram_id_ ABSL_GUARDED_BY(hist_mutex_) = 0;
 
   StatNameSetPtr well_known_tags_;
+  const bool use_element_scope_ = false;
 
   mutable Thread::MutexBasicLockable hist_mutex_;
   StatSet<ParentHistogramImpl> histogram_set_ ABSL_GUARDED_BY(hist_mutex_);

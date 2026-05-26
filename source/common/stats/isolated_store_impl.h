@@ -29,13 +29,14 @@ namespace Stats {
 // in test/integration/server.h.
 class IsolatedStoreImpl : public Store {
 public:
-  IsolatedStoreImpl();
-  explicit IsolatedStoreImpl(SymbolTable& symbol_table);
+  explicit IsolatedStoreImpl(bool use_element_scope = false);
+  explicit IsolatedStoreImpl(SymbolTable& symbol_table, bool use_element_scope = false);
   ~IsolatedStoreImpl() override;
 
   // Stats::Store
   const SymbolTable& constSymbolTable() const override { return alloc_.constSymbolTable(); }
   SymbolTable& symbolTable() override { return alloc_.symbolTable(); }
+  bool useElementScope() const override { return use_element_scope_; }
 
   void deliverHistogramToSinks(const Histogram&, uint64_t) override {}
   ScopeSharedPtr rootScope() override;
@@ -280,7 +281,7 @@ private:
   friend class IsolatedScopeImpl;
   friend class ElementScopeImpl;
 
-  IsolatedStoreImpl(std::unique_ptr<SymbolTable>&& symbol_table);
+  IsolatedStoreImpl(std::unique_ptr<SymbolTable>&& symbol_table, bool use_element_scope);
 
   SymbolTablePtr symbol_table_storage_;
   Allocator alloc_;
@@ -292,6 +293,7 @@ private:
   NullGaugeImpl null_gauge_;
   NullHistogramImpl null_histogram_;
   NullTextReadoutImpl null_text_readout_;
+  const bool use_element_scope_ = false;
 
   // We construct the default-scope lazily to allow subclasses to override
   // makeScope(), making it easier to share infrastructure across subclasses
@@ -342,6 +344,50 @@ public:
   ScopeSharedPtr scopeFromStatName(StatName name, bool evictable = false,
                                    const ScopeStatsLimitSettings& limits = {},
                                    StatsMatcherSharedPtr matcher = nullptr) override;
+  // Legacy fallback for scope creation via the element API. Scopes can only store
+  // a flat StatName prefix, so tag metadata is dropped here — each element's `value`
+  // contributes as a plain path token, and the joined values form the scope's prefix.
+  ScopeSharedPtr createScope(StatElementSpan names, bool evictable = false,
+                             const ScopeStatsLimitSettings& limits = {},
+                             StatsMatcherSharedPtr matcher = nullptr) override {
+    auto joined = TagUtility::joinElementValues(names, symbolTable());
+    return scopeFromStatName(joined.name, evictable, limits, std::move(matcher));
+  }
+  ScopeSharedPtr createScope(StatElementViewSpan names, bool evictable = false,
+                             const ScopeStatsLimitSettings& limits = {},
+                             StatsMatcherSharedPtr matcher = nullptr) override {
+    return createScope(TagUtility::joinElementValues(names), evictable, limits, std::move(matcher));
+  }
+  // Legacy fallback for the element-based stat-creation API. Tag metadata on elements
+  // IS honored (unlike createScope above): the (StatName prefix, StatElementSpan, ...)
+  // joiner combines the scope's flat prefix with the tagged elements in a single pass,
+  // so callers see element-level tags on the resulting stat.
+  Counter& getOrCreateCounter(StatElementSpan names) override {
+    const OptRef<const StatsMatcher> matcher = makeOptRefFromPtr(scope_matcher_.get());
+    const TagUtility::TagStatNameJoiner joiner(prefix(), names, symbolTable());
+    return store_.counters_.get(joiner, matcher).value_or(store_.null_counter_);
+  }
+  Gauge& getOrCreateGauge(StatElementSpan names, Gauge::ImportMode import_mode) override {
+    const OptRef<const StatsMatcher> matcher = makeOptRefFromPtr(scope_matcher_.get());
+    const TagUtility::TagStatNameJoiner joiner(prefix(), names, symbolTable());
+    auto gauge = store_.gauges_.get(joiner, import_mode, matcher);
+    if (!gauge.has_value()) {
+      return store_.null_gauge_;
+    }
+    gauge->mergeImportMode(import_mode);
+    return *gauge;
+  }
+  Histogram& getOrCreateHistogram(StatElementSpan names, Histogram::Unit unit) override {
+    const OptRef<const StatsMatcher> matcher = makeOptRefFromPtr(scope_matcher_.get());
+    const TagUtility::TagStatNameJoiner joiner(prefix(), names, symbolTable());
+    return store_.histograms_.get(joiner, unit, matcher).value_or(store_.null_histogram_);
+  }
+  TextReadout& getOrCreateTextReadout(StatElementSpan names) override {
+    const OptRef<const StatsMatcher> matcher = makeOptRefFromPtr(scope_matcher_.get());
+    const TagUtility::TagStatNameJoiner joiner(prefix(), names, symbolTable());
+    return store_.text_readouts_.get(joiner, TextReadout::Type::Default, matcher)
+        .value_or(store_.null_text_readout_);
+  }
   Gauge& gaugeFromStatNameWithTags(const StatName& name, StatNameTagVectorOptConstRef tags,
                                    Gauge::ImportMode import_mode) override {
     const OptRef<const StatsMatcher> matcher = makeOptRefFromPtr(scope_matcher_.get());
@@ -441,6 +487,43 @@ protected:
   IsolatedStoreImpl& store_;
   StatsMatcherSharedPtr scope_matcher_;
   std::function<void()> cleanup_callback_;
+};
+
+class ElementScopeImpl : public IsolatedScopeImpl {
+public:
+  ElementScopeImpl(std::unique_ptr<StatNamePool>&& pool, StatElementVec&& prefix_elements,
+                   IsolatedStoreImpl& store, StatsMatcherSharedPtr matcher = nullptr);
+
+  ScopeSharedPtr createScope(const std::string& name, bool evictable = false,
+                             const ScopeStatsLimitSettings& limits = {},
+                             StatsMatcherSharedPtr matcher = nullptr) override;
+  ScopeSharedPtr createScope(StatElementSpan names, bool evictable = false,
+                             const ScopeStatsLimitSettings& limits = {},
+                             StatsMatcherSharedPtr matcher = nullptr) override;
+  ScopeSharedPtr createScope(StatElementViewSpan names, bool evictable = false,
+                             const ScopeStatsLimitSettings& limits = {},
+                             StatsMatcherSharedPtr matcher = nullptr) override;
+  ScopeSharedPtr scopeFromStatName(StatName name, bool evictable = false,
+                                   const ScopeStatsLimitSettings& limits = {},
+                                   StatsMatcherSharedPtr matcher = nullptr) override;
+
+  Counter& getOrCreateCounter(StatElementSpan names) override;
+  Gauge& getOrCreateGauge(StatElementSpan names, Gauge::ImportMode import_mode) override;
+  Histogram& getOrCreateHistogram(StatElementSpan names, Histogram::Unit unit) override;
+  TextReadout& getOrCreateTextReadout(StatElementSpan names) override;
+
+  Counter& counterFromStatNameWithTags(const StatName& name,
+                                       StatNameTagVectorOptConstRef tags) override;
+  Gauge& gaugeFromStatNameWithTags(const StatName& name, StatNameTagVectorOptConstRef tags,
+                                   Gauge::ImportMode import_mode) override;
+  Histogram& histogramFromStatNameWithTags(const StatName& name, StatNameTagVectorOptConstRef tags,
+                                           Histogram::Unit unit) override;
+  TextReadout& textReadoutFromStatNameWithTags(const StatName& name,
+                                               StatNameTagVectorOptConstRef tags) override;
+
+private:
+  std::unique_ptr<StatNamePool> pool_;
+  StatElementVec prefix_elements_;
 };
 
 } // namespace Stats

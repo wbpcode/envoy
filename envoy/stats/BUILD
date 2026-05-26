@@ -17,6 +17,13 @@ envoy_cc_library(
 envoy_cc_library(
     name = "tag_interface",
     hdrs = ["tag.h"],
+    deps = [
+        "//envoy/common:optref_lib",
+        "@abseil-cpp//absl/container:inlined_vector",
+        "@abseil-cpp//absl/strings",
+        "@abseil-cpp//absl/types:optional",
+        "@abseil-cpp//absl/types:span",
+    ],
 )
 
 # TODO(jmarantz): atomize the build rules to match the include files.

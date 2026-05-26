@@ -133,6 +133,19 @@ public:
   virtual Gauge& nullGauge() PURE;
 
   /**
+   * @return true if this store's scope chain is built on element-based scopes
+   * (ElementScopeImpl) and therefore honors per-element tag metadata when the
+   * StatElementSpan-based Scope APIs (createScope(StatElementSpan),
+   * getOrCreateCounter, etc.) are invoked. When false, those APIs are still
+   * implemented but operate as a legacy fallback that ignores tag metadata and
+   * joins element values into a plain path.
+   *
+   * Currently controlled by --enable-stats-element-scope; future stores can
+   * override this to expose additional element-aware creation logic.
+   */
+  virtual bool useElementScope() const PURE;
+
+  /**
    * Iterate over all stats that need to be flushed to sinks. Note, that implementations can
    * potentially hold on to a mutex that will deadlock if the passed in functors try to create
    * or delete a stat.
@@ -181,6 +194,11 @@ public:
                              const ScopeStatsLimitSettings& limits = {},
                              StatsMatcherSharedPtr matcher = nullptr) {
     return rootScope()->createScope(name, evictable, limits, std::move(matcher));
+  }
+  ScopeSharedPtr createScope(StatElementViewSpan names, bool evictable = false,
+                             const ScopeStatsLimitSettings& limits = {},
+                             StatsMatcherSharedPtr matcher = nullptr) {
+    return rootScope()->createScope(names, evictable, limits, std::move(matcher));
   }
 
   /**

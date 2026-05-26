@@ -117,6 +117,8 @@ envoy_cc_library(
         ":symbol_table_lib",
         "//envoy/stats:stats_interface",
         "//source/common/config:well_known_names",
+        "@abseil-cpp//absl/container:flat_hash_map",
+        "@abseil-cpp//absl/strings",
     ],
 )
 

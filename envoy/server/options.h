@@ -293,6 +293,11 @@ public:
    * responsibility of the caller to handle the duplicates.
    */
   virtual const Stats::TagVector& statsTags() const PURE;
+
+  /**
+   * @return whether to use the element-based stats scope/store implementation.
+   */
+  virtual bool enableStatsElementScope() const PURE;
 };
 
 } // namespace Server

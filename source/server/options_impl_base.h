@@ -104,6 +104,10 @@ public:
 
   void setStatsTags(const Stats::TagVector& stats_tags) { stats_tags_ = stats_tags; }
 
+  void setEnableStatsElementScope(bool enable_stats_element_scope) {
+    enable_stats_element_scope_ = enable_stats_element_scope;
+  }
+
   // Server::Options
   uint64_t baseId() const override { return base_id_; }
   bool useDynamicBaseId() const override { return use_dynamic_base_id_; }
@@ -159,6 +163,7 @@ public:
   uint32_t count() const;
   const std::string& socketPath() const override { return socket_path_; }
   mode_t socketMode() const override { return socket_mode_; }
+  bool enableStatsElementScope() const override { return enable_stats_element_scope_; }
   // implemented by OptionsImpl
   Server::CommandLineOptionsPtr toCommandLineOptions() const override { return nullptr; }
 
@@ -220,6 +225,7 @@ private:
   bool cpuset_threads_{false};
   std::vector<std::string> disabled_extensions_;
   Stats::TagVector stats_tags_;
+  bool enable_stats_element_scope_{false};
   uint32_t count_{0};
 
   // Initialization added here to avoid integration_admin_test failure caused by uninitialized

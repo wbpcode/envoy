@@ -66,7 +66,8 @@ StrippedMainBase::StrippedMainBase(const Server::Options& options,
   case Server::Mode::Serve:
     configureHotRestarter(random_generator);
     tls_ = std::make_unique<ThreadLocal::InstanceImpl>();
-    stats_store_ = std::make_unique<Stats::ThreadLocalStoreImpl>(stats_allocator_);
+    stats_store_ = std::make_unique<Stats::ThreadLocalStoreImpl>(
+        stats_allocator_, options_.enableStatsElementScope());
     break;
   case Server::Mode::Validate:
     restarter_ = std::make_unique<Server::HotRestartNopImpl>();

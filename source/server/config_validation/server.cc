@@ -30,7 +30,7 @@ bool validateConfig(const Options& options,
                     Filesystem::Instance& file_system,
                     const ProcessContextOptRef& process_context) {
   Thread::MutexBasicLockable access_log_lock;
-  Stats::IsolatedStoreImpl stats_store;
+  Stats::IsolatedStoreImpl stats_store(options.enableStatsElementScope());
 
   TRY_ASSERT_MAIN_THREAD {
     Event::RealTimeSystem time_system;

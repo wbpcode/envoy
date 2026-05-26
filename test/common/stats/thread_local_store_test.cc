@@ -11,7 +11,6 @@
 #include "source/common/common/c_smart_ptr.h"
 #include "source/common/event/dispatcher_impl.h"
 #include "source/common/memory/stats.h"
-#include "source/common/runtime/runtime_impl.h"
 #include "source/common/stats/histogram_impl.h"
 #include "source/common/stats/stats_matcher_impl.h"
 #include "source/common/stats/symbol_table.h"
@@ -452,6 +451,350 @@ TEST_F(StatsThreadLocalStoreTest, BasicScope) {
   store_->deliverHistogramToSinks(h2, 200);
   scope1.reset();
   tls_.shutdownThread();
+}
+
+TEST(StatsThreadLocalStoreElementScopeTest, CreateScopedStatsFromElements) {
+  SymbolTableImpl symbol_table;
+  StatNamePool pool(symbol_table);
+  Allocator alloc(symbol_table);
+  ThreadLocalStoreImpl store(alloc, true);
+
+  ScopeSharedPtr scope = store.rootScope()->createScope(StatElementViewVec{
+      {.value = "http"},
+      {.value = "ingress", .name = "http_conn_manager_prefix", .ignore_name = true}});
+
+  Counter& counter =
+      scope->getOrCreateCounter(StatElementVec{{.value = pool.add("downstream_rq_total")}});
+  Gauge& gauge = scope->getOrCreateGauge(
+      StatElementVec{{.value = pool.add("downstream_rq_active")}}, Gauge::ImportMode::Accumulate);
+  TextReadout& text_readout =
+      scope->getOrCreateTextReadout(StatElementVec{{.value = pool.add("state")}});
+
+  EXPECT_EQ("http.ingress.downstream_rq_total", counter.name());
+  EXPECT_EQ("http.downstream_rq_total", counter.tagExtractedName());
+  EXPECT_THAT(counter.tags(), testing::ElementsAre(Tag{"http_conn_manager_prefix", "ingress"}));
+
+  EXPECT_EQ("http.ingress.downstream_rq_active", gauge.name());
+  EXPECT_EQ("http.downstream_rq_active", gauge.tagExtractedName());
+  EXPECT_THAT(gauge.tags(), testing::ElementsAre(Tag{"http_conn_manager_prefix", "ingress"}));
+
+  EXPECT_EQ("http.ingress.state", text_readout.name());
+  EXPECT_EQ("http.state", text_readout.tagExtractedName());
+  EXPECT_THAT(text_readout.tags(),
+              testing::ElementsAre(Tag{"http_conn_manager_prefix", "ingress"}));
+}
+
+// Element-scope histogram path on TLS store. The other test skips Histogram
+// because the TLS histogram pipeline (parent + per-thread replicas) is
+// materially different from the isolated store path.
+TEST(StatsThreadLocalStoreElementScopeTest, GetOrCreateHistogram) {
+  SymbolTableImpl symbol_table;
+  StatNamePool pool(symbol_table);
+  Allocator alloc(symbol_table);
+  ThreadLocalStoreImpl store(alloc, true);
+
+  ScopeSharedPtr scope = store.rootScope()->createScope(StatElementViewVec{
+      {.value = "cluster"}, {.value = "svc", .name = "cluster_name", .ignore_name = true}});
+  Histogram& histogram = scope->getOrCreateHistogram(StatElementVec{{.value = pool.add("latency")}},
+                                                     Histogram::Unit::Milliseconds);
+  EXPECT_EQ("cluster.svc.latency", histogram.name());
+  EXPECT_EQ("cluster.latency", histogram.tagExtractedName());
+  EXPECT_THAT(histogram.tags(), testing::ElementsAre(Tag{"cluster_name", "svc"}));
+}
+
+// Direct-StatName variant of createScope on the TLS element-backed scope.
+TEST(StatsThreadLocalStoreElementScopeTest, CreateScopeStatNameVariant) {
+  SymbolTableImpl symbol_table;
+  StatNamePool pool(symbol_table);
+  Allocator alloc(symbol_table);
+  ThreadLocalStoreImpl store(alloc, true);
+
+  StatElementVec prefix{
+      {.value = pool.add("cluster")},
+      {.value = pool.add("svc"), .name = pool.add("cluster_name"), .ignore_name = true}};
+  ScopeSharedPtr scope = store.rootScope()->createScope(StatElementSpan(prefix));
+  Counter& counter = scope->getOrCreateCounter(StatElementVec{{.value = pool.add("rq_total")}});
+  EXPECT_EQ("cluster.svc.rq_total", counter.name());
+  EXPECT_EQ("cluster.rq_total", counter.tagExtractedName());
+  EXPECT_THAT(counter.tags(), testing::ElementsAre(Tag{"cluster_name", "svc"}));
+}
+
+// Legacy createScope(std::string) on TLS element scope decomposes via
+// populateWellKnownLegacyStatPrefix.
+TEST(StatsThreadLocalStoreElementScopeTest, LegacyCreateScopeStringWellKnownPrefix) {
+  SymbolTableImpl symbol_table;
+  StatNamePool pool(symbol_table);
+  Allocator alloc(symbol_table);
+  ThreadLocalStoreImpl store(alloc, true);
+
+  ScopeSharedPtr scope = store.rootScope()->createScope("cluster.svc.");
+  Counter& counter = scope->counterFromStatNameWithTags(pool.add("rq_total"), absl::nullopt);
+  EXPECT_EQ("cluster.svc.rq_total", counter.name());
+  EXPECT_EQ("cluster.rq_total", counter.tagExtractedName());
+  EXPECT_THAT(counter.tags(), testing::ElementsAre(Tag{"envoy.cluster_name", "svc"}));
+}
+
+TEST(StatsThreadLocalStoreElementScopeTest, LegacyScopeFromStatNameWellKnownPrefix) {
+  SymbolTableImpl symbol_table;
+  StatNamePool pool(symbol_table);
+  Allocator alloc(symbol_table);
+  ThreadLocalStoreImpl store(alloc, true);
+
+  ScopeSharedPtr scope = store.rootScope()->scopeFromStatName(pool.add("http.ingress"));
+  Gauge& gauge = scope->gaugeFromStatNameWithTags(pool.add("rq_active"), absl::nullopt,
+                                                  Gauge::ImportMode::Accumulate);
+  EXPECT_EQ("http.ingress.rq_active", gauge.name());
+  EXPECT_EQ("http.rq_active", gauge.tagExtractedName());
+  EXPECT_THAT(gauge.tags(), testing::ElementsAre(Tag{"envoy.http_conn_manager_prefix", "ingress"}));
+}
+
+// Unknown prefix should fall through to a single opaque path element.
+TEST(StatsThreadLocalStoreElementScopeTest, LegacyCreateScopeStringUnknownPrefix) {
+  SymbolTableImpl symbol_table;
+  StatNamePool pool(symbol_table);
+  Allocator alloc(symbol_table);
+  ThreadLocalStoreImpl store(alloc, true);
+
+  ScopeSharedPtr scope = store.rootScope()->createScope("custom.subsystem.");
+  Counter& counter = scope->counterFromStatNameWithTags(pool.add("events"), absl::nullopt);
+  EXPECT_EQ("custom.subsystem.events", counter.name());
+  EXPECT_EQ("custom.subsystem.events", counter.tagExtractedName());
+  EXPECT_EQ(0u, counter.tags().size());
+}
+
+TEST(StatsThreadLocalStoreElementScopeTest, LegacyFromStatNameWithTagsAttachesTags) {
+  SymbolTableImpl symbol_table;
+  StatNamePool pool(symbol_table);
+  Allocator alloc(symbol_table);
+  ThreadLocalStoreImpl store(alloc, true);
+
+  ScopeSharedPtr scope = store.rootScope()->createScope("cluster.svc.");
+  StatNameTagVector extra_tags{{pool.add("envoy.zone"), pool.add("us-east-1a")}};
+
+  Counter& counter = scope->counterFromStatNameWithTags(pool.add("upstream_rq_total"), extra_tags);
+  EXPECT_EQ("cluster.upstream_rq_total", counter.tagExtractedName());
+  EXPECT_THAT(counter.tags(), testing::UnorderedElementsAre(Tag{"envoy.cluster_name", "svc"},
+                                                            Tag{"envoy.zone", "us-east-1a"}));
+}
+
+// Nested element scopes accumulate the prefix and tags from each level.
+TEST(StatsThreadLocalStoreElementScopeTest, NestedScopesAccumulatePrefix) {
+  SymbolTableImpl symbol_table;
+  StatNamePool pool(symbol_table);
+  Allocator alloc(symbol_table);
+  ThreadLocalStoreImpl store(alloc, true);
+
+  ScopeSharedPtr l1 = store.rootScope()->createScope(StatElementViewVec{
+      {.value = "cluster"}, {.value = "svc", .name = "cluster_name", .ignore_name = true}});
+  ScopeSharedPtr l2 = l1->createScope(StatElementViewVec{{.value = "upstream"}});
+  Counter& counter = l2->getOrCreateCounter(StatElementVec{{.value = pool.add("rq_total")}});
+  EXPECT_EQ("cluster.svc.upstream.rq_total", counter.name());
+  EXPECT_EQ("cluster.upstream.rq_total", counter.tagExtractedName());
+  EXPECT_THAT(counter.tags(), testing::ElementsAre(Tag{"cluster_name", "svc"}));
+}
+
+// useElementScope() reflects the constructor flag on TLS store.
+TEST(StatsThreadLocalStoreElementScopeTest, UseElementScopeAccessor) {
+  SymbolTableImpl symbol_table;
+  Allocator alloc(symbol_table);
+  ThreadLocalStoreImpl element_store(alloc, /*use_element_scope=*/true);
+  EXPECT_TRUE(element_store.useElementScope());
+  element_store.shutdownThreading();
+
+  ThreadLocalStoreImpl legacy_store(alloc, /*use_element_scope=*/false);
+  EXPECT_FALSE(legacy_store.useElementScope());
+  legacy_store.shutdownThreading();
+}
+
+// HiddenAccumulate gauges are never rejected by the scope matcher when going
+// through the element-scope path — mirrors the behaviour of the legacy path.
+TEST(StatsThreadLocalStoreElementScopeTest, GetOrCreateGaugeHiddenBypassesRejectsAll) {
+  SymbolTableImpl symbol_table;
+  StatNamePool pool(symbol_table);
+  Allocator alloc(symbol_table);
+  ThreadLocalStoreImpl store(alloc, /*use_element_scope=*/true);
+
+  // A reject-all scope matcher would normally null out every stat, but
+  // HiddenAccumulate gauges must still be materialized.
+  NiceMock<Server::Configuration::MockServerFactoryContext> ctx;
+  envoy::config::metrics::v3::StatsConfig cfg;
+  cfg.mutable_stats_matcher()->set_reject_all(true);
+  StatsMatcherSharedPtr matcher = std::make_shared<StatsMatcherImpl>(cfg, symbol_table, ctx);
+
+  ScopeSharedPtr scope =
+      store.rootScope()->createScope(StatElementViewVec{{.value = "scope"}}, false, {}, matcher);
+
+  Gauge& accumulate = scope->getOrCreateGauge(StatElementVec{{.value = pool.add("a")}},
+                                              Gauge::ImportMode::Accumulate);
+  EXPECT_EQ("", accumulate.name()); // rejected → null gauge
+
+  Gauge& hidden = scope->getOrCreateGauge(StatElementVec{{.value = pool.add("h")}},
+                                          Gauge::ImportMode::HiddenAccumulate);
+  EXPECT_EQ("scope.h", hidden.name()); // not rejected, allocated normally
+
+  store.shutdownThreading();
+}
+
+// scopeRejectsAll() short-circuits Counter/Histogram/TextReadout element APIs
+// to the null-stat singletons. Covers the fast-path rejection branches that
+// the gauge-only test above does not exercise.
+TEST(StatsThreadLocalStoreElementScopeTest, ElementScopeRejectsAllShortCircuits) {
+  SymbolTableImpl symbol_table;
+  StatNamePool pool(symbol_table);
+  Allocator alloc(symbol_table);
+  ThreadLocalStoreImpl store(alloc, /*use_element_scope=*/true);
+
+  NiceMock<Server::Configuration::MockServerFactoryContext> ctx;
+  envoy::config::metrics::v3::StatsConfig cfg;
+  cfg.mutable_stats_matcher()->set_reject_all(true);
+  StatsMatcherSharedPtr matcher = std::make_shared<StatsMatcherImpl>(cfg, symbol_table, ctx);
+
+  ScopeSharedPtr scope =
+      store.rootScope()->createScope(StatElementViewVec{{.value = "scope"}}, false, {}, matcher);
+
+  Counter& counter = scope->getOrCreateCounter(StatElementVec{{.value = pool.add("c")}});
+  EXPECT_EQ("", counter.name());
+  EXPECT_EQ(&counter, &store.nullCounter());
+
+  Histogram& histogram = scope->getOrCreateHistogram(StatElementVec{{.value = pool.add("h")}},
+                                                     Histogram::Unit::Milliseconds);
+  EXPECT_EQ("", histogram.name());
+
+  TextReadout& tr = scope->getOrCreateTextReadout(StatElementVec{{.value = pool.add("t")}});
+  EXPECT_EQ("", tr.name());
+
+  store.shutdownThreading();
+}
+
+// Element-scope variants of *FromStatNameWithTags for Histogram and TextReadout.
+// These wrappers translate the legacy StatName+tags arguments into element form
+// and dispatch to the element API. Other types (Counter, Gauge) are exercised
+// by LegacyFromStatNameWithTagsAttachesTags above.
+TEST(StatsThreadLocalStoreElementScopeTest, LegacyHistogramAndTextReadoutFromStatNameWithTags) {
+  SymbolTableImpl symbol_table;
+  StatNamePool pool(symbol_table);
+  Allocator alloc(symbol_table);
+  ThreadLocalStoreImpl store(alloc, /*use_element_scope=*/true);
+
+  ScopeSharedPtr scope = store.rootScope()->createScope("cluster.svc.");
+  StatNameTagVector extra_tags{{pool.add("envoy.zone"), pool.add("us-east-1a")}};
+
+  Histogram& histogram = scope->histogramFromStatNameWithTags(
+      pool.add("upstream_rq_time"), extra_tags, Histogram::Unit::Milliseconds);
+  EXPECT_EQ("cluster.upstream_rq_time", histogram.tagExtractedName());
+  EXPECT_THAT(histogram.tags(), testing::UnorderedElementsAre(Tag{"envoy.cluster_name", "svc"},
+                                                              Tag{"envoy.zone", "us-east-1a"}));
+
+  TextReadout& text_readout =
+      scope->textReadoutFromStatNameWithTags(pool.add("control_plane.identifier"), extra_tags);
+  EXPECT_EQ("cluster.control_plane.identifier", text_readout.tagExtractedName());
+  EXPECT_THAT(text_readout.tags(), testing::UnorderedElementsAre(Tag{"envoy.cluster_name", "svc"},
+                                                                 Tag{"envoy.zone", "us-east-1a"}));
+
+  store.shutdownThreading();
+}
+
+// Child element scope inherits the parent element scope's matcher; an explicit
+// matcher on the child overrides the inherited one.
+TEST(StatsThreadLocalStoreElementScopeTest, ChildElementScopeInheritsAndOverridesMatcher) {
+  SymbolTableImpl symbol_table;
+  StatNamePool pool(symbol_table);
+  Allocator alloc(symbol_table);
+  ThreadLocalStoreImpl store(alloc, /*use_element_scope=*/true);
+
+  NiceMock<Server::Configuration::MockServerFactoryContext> ctx;
+  auto make_prefix_matcher = [&](absl::string_view prefix) -> StatsMatcherSharedPtr {
+    envoy::config::metrics::v3::StatsConfig cfg;
+    cfg.mutable_stats_matcher()->mutable_exclusion_list()->add_patterns()->set_prefix(
+        std::string(prefix));
+    return std::make_shared<StatsMatcherImpl>(cfg, symbol_table, ctx);
+  };
+
+  // Parent matcher rejects full names beginning with "parent.child.rejected_by_parent."
+  ScopeSharedPtr parent =
+      store.rootScope()->createScope(StatElementViewVec{{.value = "parent"}}, false, {},
+                                     make_prefix_matcher("parent.child.rejected_by_parent."));
+
+  // Inheritance: child with no matcher uses parent's. Stats in
+  // "parent.child.rejected_by_parent." are dropped.
+  ScopeSharedPtr child = parent->createScope(StatElementViewVec{{.value = "child"}});
+  Counter& inherited_rejected =
+      child->getOrCreateCounter(StatElementVec{{.value = pool.add("rejected_by_parent.x")}});
+  EXPECT_EQ("", inherited_rejected.name());
+  Counter& inherited_accepted =
+      child->getOrCreateCounter(StatElementVec{{.value = pool.add("ok.x")}});
+  EXPECT_EQ("parent.child.ok.x", inherited_accepted.name());
+
+  // Override: an explicit matcher on the child replaces the parent's.
+  ScopeSharedPtr override_child =
+      parent->createScope(StatElementViewVec{{.value = "child2"}}, false, {},
+                          make_prefix_matcher("parent.child2.rejected_by_child."));
+  Counter& parent_rule_inactive = override_child->getOrCreateCounter(
+      StatElementVec{{.value = pool.add("rejected_by_parent.x")}});
+  EXPECT_EQ("parent.child2.rejected_by_parent.x", parent_rule_inactive.name());
+  Counter& child_rule_active = override_child->getOrCreateCounter(
+      StatElementVec{{.value = pool.add("rejected_by_child.x")}});
+  EXPECT_EQ("", child_rule_active.name());
+
+  store.shutdownThreading();
+}
+
+// On a legacy (non-element) TLS scope:
+//   - getOrCreate* uses the (StatName, StatElementSpan, SymbolTable) joiner.
+//     `ignore_name=true` elements are treated as plain path tokens (no
+//     explicit tag; the TagProducer regex pipeline runs and may extract a
+//     tag from the resulting name). `ignore_name=false` elements ARE honored
+//     as explicit tags.
+//   - createScope still drops tag metadata.
+TEST(StatsThreadLocalStoreElementScopeTest, LegacyTlsScopeJoinsElementValues) {
+  SymbolTableImpl symbol_table;
+  StatNamePool pool(symbol_table);
+  Allocator alloc(symbol_table);
+  ThreadLocalStoreImpl store(alloc, /*use_element_scope=*/false);
+  ScopeSharedPtr scope = store.rootScope();
+
+  // Multiple `value`-only elements are joined with '.'.
+  const StatElementVec elements{{.value = pool.add("foo")}, {.value = pool.add("bar")}};
+  EXPECT_EQ("foo.bar", scope->getOrCreateCounter(elements).name());
+  EXPECT_EQ("foo.bar", scope->getOrCreateGauge(elements, Gauge::ImportMode::Accumulate).name());
+  EXPECT_EQ("foo.bar", scope->getOrCreateHistogram(elements, Histogram::Unit::Unspecified).name());
+  EXPECT_EQ("foo.bar", scope->getOrCreateTextReadout(elements).name());
+
+  // ignore_name=true element: treated as a plain path token. effective_tags_
+  // is not populated; the path goes through the TagProducer's regex
+  // extractors. "foo.v1" does not match any well-known pattern, so the
+  // resulting counter has no tags. The key property under test: the joiner
+  // didn't short-circuit regex extraction.
+  const StatElementVec well_known_tag_elements{
+      {.value = pool.add("foo")},
+      {.value = pool.add("v1"), .name = pool.add("version"), .ignore_name = true},
+  };
+  Counter& well_known_counter = scope->getOrCreateCounter(well_known_tag_elements);
+  EXPECT_EQ("foo.v1", well_known_counter.name());
+  EXPECT_EQ("foo.v1", well_known_counter.tagExtractedName());
+  EXPECT_TRUE(well_known_counter.tags().empty());
+
+  // ignore_name=false element: explicit caller-declared tag. effective_tags_
+  // is populated, downstream code uses it verbatim, regex is skipped.
+  const StatElementVec explicit_tag_elements{
+      {.value = pool.add("rq_total")},
+      {.value = pool.add("us-east-1a"), .name = pool.add("envoy.zone")},
+  };
+  Counter& explicit_tag_counter = scope->getOrCreateCounter(explicit_tag_elements);
+  EXPECT_EQ("rq_total.envoy.zone.us-east-1a", explicit_tag_counter.name());
+  EXPECT_EQ("rq_total", explicit_tag_counter.tagExtractedName());
+  EXPECT_THAT(explicit_tag_counter.tags(), testing::ElementsAre(Tag{"envoy.zone", "us-east-1a"}));
+
+  // createScope still drops tag metadata. The resulting scope's prefix is the
+  // joined `value`s only, and child stats see no scope-level tags.
+  ScopeSharedPtr stat_name_scope = scope->createScope(StatElementSpan(elements));
+  EXPECT_EQ("foo.bar.x", stat_name_scope->counterFromString("x").name());
+
+  StatElementViewVec view_elements{{.value = "foo"}, {.value = "bar"}};
+  ScopeSharedPtr view_scope = scope->createScope(StatElementViewSpan(view_elements));
+  EXPECT_EQ("foo.bar.y", view_scope->counterFromString("y").name());
+
+  store.shutdownThreading();
 }
 
 TEST_F(StatsThreadLocalStoreTest, HistogramScopeOverlap) {

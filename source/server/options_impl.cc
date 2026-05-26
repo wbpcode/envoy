@@ -180,6 +180,9 @@ OptionsImpl::OptionsImpl(std::vector<std::string> args,
       "characters are permitted except for '.' (dot). This flag can be repeated multiple times to "
       "set multiple universal tags. Multiple values for the same tag name are not allowed.",
       false, "string", cmd);
+  TCLAP::SwitchArg enable_stats_element_scope(
+      "", "enable-stats-element-scope", "Enable the element-based stats scope/store implementation",
+      cmd, false);
 
   cmd.setExceptionHandling(false);
 
@@ -205,6 +208,7 @@ OptionsImpl::OptionsImpl(std::vector<std::string> args,
   hot_restart_disabled_ = disable_hot_restart.getValue();
   mutex_tracing_enabled_ = enable_mutex_tracing.getValue();
   core_dump_enabled_ = enable_core_dump.getValue();
+  enable_stats_element_scope_ = enable_stats_element_scope.getValue();
 
   cpuset_threads_ = cpuset_threads.getValue();
 
@@ -458,6 +462,7 @@ Server::CommandLineOptionsPtr OptionsImpl::toCommandLineOptions() const {
   for (const auto& tag : statsTags()) {
     command_line_options->add_stats_tag(fmt::format("{}:{}", tag.name_, tag.value_));
   }
+  command_line_options->set_enable_stats_element_scope(enableStatsElementScope());
   return command_line_options;
 }
 

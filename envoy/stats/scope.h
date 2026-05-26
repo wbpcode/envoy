@@ -118,6 +118,34 @@ public:
                                            StatsMatcherSharedPtr matcher = nullptr) PURE;
 
   /**
+   * Allocate a new scope using structured stat elements.
+   *
+   * When the owning Store has useElementScope() == true (gated on
+   * --enable-stats-element-scope), the implementation honors per-element tag
+   * metadata (`name`, `ignore_name`) and produces a fully tag-extracted scope.
+   * On any other Scope implementation this is a legacy fallback: tag metadata
+   * is ignored, only each element's `value` contributes, and the values are
+   * joined to form the scope prefix.
+   *
+   * NOTE: The implementation should correctly handle overlapping scopes that
+   * point to the same reference counted backing stats. This allows a new scope
+   * to be gracefully swapped in while an old scope with the same name is being
+   * destroyed.
+   *
+   * @param names stat elements supplying the scope namespace prefix and optionally tags.
+   * @param evictable whether unused metrics can be deleted from the scope caches. This requires
+   * that the metrics are not stored by reference.
+   * @param limits metric limits for counters, gauges and histograms allowed in this scope.
+   * @param matcher optional per-scope stats matcher; replaces the store-level matcher when set.
+   */
+  virtual ScopeSharedPtr createScope(StatElementSpan names, bool evictable = false,
+                                     const ScopeStatsLimitSettings& limits = {},
+                                     StatsMatcherSharedPtr matcher = nullptr) PURE;
+  virtual ScopeSharedPtr createScope(StatElementViewSpan names, bool evictable = false,
+                                     const ScopeStatsLimitSettings& limits = {},
+                                     StatsMatcherSharedPtr matcher = nullptr) PURE;
+
+  /**
    * Creates a Counter from the stat name. Tag extraction will be performed on the name.
    * @param name The name of the stat, obtained from the SymbolTable.
    * @return a counter within the scope's namespace.
@@ -134,6 +162,19 @@ public:
    */
   virtual Counter& counterFromStatNameWithTags(const StatName& name,
                                                StatNameTagVectorOptConstRef tags) PURE;
+
+  /**
+   * Creates or retrieves a Counter from structured stat elements. Per-element
+   * tag metadata (`name`, `ignore_name`) is honored on every Scope
+   * implementation — legacy scopes combine their flat StatName prefix with the
+   * tagged elements via the (StatName, StatElementSpan) TagStatNameJoiner
+   * constructor in a single pass, so the resulting Counter carries the tags
+   * declared by the caller.
+   *
+   * @param names stat elements supplying the stat name and optionally tags.
+   * @return a counter within the scope's namespace.
+   */
+  virtual Counter& getOrCreateCounter(StatElementSpan names) PURE;
 
   /**
    * TODO(#6667): this variant is deprecated: use counterFromStatName.
@@ -162,6 +203,16 @@ public:
    */
   virtual Gauge& gaugeFromStatNameWithTags(const StatName& name, StatNameTagVectorOptConstRef tags,
                                            Gauge::ImportMode import_mode) PURE;
+
+  /**
+   * Creates or retrieves a Gauge from structured stat elements. Tag metadata
+   * on elements is honored on every Scope implementation; see getOrCreateCounter.
+   *
+   * @param names stat elements supplying the stat name and optionally tags.
+   * @param import_mode Whether hot-restart should accumulate this value.
+   * @return a gauge within the scope's namespace.
+   */
+  virtual Gauge& getOrCreateGauge(StatElementSpan names, Gauge::ImportMode import_mode) PURE;
 
   /**
    * TODO(#6667): this variant is deprecated: use gaugeFromStatName.
@@ -194,6 +245,16 @@ public:
                                                    Histogram::Unit unit) PURE;
 
   /**
+   * Creates or retrieves a Histogram from structured stat elements. Tag metadata
+   * on elements is honored on every Scope implementation; see getOrCreateCounter.
+   *
+   * @param names stat elements supplying the stat name and optionally tags.
+   * @param unit The unit of measurement.
+   * @return a histogram within the scope's namespace with a particular value type.
+   */
+  virtual Histogram& getOrCreateHistogram(StatElementSpan names, Histogram::Unit unit) PURE;
+
+  /**
    * TODO(#6667): this variant is deprecated: use histogramFromStatName.
    * @param name The name, expressed as a string.
    * @param unit The unit of measurement.
@@ -219,6 +280,15 @@ public:
    */
   virtual TextReadout& textReadoutFromStatNameWithTags(const StatName& name,
                                                        StatNameTagVectorOptConstRef tags) PURE;
+
+  /**
+   * Creates or retrieves a TextReadout from structured stat elements. Tag metadata
+   * on elements is honored on every Scope implementation; see getOrCreateCounter.
+   *
+   * @param names stat elements supplying the stat name and optionally tags.
+   * @return a text readout within the scope's namespace.
+   */
+  virtual TextReadout& getOrCreateTextReadout(StatElementSpan names) PURE;
 
   /**
    * TODO(#6667): this variant is deprecated: use textReadoutFromStatName.

@@ -9,6 +9,7 @@
 #include "source/common/stats/stats_matcher_impl.h"
 
 #include "test/mocks/server/server_factory_context.h"
+#include "test/test_common/utility.h"
 
 #include "absl/strings/str_cat.h"
 #include "absl/strings/string_view.h"
@@ -258,6 +259,151 @@ TEST_F(StatsIsolatedStoreImplTest, TextReadoutWithTag) {
   EXPECT_EQ(&b1, &scope_->textReadoutFromStatNameWithTags(base, tags));
 }
 
+TEST(StatsIsolatedStoreElementScopeTest, CreateScopedStatsFromElements) {
+  SymbolTableImpl symbol_table;
+  StatNamePool pool(symbol_table);
+  IsolatedStoreImpl store(symbol_table, true);
+
+  ScopeSharedPtr scope = store.rootScope()->createScope(StatElementViewVec{
+      {.value = "cluster"}, {.value = "service", .name = "cluster_name", .ignore_name = true}});
+
+  Counter& counter = scope->getOrCreateCounter(StatElementVec{{.value = pool.add("rq_total")}});
+  Gauge& gauge = scope->getOrCreateGauge(StatElementVec{{.value = pool.add("rq_active")}},
+                                         Gauge::ImportMode::Accumulate);
+  Histogram& histogram = scope->getOrCreateHistogram(StatElementVec{{.value = pool.add("latency")}},
+                                                     Histogram::Unit::Milliseconds);
+  TextReadout& text_readout =
+      scope->getOrCreateTextReadout(StatElementVec{{.value = pool.add("state")}});
+
+  EXPECT_EQ("cluster.service.rq_total", counter.name());
+  EXPECT_EQ("cluster.rq_total", counter.tagExtractedName());
+  EXPECT_THAT(counter.tags(), testing::ElementsAre(Tag{"cluster_name", "service"}));
+
+  EXPECT_EQ("cluster.service.rq_active", gauge.name());
+  EXPECT_EQ("cluster.rq_active", gauge.tagExtractedName());
+  EXPECT_THAT(gauge.tags(), testing::ElementsAre(Tag{"cluster_name", "service"}));
+
+  EXPECT_EQ("cluster.service.latency", histogram.name());
+  EXPECT_EQ("cluster.latency", histogram.tagExtractedName());
+  EXPECT_THAT(histogram.tags(), testing::ElementsAre(Tag{"cluster_name", "service"}));
+
+  EXPECT_EQ("cluster.service.state", text_readout.name());
+  EXPECT_EQ("cluster.state", text_readout.tagExtractedName());
+  EXPECT_THAT(text_readout.tags(), testing::ElementsAre(Tag{"cluster_name", "service"}));
+}
+
+// Direct-StatName variant of createScope on an element-backed scope. Mirrors
+// the StatElementViewSpan path tested above but exercises populatePoolAndElementVec's
+// StatElement specialization.
+TEST(StatsIsolatedStoreElementScopeTest, CreateScopeStatNameVariant) {
+  SymbolTableImpl symbol_table;
+  StatNamePool pool(symbol_table);
+  IsolatedStoreImpl store(symbol_table, true);
+
+  StatElementVec prefix{
+      {.value = pool.add("cluster")},
+      {.value = pool.add("service"), .name = pool.add("cluster_name"), .ignore_name = true}};
+  ScopeSharedPtr scope = store.rootScope()->createScope(StatElementSpan(prefix));
+
+  Counter& counter = scope->getOrCreateCounter(StatElementVec{{.value = pool.add("rq_total")}});
+  EXPECT_EQ("cluster.service.rq_total", counter.name());
+  EXPECT_EQ("cluster.rq_total", counter.tagExtractedName());
+  EXPECT_THAT(counter.tags(), testing::ElementsAre(Tag{"cluster_name", "service"}));
+}
+
+// Legacy string-based createScope on an element-backed scope must produce the
+// same name/tag layout as the direct element API for well-known prefixes.
+TEST(StatsIsolatedStoreElementScopeTest, LegacyCreateScopeStringWellKnownPrefix) {
+  SymbolTableImpl symbol_table;
+  StatNamePool pool(symbol_table);
+  IsolatedStoreImpl store(symbol_table, true);
+
+  ScopeSharedPtr scope = store.rootScope()->createScope("cluster.service.");
+  Counter& counter = scope->counterFromStatNameWithTags(pool.add("rq_total"), absl::nullopt);
+  EXPECT_EQ("cluster.service.rq_total", counter.name());
+  EXPECT_EQ("cluster.rq_total", counter.tagExtractedName());
+  EXPECT_THAT(counter.tags(), testing::ElementsAre(Tag{"envoy.cluster_name", "service"}));
+}
+
+// Legacy StatName-based scopeFromStatName must walk through the same legacy
+// prefix decomposition.
+TEST(StatsIsolatedStoreElementScopeTest, LegacyScopeFromStatNameWellKnownPrefix) {
+  SymbolTableImpl symbol_table;
+  StatNamePool pool(symbol_table);
+  IsolatedStoreImpl store(symbol_table, true);
+
+  ScopeSharedPtr scope = store.rootScope()->scopeFromStatName(pool.add("http.ingress"));
+  Gauge& gauge = scope->gaugeFromStatNameWithTags(pool.add("rq_active"), absl::nullopt,
+                                                  Gauge::ImportMode::Accumulate);
+  EXPECT_EQ("http.ingress.rq_active", gauge.name());
+  EXPECT_EQ("http.rq_active", gauge.tagExtractedName());
+  EXPECT_THAT(gauge.tags(), testing::ElementsAre(Tag{"envoy.http_conn_manager_prefix", "ingress"}));
+}
+
+// Legacy createScope with a prefix that has no well-known mapping should fall
+// through to a single opaque path element with no tag extraction.
+TEST(StatsIsolatedStoreElementScopeTest, LegacyCreateScopeStringUnknownPrefix) {
+  SymbolTableImpl symbol_table;
+  StatNamePool pool(symbol_table);
+  IsolatedStoreImpl store(symbol_table, true);
+
+  ScopeSharedPtr scope = store.rootScope()->createScope("custom.subsystem.");
+  Counter& counter = scope->counterFromStatNameWithTags(pool.add("events"), absl::nullopt);
+  EXPECT_EQ("custom.subsystem.events", counter.name());
+  EXPECT_EQ("custom.subsystem.events", counter.tagExtractedName());
+  EXPECT_EQ(0u, counter.tags().size());
+}
+
+// Legacy *FromStatNameWithTags variants on element-backed scope translate
+// caller-supplied tags into element form.
+TEST(StatsIsolatedStoreElementScopeTest, LegacyFromStatNameWithTagsAttachesTags) {
+  SymbolTableImpl symbol_table;
+  StatNamePool pool(symbol_table);
+  IsolatedStoreImpl store(symbol_table, true);
+
+  ScopeSharedPtr scope = store.rootScope()->createScope("cluster.svc.");
+  StatNameTagVector extra_tags{{pool.add("envoy.zone"), pool.add("us-east-1a")}};
+
+  Counter& counter = scope->counterFromStatNameWithTags(pool.add("upstream_rq_total"), extra_tags);
+  EXPECT_EQ("cluster.svc.upstream_rq_total.envoy.zone.us-east-1a", counter.name());
+  EXPECT_EQ("cluster.upstream_rq_total", counter.tagExtractedName());
+  EXPECT_THAT(counter.tags(), testing::UnorderedElementsAre(Tag{"envoy.cluster_name", "svc"},
+                                                            Tag{"envoy.zone", "us-east-1a"}));
+
+  Gauge& gauge = scope->gaugeFromStatNameWithTags(pool.add("upstream_rq_active"), extra_tags,
+                                                  Gauge::ImportMode::Accumulate);
+  EXPECT_EQ("cluster.upstream_rq_active", gauge.tagExtractedName());
+  EXPECT_THAT(gauge.tags(), testing::UnorderedElementsAre(Tag{"envoy.cluster_name", "svc"},
+                                                          Tag{"envoy.zone", "us-east-1a"}));
+
+  Histogram& histogram = scope->histogramFromStatNameWithTags(
+      pool.add("upstream_rq_time"), extra_tags, Histogram::Unit::Milliseconds);
+  EXPECT_EQ("cluster.upstream_rq_time", histogram.tagExtractedName());
+  EXPECT_THAT(histogram.tags(), testing::UnorderedElementsAre(Tag{"envoy.cluster_name", "svc"},
+                                                              Tag{"envoy.zone", "us-east-1a"}));
+
+  TextReadout& text_readout =
+      scope->textReadoutFromStatNameWithTags(pool.add("control_plane.identifier"), extra_tags);
+  EXPECT_EQ("cluster.control_plane.identifier", text_readout.tagExtractedName());
+  EXPECT_THAT(text_readout.tags(), testing::UnorderedElementsAre(Tag{"envoy.cluster_name", "svc"},
+                                                                 Tag{"envoy.zone", "us-east-1a"}));
+}
+
+// Nested element scopes must accumulate the prefix and tags from each level.
+TEST(StatsIsolatedStoreElementScopeTest, NestedScopesAccumulatePrefix) {
+  SymbolTableImpl symbol_table;
+  StatNamePool pool(symbol_table);
+  IsolatedStoreImpl store(symbol_table, true);
+
+  ScopeSharedPtr l1 = store.rootScope()->createScope(StatElementViewVec{
+      {.value = "cluster"}, {.value = "svc", .name = "cluster_name", .ignore_name = true}});
+  ScopeSharedPtr l2 = l1->createScope(StatElementViewVec{{.value = "upstream"}});
+  Counter& counter = l2->getOrCreateCounter(StatElementVec{{.value = pool.add("rq_total")}});
+  EXPECT_EQ("cluster.svc.upstream.rq_total", counter.name());
+  EXPECT_EQ("cluster.upstream.rq_total", counter.tagExtractedName());
+  EXPECT_THAT(counter.tags(), testing::ElementsAre(Tag{"cluster_name", "svc"}));
+}
+
 TEST_F(StatsIsolatedStoreImplTest, HistogramWithTag) {
   StatNameTagVector tags{{makeStatName("tag1"), makeStatName("tag1Value")}};
   StatNameTagVector tags2{{makeStatName("tag1"), makeStatName("tag1Value2")}};
@@ -498,6 +644,168 @@ TEST_F(IsolatedStoreScopeMatcherTest, ChildScopeInheritsMatcher) {
 
   TextReadout& child_tr_rejected = child_scope->textReadoutFromString("qux");
   EXPECT_EQ("", child_tr_rejected.name());
+}
+
+// useElementScope() reflects the constructor flag and gates rootScope's type.
+TEST(StatsIsolatedStoreElementScopeTest, UseElementScopeAccessor) {
+  SymbolTableImpl symbol_table;
+  IsolatedStoreImpl element_store(symbol_table, /*use_element_scope=*/true);
+  EXPECT_TRUE(element_store.useElementScope());
+
+  IsolatedStoreImpl legacy_store(symbol_table, /*use_element_scope=*/false);
+  EXPECT_FALSE(legacy_store.useElementScope());
+
+  // Default ctor (the single-arg form) defaults to legacy.
+  IsolatedStoreImpl default_store(symbol_table);
+  EXPECT_FALSE(default_store.useElementScope());
+}
+
+// On a legacy (non-element) scope:
+//   - getOrCreate* uses the (StatName, StatElementSpan, SymbolTable) joiner.
+//     `ignore_name=true` elements are treated as PLAIN path tokens (no
+//     explicit tag) so the legacy TagProducer pipeline still gets a chance to
+//     regex-extract them. `ignore_name=false` elements ARE honored as
+//     explicit tags.
+//   - createScope drops tag metadata entirely, because scopes can only store
+//     a flat StatName prefix.
+TEST(StatsIsolatedStoreElementScopeTest, LegacyScopeJoinsElementValues) {
+  SymbolTableImpl symbol_table;
+  StatNamePool pool(symbol_table);
+  IsolatedStoreImpl store(symbol_table, /*use_element_scope=*/false);
+  ScopeSharedPtr scope = store.rootScope();
+
+  // Multiple `value`-only elements are joined with '.'.
+  const StatElementVec elements{{.value = pool.add("foo")}, {.value = pool.add("bar")}};
+  EXPECT_EQ("foo.bar", scope->getOrCreateCounter(elements).name());
+  EXPECT_EQ("foo.bar", scope->getOrCreateGauge(elements, Gauge::ImportMode::Accumulate).name());
+  EXPECT_EQ("foo.bar", scope->getOrCreateHistogram(elements, Histogram::Unit::Unspecified).name());
+  EXPECT_EQ("foo.bar", scope->getOrCreateTextReadout(elements).name());
+
+  // ignore_name=true element: treated as a plain path token on a legacy
+  // scope. effective_tags_ is NOT populated; downstream regex extraction is
+  // expected to recognize the tag (the IsolatedStore here has no TagProducer
+  // configured, so the resulting counter simply has no tags).
+  const StatElementVec well_known_tag_elements{
+      {.value = pool.add("foo")},
+      {.value = pool.add("v1"), .name = pool.add("version"), .ignore_name = true},
+  };
+  Counter& well_known_counter = scope->getOrCreateCounter(well_known_tag_elements);
+  EXPECT_EQ("foo.v1", well_known_counter.name());
+  EXPECT_EQ("foo.v1", well_known_counter.tagExtractedName());
+  EXPECT_TRUE(well_known_counter.tags().empty());
+
+  // ignore_name=false element: explicit caller-declared tag. The joiner
+  // records it in effective_tags_; downstream code uses it verbatim and
+  // skips regex extraction.
+  const StatElementVec explicit_tag_elements{
+      {.value = pool.add("rq_total")},
+      {.value = pool.add("us-east-1a"), .name = pool.add("envoy.zone")},
+  };
+  Counter& explicit_tag_counter = scope->getOrCreateCounter(explicit_tag_elements);
+  EXPECT_EQ("rq_total.envoy.zone.us-east-1a", explicit_tag_counter.name());
+  EXPECT_EQ("rq_total", explicit_tag_counter.tagExtractedName());
+  EXPECT_THAT(explicit_tag_counter.tags(), testing::ElementsAre(Tag{"envoy.zone", "us-east-1a"}));
+
+  // createScope still drops tag metadata. The resulting scope's prefix is the
+  // joined `value`s only, and child stats see no scope-level tags.
+  ScopeSharedPtr stat_name_scope = scope->createScope(StatElementSpan(elements));
+  EXPECT_EQ("foo.bar.x", stat_name_scope->counterFromString("x").name());
+
+  StatElementViewVec view_elements{{.value = "foo"}, {.value = "bar"}};
+  ScopeSharedPtr view_scope = scope->createScope(StatElementViewSpan(view_elements));
+  EXPECT_EQ("foo.bar.y", view_scope->counterFromString("y").name());
+}
+
+// A scope-level matcher on an element-backed scope must reject through the
+// element-API path (different code from the legacy counterFromStatNameWithTags
+// path tested elsewhere).
+TEST_F(IsolatedStoreScopeMatcherTest, ElementScopeMatcherRejectsViaElementApi) {
+  SymbolTableImpl element_symbol_table;
+  IsolatedStoreImpl element_store(element_symbol_table, /*use_element_scope=*/true);
+  StatNamePool element_pool(element_symbol_table);
+
+  // Matcher rejects exactly "scope.rejected.foo".
+  envoy::config::metrics::v3::StatsConfig cfg;
+  cfg.mutable_stats_matcher()->mutable_exclusion_list()->add_patterns()->set_prefix(
+      "scope.rejected.");
+  StatsMatcherSharedPtr scope_matcher =
+      std::make_shared<StatsMatcherImpl>(cfg, element_symbol_table, context_);
+
+  ScopeSharedPtr scope = element_store.rootScope()->createScope(
+      StatElementViewVec{{.value = "scope"}}, false, {}, scope_matcher);
+
+  // Rejected via the element API.
+  Counter& rejected =
+      scope->getOrCreateCounter(StatElementVec{{.value = element_pool.add("rejected.foo")}});
+  EXPECT_EQ("", rejected.name());
+
+  // Accepted via the element API.
+  Counter& accepted =
+      scope->getOrCreateCounter(StatElementVec{{.value = element_pool.add("accepted.foo")}});
+  EXPECT_EQ("scope.accepted.foo", accepted.name());
+
+  // The Gauge path returns the null gauge via an explicit `if (!gauge.has_value())`
+  // branch (distinct from Counter's `.value_or` path).
+  Gauge& rejected_gauge = scope->getOrCreateGauge(
+      StatElementVec{{.value = element_pool.add("rejected.foo")}}, Gauge::ImportMode::Accumulate);
+  EXPECT_EQ("", rejected_gauge.name());
+  Gauge& accepted_gauge = scope->getOrCreateGauge(
+      StatElementVec{{.value = element_pool.add("accepted.foo")}}, Gauge::ImportMode::Accumulate);
+  EXPECT_EQ("scope.accepted.foo", accepted_gauge.name());
+
+  // Histogram and TextReadout rejection paths use `.value_or(null_*)` and
+  // round out the per-stat-type coverage on the element API.
+  Histogram& rejected_hist = scope->getOrCreateHistogram(
+      StatElementVec{{.value = element_pool.add("rejected.foo")}}, Histogram::Unit::Milliseconds);
+  EXPECT_EQ("", rejected_hist.name());
+  TextReadout& rejected_tr =
+      scope->getOrCreateTextReadout(StatElementVec{{.value = element_pool.add("rejected.foo")}});
+  EXPECT_EQ("", rejected_tr.name());
+}
+
+// Parallels ChildElementScopeInheritsAndOverridesMatcher from
+// thread_local_store_test.cc: a child element scope inherits its parent's
+// matcher when no explicit matcher is supplied, and an explicit child matcher
+// overrides the inherited one.
+TEST(StatsIsolatedStoreElementScopeTest, ElementScopeMatcherInheritsAndOverrides) {
+  NiceMock<Server::Configuration::MockServerFactoryContext> context;
+  SymbolTableImpl symbol_table;
+  StatNamePool pool(symbol_table);
+  IsolatedStoreImpl store(symbol_table, /*use_element_scope=*/true);
+
+  auto make_prefix_matcher = [&](absl::string_view prefix) -> StatsMatcherSharedPtr {
+    envoy::config::metrics::v3::StatsConfig cfg;
+    cfg.mutable_stats_matcher()->mutable_exclusion_list()->add_patterns()->set_prefix(
+        std::string(prefix));
+    return std::make_shared<StatsMatcherImpl>(cfg, symbol_table, context);
+  };
+
+  // Parent matcher rejects names beginning with "parent.child.rejected_by_parent."
+  ScopeSharedPtr parent =
+      store.rootScope()->createScope(StatElementViewVec{{.value = "parent"}}, false, {},
+                                     make_prefix_matcher("parent.child.rejected_by_parent."));
+
+  // Inheritance: child without an explicit matcher uses parent's matcher.
+  ScopeSharedPtr child = parent->createScope(StatElementViewVec{{.value = "child"}});
+  Counter& inherited_rejected =
+      child->getOrCreateCounter(StatElementVec{{.value = pool.add("rejected_by_parent.x")}});
+  EXPECT_EQ("", inherited_rejected.name());
+  Counter& inherited_accepted =
+      child->getOrCreateCounter(StatElementVec{{.value = pool.add("ok.x")}});
+  EXPECT_EQ("parent.child.ok.x", inherited_accepted.name());
+
+  // Override: an explicit matcher on the child replaces the parent's matcher.
+  ScopeSharedPtr override_child =
+      parent->createScope(StatElementViewVec{{.value = "child2"}}, false, {},
+                          make_prefix_matcher("parent.child2.rejected_by_child."));
+  // Parent's rule no longer applies on this branch.
+  Counter& parent_rule_inactive = override_child->getOrCreateCounter(
+      StatElementVec{{.value = pool.add("rejected_by_parent.x")}});
+  EXPECT_EQ("parent.child2.rejected_by_parent.x", parent_rule_inactive.name());
+  // Child's own rule does apply.
+  Counter& child_rule_active = override_child->getOrCreateCounter(
+      StatElementVec{{.value = pool.add("rejected_by_child.x")}});
+  EXPECT_EQ("", child_rule_active.name());
 }
 
 // Tests that an explicit matcher on a child scope overrides the inherited parent matcher.

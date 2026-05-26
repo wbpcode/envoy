@@ -94,10 +94,31 @@ public:
         store_);
   }
 
+  ScopeSharedPtr createScope(StatElementSpan names, bool evictable,
+                             const ScopeStatsLimitSettings& limits,
+                             StatsMatcherSharedPtr matcher = nullptr) override {
+    Thread::LockGuard lock(lock_);
+    return std::make_shared<TestScopeWrapper>(
+        lock_, wrapped_scope_->createScope(names, evictable, limits, std::move(matcher)), store_);
+  }
+
+  ScopeSharedPtr createScope(StatElementViewSpan names, bool evictable,
+                             const ScopeStatsLimitSettings& limits,
+                             StatsMatcherSharedPtr matcher = nullptr) override {
+    Thread::LockGuard lock(lock_);
+    return std::make_shared<TestScopeWrapper>(
+        lock_, wrapped_scope_->createScope(names, evictable, limits, std::move(matcher)), store_);
+  }
+
   Counter& counterFromStatNameWithTags(const StatName& name,
                                        StatNameTagVectorOptConstRef tags) override {
     Thread::LockGuard lock(lock_);
     return wrapped_scope_->counterFromStatNameWithTags(name, tags);
+  }
+
+  Counter& getOrCreateCounter(StatElementSpan names) override {
+    Thread::LockGuard lock(lock_);
+    return wrapped_scope_->getOrCreateCounter(names);
   }
 
   Gauge& gaugeFromStatNameWithTags(const StatName& name, StatNameTagVectorOptConstRef tags,
@@ -106,16 +127,31 @@ public:
     return wrapped_scope_->gaugeFromStatNameWithTags(name, tags, import_mode);
   }
 
+  Gauge& getOrCreateGauge(StatElementSpan names, Gauge::ImportMode import_mode) override {
+    Thread::LockGuard lock(lock_);
+    return wrapped_scope_->getOrCreateGauge(names, import_mode);
+  }
+
   Histogram& histogramFromStatNameWithTags(const StatName& name, StatNameTagVectorOptConstRef tags,
                                            Histogram::Unit unit) override {
     Thread::LockGuard lock(lock_);
     return wrapped_scope_->histogramFromStatNameWithTags(name, tags, unit);
   }
 
+  Histogram& getOrCreateHistogram(StatElementSpan names, Histogram::Unit unit) override {
+    Thread::LockGuard lock(lock_);
+    return wrapped_scope_->getOrCreateHistogram(names, unit);
+  }
+
   TextReadout& textReadoutFromStatNameWithTags(const StatName& name,
                                                StatNameTagVectorOptConstRef tags) override {
     Thread::LockGuard lock(lock_);
     return wrapped_scope_->textReadoutFromStatNameWithTags(name, tags);
+  }
+
+  TextReadout& getOrCreateTextReadout(StatElementSpan names) override {
+    Thread::LockGuard lock(lock_);
+    return wrapped_scope_->getOrCreateTextReadout(names);
   }
 
   Counter& counterFromString(const std::string& name) override {
@@ -348,6 +384,7 @@ public:
   }
   const SymbolTable& constSymbolTable() const override { return store_.constSymbolTable(); }
   SymbolTable& symbolTable() override { return store_.symbolTable(); }
+  bool useElementScope() const override { return store_.useElementScope(); }
 
   // Stats::Store
   std::vector<CounterSharedPtr> counters() const override {

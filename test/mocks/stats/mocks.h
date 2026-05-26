@@ -309,6 +309,19 @@ public:
     checkCreateScopeArgs(evictable, limits);
     return createScope_(symbolTable().toString(name));
   }
+  ScopeSharedPtr createScope(StatElementSpan, bool evictable, const ScopeStatsLimitSettings& limits,
+                             StatsMatcherSharedPtr = nullptr) override {
+    checkCreateScopeArgs(evictable, limits);
+    IS_ENVOY_BUG("Element-based API not supported in MockScope");
+    return nullptr;
+  }
+  ScopeSharedPtr createScope(StatElementViewSpan, bool evictable,
+                             const ScopeStatsLimitSettings& limits,
+                             StatsMatcherSharedPtr = nullptr) override {
+    checkCreateScopeArgs(evictable, limits);
+    IS_ENVOY_BUG("Element-based API not supported in MockScope");
+    return nullptr;
+  }
 
   MOCK_METHOD(void, checkCreateScopeArgs, (bool, const ScopeStatsLimitSettings&));
   MOCK_METHOD(ScopeSharedPtr, createScope_, (const std::string& name));
@@ -323,13 +336,29 @@ public:
   MOCK_METHOD(Counter&, counterFromStatNameWithTags,
               (const StatName&, StatNameTagVectorOptConstRef));
   Counter& counterFromStatNameWithTags_(const StatName& name, StatNameTagVectorOptConstRef);
+  Counter& getOrCreateCounter(StatElementSpan) override {
+    IS_ENVOY_BUG("Element-based API not supported in MockScope");
+    return TestUtil::TestScope::counterFromStatName(StatName());
+  }
 
   Gauge& gaugeFromStatNameWithTags(const StatName& name, StatNameTagVectorOptConstRef,
                                    Gauge::ImportMode import_mode) override;
+  Gauge& getOrCreateGauge(StatElementSpan, Gauge::ImportMode) override {
+    IS_ENVOY_BUG("Element-based API not supported in MockScope");
+    return TestUtil::TestScope::gaugeFromStatName(StatName(), Gauge::ImportMode::Accumulate);
+  }
   Histogram& histogramFromStatNameWithTags(const StatName& name, StatNameTagVectorOptConstRef,
                                            Histogram::Unit unit) override;
+  Histogram& getOrCreateHistogram(StatElementSpan, Histogram::Unit) override {
+    IS_ENVOY_BUG("Element-based API not supported in MockScope");
+    return TestUtil::TestScope::histogramFromStatName(StatName(), Histogram::Unit::Unspecified);
+  }
   TextReadout& textReadoutFromStatNameWithTags(const StatName& name,
                                                StatNameTagVectorOptConstRef) override;
+  TextReadout& getOrCreateTextReadout(StatElementSpan) override {
+    IS_ENVOY_BUG("Element-based API not supported in MockScope");
+    return TestUtil::TestScope::textReadoutFromStatName(StatName());
+  }
 
   MockStore& mock_store_;
 };

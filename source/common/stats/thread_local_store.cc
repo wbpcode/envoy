@@ -11,12 +11,12 @@
 #include "envoy/stats/stats.h"
 
 #include "source/common/common/lock_guard.h"
-#include "source/common/runtime/runtime_features.h"
 #include "source/common/stats/allocator.h"
 #include "source/common/stats/histogram_impl.h"
 #include "source/common/stats/stats_matcher_impl.h"
 #include "source/common/stats/tag_producer_impl.h"
 #include "source/common/stats/tag_utility.h"
+#include "source/common/stats/utility.h"
 
 #include "absl/strings/str_join.h"
 
@@ -27,18 +27,24 @@ const char ThreadLocalStoreImpl::DeleteScopeSync[] = "delete-scope";
 const char ThreadLocalStoreImpl::IterateScopeSync[] = "iterate-scope";
 const char ThreadLocalStoreImpl::MainDispatcherCleanupSync[] = "main-dispatcher-cleanup";
 
-ThreadLocalStoreImpl::ThreadLocalStoreImpl(Allocator& alloc)
+ThreadLocalStoreImpl::ThreadLocalStoreImpl(Allocator& alloc, bool use_element_scope)
     : alloc_(alloc), tag_producer_(std::make_unique<TagProducerImpl>()),
       stats_matcher_(std::make_unique<StatsMatcherImpl>()),
       histogram_settings_(std::make_unique<HistogramSettingsImpl>()),
       null_counter_(alloc.symbolTable()), null_gauge_(alloc.symbolTable()),
       null_histogram_(alloc.symbolTable()), null_text_readout_(alloc.symbolTable()),
-      well_known_tags_(alloc.symbolTable().makeSet("well_known_tags")) {
+      well_known_tags_(alloc.symbolTable().makeSet("well_known_tags")),
+      use_element_scope_(use_element_scope) {
   for (const auto& desc : Config::TagNames::get().descriptorVec()) {
     well_known_tags_->rememberBuiltin(desc.name_);
   }
-  StatNameManagedStorage empty("", alloc.symbolTable());
-  auto new_scope = std::make_shared<ScopeImpl>(*this, StatName(empty.statName()), false);
+  std::shared_ptr<ScopeImpl> new_scope;
+  if (use_element_scope_) {
+    new_scope = std::make_shared<ElementScopeImpl>(nullptr, StatElementVec{}, *this, false);
+  } else {
+    StatNameManagedStorage empty("", alloc.symbolTable());
+    new_scope = std::make_shared<ScopeImpl>(*this, StatName(empty.statName()), false);
+  }
   addScope(new_scope);
   default_scope_ = new_scope;
 }
@@ -848,6 +854,136 @@ HistogramOptConstRef ThreadLocalStoreImpl::ScopeImpl::findHistogramLockHeld(Stat
 TextReadoutOptConstRef ThreadLocalStoreImpl::ScopeImpl::findTextReadout(StatName name) const {
   Thread::LockGuard lock(parent_.lock_);
   return findStatLockHeld<TextReadout>(name, central_cache_->text_readouts_);
+}
+
+ThreadLocalStoreImpl::ElementScopeImpl::ElementScopeImpl(std::unique_ptr<StatNamePool> pool,
+                                                         StatElementVec&& prefix_elements,
+                                                         ThreadLocalStoreImpl& store,
+                                                         bool evictable,
+                                                         const ScopeStatsLimitSettings& limits,
+                                                         StatsMatcherSharedPtr matcher)
+    : ScopeImpl(
+          store,
+          TagUtility::buildScopePrefixStorage(prefix_elements, store.symbolTable()).statName(),
+          evictable, limits, std::move(matcher)),
+      pool_(std::move(pool)), prefix_elements_(std::move(prefix_elements)) {}
+
+ScopeSharedPtr
+ThreadLocalStoreImpl::ElementScopeImpl::createScope(const std::string& name, bool evictable,
+                                                    const ScopeStatsLimitSettings& limits,
+                                                    StatsMatcherSharedPtr matcher) {
+  const std::string sanitized_name = Utility::sanitizeStatsName(name);
+  StatElementViewVec names;
+  TagUtility::populateWellKnownLegacyStatPrefix(sanitized_name, names);
+  return createScope(names, evictable, limits, std::move(matcher));
+}
+
+ScopeSharedPtr
+ThreadLocalStoreImpl::ElementScopeImpl::scopeFromStatName(StatName name, bool evictable,
+                                                          const ScopeStatsLimitSettings& limits,
+                                                          StatsMatcherSharedPtr matcher) {
+  const std::string stat_name = symbolTable().toString(name);
+  StatElementViewVec names;
+  TagUtility::populateWellKnownLegacyStatPrefix(stat_name, names);
+  return createScope(names, evictable, limits, std::move(matcher));
+}
+
+ScopeSharedPtr
+ThreadLocalStoreImpl::ElementScopeImpl::createScope(StatElementSpan names, bool evictable,
+                                                    const ScopeStatsLimitSettings& limits,
+                                                    StatsMatcherSharedPtr matcher) {
+  auto child_pool = std::make_unique<StatNamePool>(symbolTable());
+  StatElementVec child_names;
+  TagUtility::populatePoolAndElementVec(prefix_elements_, names, child_pool.get(), child_names);
+
+  StatsMatcherSharedPtr child_matcher = matcher ? std::move(matcher) : scope_matcher_;
+  std::shared_ptr<ScopeImpl> new_scope =
+      std::make_shared<ElementScopeImpl>(std::move(child_pool), std::move(child_names), parent_,
+                                         evictable, limits, std::move(child_matcher));
+  parent_.addScope(new_scope);
+  return new_scope;
+}
+
+ScopeSharedPtr
+ThreadLocalStoreImpl::ElementScopeImpl::createScope(StatElementViewSpan names, bool evictable,
+                                                    const ScopeStatsLimitSettings& limits,
+                                                    StatsMatcherSharedPtr matcher) {
+  auto child_pool = std::make_unique<StatNamePool>(symbolTable());
+  StatElementVec child_names;
+  TagUtility::populatePoolAndElementVec(prefix_elements_, names, child_pool.get(), child_names);
+
+  StatsMatcherSharedPtr child_matcher = matcher ? std::move(matcher) : scope_matcher_;
+  std::shared_ptr<ScopeImpl> new_scope =
+      std::make_shared<ElementScopeImpl>(std::move(child_pool), std::move(child_names), parent_,
+                                         evictable, limits, std::move(child_matcher));
+  parent_.addScope(new_scope);
+  return new_scope;
+}
+
+Counter& ThreadLocalStoreImpl::ElementScopeImpl::getOrCreateCounter(StatElementSpan names) {
+  if (scopeRejectsAll()) {
+    return parent_.null_counter_;
+  }
+  const TagUtility::TagStatNameJoiner joiner(prefix_elements_, names, symbolTable());
+  return getOrCreateCounterBase(joiner);
+}
+
+Gauge& ThreadLocalStoreImpl::ElementScopeImpl::getOrCreateGauge(StatElementSpan names,
+                                                                Gauge::ImportMode import_mode) {
+  if (scopeRejectsAll() && import_mode != Gauge::ImportMode::HiddenAccumulate) {
+    return parent_.null_gauge_;
+  }
+  const TagUtility::TagStatNameJoiner joiner(prefix_elements_, names, symbolTable());
+  return getOrCreateGaugeBase(joiner, import_mode);
+}
+
+Histogram& ThreadLocalStoreImpl::ElementScopeImpl::getOrCreateHistogram(StatElementSpan names,
+                                                                        Histogram::Unit unit) {
+  if (scopeRejectsAll()) {
+    return parent_.null_histogram_;
+  }
+  const TagUtility::TagStatNameJoiner joiner(prefix_elements_, names, symbolTable());
+  return getOrCreateHistogramBase(joiner, unit);
+}
+
+TextReadout& ThreadLocalStoreImpl::ElementScopeImpl::getOrCreateTextReadout(StatElementSpan names) {
+  if (scopeRejectsAll()) {
+    return parent_.null_text_readout_;
+  }
+  const TagUtility::TagStatNameJoiner joiner(prefix_elements_, names, symbolTable());
+  return getOrCreateTextReadoutBase(joiner);
+}
+
+Counter& ThreadLocalStoreImpl::ElementScopeImpl::counterFromStatNameWithTags(
+    const StatName& name, StatNameTagVectorOptConstRef tags) {
+  StatElementVec elements;
+  elements.emplace_back(StatElement{.value = name});
+  TagUtility::mergeTagsToElements(elements, tags);
+  return getOrCreateCounter(elements);
+}
+
+Gauge& ThreadLocalStoreImpl::ElementScopeImpl::gaugeFromStatNameWithTags(
+    const StatName& name, StatNameTagVectorOptConstRef tags, Gauge::ImportMode import_mode) {
+  StatElementVec elements;
+  elements.emplace_back(StatElement{.value = name});
+  TagUtility::mergeTagsToElements(elements, tags);
+  return getOrCreateGauge(elements, import_mode);
+}
+
+Histogram& ThreadLocalStoreImpl::ElementScopeImpl::histogramFromStatNameWithTags(
+    const StatName& name, StatNameTagVectorOptConstRef tags, Histogram::Unit unit) {
+  StatElementVec elements;
+  elements.emplace_back(StatElement{.value = name});
+  TagUtility::mergeTagsToElements(elements, tags);
+  return getOrCreateHistogram(elements, unit);
+}
+
+TextReadout& ThreadLocalStoreImpl::ElementScopeImpl::textReadoutFromStatNameWithTags(
+    const StatName& name, StatNameTagVectorOptConstRef tags) {
+  StatElementVec elements;
+  elements.emplace_back(StatElement{.value = name});
+  TagUtility::mergeTagsToElements(elements, tags);
+  return getOrCreateTextReadout(elements);
 }
 
 Histogram& ThreadLocalStoreImpl::tlsHistogram(ParentHistogramImpl& parent, uint64_t id) {

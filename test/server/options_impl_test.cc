@@ -115,6 +115,7 @@ TEST_F(OptionsImplTest, All) {
       "--disable-hot-restart --cpuset-threads --allow-unknown-static-fields "
       "--reject-unknown-dynamic-fields --base-id 5 "
       "--use-dynamic-base-id --base-id-path /foo/baz "
+      "--enable-stats-element-scope "
       "--stats-tag foo:bar --stats-tag baz:bar "
       "--socket-path /foo/envoy_domain_socket --socket-mode 644");
   EXPECT_EQ(Server::Mode::Validate, options->mode());
@@ -147,6 +148,7 @@ TEST_F(OptionsImplTest, All) {
   EXPECT_EQ("/foo/envoy_domain_socket", options->socketPath());
   EXPECT_EQ(0644, options->socketMode());
   EXPECT_EQ(2U, options->statsTags().size());
+  EXPECT_TRUE(options->enableStatsElementScope());
 
   options = createOptionsImpl("envoy --mode init_only");
   EXPECT_EQ(Server::Mode::InitOnly, options->mode());
@@ -214,6 +216,7 @@ TEST_F(OptionsImplTest, SetAll) {
   options->setSocketPath("/foo/envoy_domain_socket");
   options->setSocketMode(0644);
   options->setStatsTags({{"foo", "bar"}});
+  options->setEnableStatsElementScope(true);
 
   EXPECT_EQ(109876, options->baseId());
   EXPECT_EQ(true, options->useDynamicBaseId());
@@ -247,6 +250,7 @@ TEST_F(OptionsImplTest, SetAll) {
   EXPECT_TRUE(options->rejectUnknownDynamicFields());
   EXPECT_EQ("/foo/envoy_domain_socket", options->socketPath());
   EXPECT_EQ(0644, options->socketMode());
+  EXPECT_TRUE(options->enableStatsElementScope());
 
   // Validate that CommandLineOptions is constructed correctly.
   Server::CommandLineOptionsPtr command_line_options = options->toCommandLineOptions();
@@ -281,6 +285,7 @@ TEST_F(OptionsImplTest, SetAll) {
   EXPECT_EQ(options->socketMode(), command_line_options->socket_mode());
   EXPECT_EQ(1U, command_line_options->stats_tag().size());
   EXPECT_EQ("foo:bar", command_line_options->stats_tag(0));
+  EXPECT_TRUE(command_line_options->enable_stats_element_scope());
 }
 
 TEST_F(OptionsImplTest, DefaultParams) {
@@ -295,6 +300,7 @@ TEST_F(OptionsImplTest, DefaultParams) {
   EXPECT_EQ("@envoy_domain_socket", options->socketPath());
   EXPECT_EQ(0, options->socketMode());
   EXPECT_EQ(0U, options->statsTags().size());
+  EXPECT_FALSE(options->enableStatsElementScope());
   EXPECT_FALSE(options->hotRestartDisabled());
   EXPECT_FALSE(options->cpusetThreadsEnabled());
 
@@ -313,6 +319,7 @@ TEST_F(OptionsImplTest, DefaultParams) {
   EXPECT_FALSE(command_line_options->cpuset_threads());
   EXPECT_FALSE(command_line_options->allow_unknown_static_fields());
   EXPECT_FALSE(command_line_options->reject_unknown_dynamic_fields());
+  EXPECT_FALSE(command_line_options->enable_stats_element_scope());
   EXPECT_EQ(0, options->statsTags().size());
 }
 
