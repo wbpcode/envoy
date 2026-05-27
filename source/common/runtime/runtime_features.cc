@@ -76,6 +76,15 @@ RUNTIME_GUARD(envoy_reloadable_features_no_extension_lookup_by_name);
 RUNTIME_GUARD(envoy_reloadable_features_no_timer_based_rate_limit_token_bucket);
 RUNTIME_GUARD(envoy_reloadable_features_oauth2_cleanup_cookies);
 RUNTIME_GUARD(envoy_reloadable_features_oauth2_encrypt_tokens);
+// OAuth2 filter cookie decryption: when true (the default), decrypt() accepts legacy CBC
+// ciphertexts via the legacy AES-256-CBC fallback. When false, only "gcm."-prefixed ciphertexts
+// decrypt; legacy CBC cookies are rejected and the affected users are redirected to the OAuth
+// server to re-authenticate. The default is true so that GCM-emitting instances can still read
+// CBC cookies issued by older instances during a rolling upgrade. While true, the CBC decrypt
+// path is reachable and partially reopens CVE-2026-47775; operators should flip this flag to
+// false once their cookie TTL has elapsed and no legacy cookies remain in circulation.
+// TODO: flip the default to false and remove the flag once the migration window has elapsed.
+RUNTIME_GUARD(envoy_reloadable_features_oauth2_legacy_cbc_decrypt_compat);
 RUNTIME_GUARD(envoy_reloadable_features_original_dst_rely_on_idle_timeout);
 RUNTIME_GUARD(envoy_reloadable_features_prefer_ipv6_dns_on_macos);
 RUNTIME_GUARD(envoy_reloadable_features_proxy_104);
@@ -136,6 +145,13 @@ FALSE_RUNTIME_GUARD(envoy_reloadable_features_streaming_shadow);
 FALSE_RUNTIME_GUARD(envoy_reloadable_features_unified_mux);
 // TODO(birenroy) flip after the security issue is addressed.
 FALSE_RUNTIME_GUARD(envoy_reloadable_features_http2_use_oghttp2);
+// OAuth2 filter cookie encryption: when true, encrypt() emits AES-256-GCM ciphertexts with a
+// "gcm." marker; when false (the default), it emits the legacy AES-256-CBC format with no
+// marker. The default is false so that newly upgraded instances stay wire-compatible with
+// older instances during a rolling upgrade. Operators must flip this flag to true (cluster-wide,
+// after the rollout is complete) to be protected against CVE-2026-47775.
+// TODO: flip the default to true and remove the flag once the migration window has elapsed.
+FALSE_RUNTIME_GUARD(envoy_reloadable_features_oauth2_use_gcm_encryption);
 // Used to track if runtime is initialized.
 FALSE_RUNTIME_GUARD(envoy_reloadable_features_runtime_initialized);
 // TODO(mattklein123): Flip this to true and/or remove completely once verified by Envoy Mobile.
