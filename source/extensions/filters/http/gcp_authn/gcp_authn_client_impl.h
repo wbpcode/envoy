@@ -23,6 +23,7 @@ public:
       Server::Configuration::FactoryContext& context)
       : config_(config), context_(context) {}
 
+  // NOLINTNEXTLINE(clang-analyzer-optin.cplusplus.VirtualCall)
   ~GcpAuthnClientImpl() override { cancel(); }
 
   void onBeforeFinalizeUpstreamSpan(Tracing::Span&, const Http::ResponseHeaderMap*) override {}

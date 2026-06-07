@@ -19,7 +19,6 @@ namespace {
 using testing::_;
 using testing::Invoke;
 using testing::NiceMock;
-using testing::Return;
 using testing::ReturnRef;
 
 class ScopeProviderSingletonTest : public testing::Test {

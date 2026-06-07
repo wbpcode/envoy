@@ -33,7 +33,6 @@ using testing::_;
 using testing::ContainerEq;
 using testing::DoAll;
 using testing::Invoke;
-using testing::InvokeWithoutArgs;
 using testing::NiceMock;
 using testing::Ref;
 using testing::Return;

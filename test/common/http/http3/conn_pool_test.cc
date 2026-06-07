@@ -216,6 +216,7 @@ void Http3ConnPoolImplTest::createNewStream() {
 
   // NOLINTNEXTLINE(clang-analyzer-cplusplus.NewDeleteLeaks)
   std::list<Envoy::ConnectionPool::ActiveClientPtr>& clients =
+      // NOLINTNEXTLINE(clang-analyzer-cplusplus.NewDeleteLeaks)
       Http3ConnPoolImplPeer::connectingClients(*pool_);
   EXPECT_EQ(1u, clients.size());
   EXPECT_EQ(1u, observers_.registeredQuicObservers().size());

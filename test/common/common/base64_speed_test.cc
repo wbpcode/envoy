@@ -12,7 +12,7 @@
 // NOLINTNEXTLINE(readability-identifier-naming)
 static void BM_AbslBase64Encode(benchmark::State& state) {
   const std::string input(state.range(0), 'x');
-  for (auto _ : state) {
+  for (auto _ : state) { // NOLINT(clang-analyzer-deadcode.DeadStores)
     std::string res = Envoy::Base64::encode(input);
     benchmark::DoNotOptimize(res);
   }
@@ -23,7 +23,7 @@ BENCHMARK(BM_AbslBase64Encode)->Range(8, 1 << 20);
 // NOLINTNEXTLINE(readability-identifier-naming)
 static void BM_LegacyBase64Encode(benchmark::State& state) {
   const std::string input(state.range(0), 'x');
-  for (auto _ : state) {
+  for (auto _ : state) { // NOLINT(clang-analyzer-deadcode.DeadStores)
     std::string res = Envoy::Base64Legacy::encode(input);
     benchmark::DoNotOptimize(res);
   }
@@ -36,7 +36,7 @@ static void BM_AbslBase64Decode(benchmark::State& state) {
   const std::string input(state.range(0), 'x');
   const std::string encoded = Envoy::Base64::encode(input);
 
-  for (auto _ : state) {
+  for (auto _ : state) { // NOLINT(clang-analyzer-deadcode.DeadStores)
     std::string res = Envoy::Base64::decode(encoded);
     benchmark::DoNotOptimize(res);
   }
@@ -49,7 +49,7 @@ static void BM_LegacyBase64Decode(benchmark::State& state) {
   const std::string input(state.range(0), 'x');
   const std::string encoded = Envoy::Base64::encode(input);
 
-  for (auto _ : state) {
+  for (auto _ : state) { // NOLINT(clang-analyzer-deadcode.DeadStores)
     std::string res = Envoy::Base64Legacy::decode(encoded);
     benchmark::DoNotOptimize(res);
   }
@@ -62,7 +62,7 @@ static void BM_AbslBase64BufferInstanceEncode(benchmark::State& state) {
   const std::string input(state.range(0), 'x');
   Envoy::Buffer::OwnedImpl buffer(input);
 
-  for (auto _ : state) {
+  for (auto _ : state) { // NOLINT(clang-analyzer-deadcode.DeadStores)
     std::string res = Envoy::Base64::encode(buffer, input.size());
     benchmark::DoNotOptimize(res);
   }
@@ -75,7 +75,7 @@ static void BM_LegacyBase64BufferInstanceEncode(benchmark::State& state) {
   const std::string input(state.range(0), 'x');
   Envoy::Buffer::OwnedImpl buffer(input);
 
-  for (auto _ : state) {
+  for (auto _ : state) { // NOLINT(clang-analyzer-deadcode.DeadStores)
     std::string res = Envoy::Base64Legacy::encode(buffer, input.size());
     benchmark::DoNotOptimize(res);
   }
@@ -92,7 +92,7 @@ static void BM_AbslBase64BufferInstanceEncodeMultiSlice(benchmark::State& state)
     const uint64_t n = std::min(slice_size, total_size - off);
     buffer.appendSliceForTest(std::string(n, 'x'));
   }
-  for (auto _ : state) {
+  for (auto _ : state) { // NOLINT(clang-analyzer-deadcode.DeadStores)
     std::string res = Envoy::Base64::encode(buffer, total_size);
     benchmark::DoNotOptimize(res);
   }
@@ -109,7 +109,7 @@ static void BM_LegacyBase64BufferInstanceEncodeMultiSlice(benchmark::State& stat
     const uint64_t n = std::min(slice_size, total_size - off);
     buffer.appendSliceForTest(std::string(n, 'x'));
   }
-  for (auto _ : state) {
+  for (auto _ : state) { // NOLINT(clang-analyzer-deadcode.DeadStores)
     std::string res = Envoy::Base64Legacy::encode(buffer, total_size);
     benchmark::DoNotOptimize(res);
   }
@@ -120,7 +120,7 @@ BENCHMARK(BM_LegacyBase64BufferInstanceEncodeMultiSlice)->Range(4096, 1 << 20);
 // NOLINTNEXTLINE(readability-identifier-naming)
 static void BM_AbslBase64UrlEncode(benchmark::State& state) {
   const std::string input(state.range(0), 'x');
-  for (auto _ : state) {
+  for (auto _ : state) { // NOLINT(clang-analyzer-deadcode.DeadStores)
     std::string res = Envoy::Base64Url::encode(input.data(), input.size());
     benchmark::DoNotOptimize(res);
   }
@@ -131,7 +131,7 @@ BENCHMARK(BM_AbslBase64UrlEncode)->Range(8, 1 << 20);
 // NOLINTNEXTLINE(readability-identifier-naming)
 static void BM_LegacyBase64UrlEncode(benchmark::State& state) {
   const std::string input(state.range(0), 'x');
-  for (auto _ : state) {
+  for (auto _ : state) { // NOLINT(clang-analyzer-deadcode.DeadStores)
     std::string res = Envoy::Base64UrlLegacy::encode(input.data(), input.size());
     benchmark::DoNotOptimize(res);
   }
@@ -144,7 +144,7 @@ static void BM_AbslBase64UrlDecode(benchmark::State& state) {
   const std::string input(state.range(0), 'x');
   const std::string encoded = Envoy::Base64Url::encode(input.data(), input.size());
 
-  for (auto _ : state) {
+  for (auto _ : state) { // NOLINT(clang-analyzer-deadcode.DeadStores)
     std::string res = Envoy::Base64Url::decode(encoded);
     benchmark::DoNotOptimize(res);
   }
@@ -157,7 +157,7 @@ static void BM_LegacyBase64UrlDecode(benchmark::State& state) {
   const std::string input(state.range(0), 'x');
   const std::string encoded = Envoy::Base64Url::encode(input.data(), input.size());
 
-  for (auto _ : state) {
+  for (auto _ : state) { // NOLINT(clang-analyzer-deadcode.DeadStores)
     std::string res = Envoy::Base64UrlLegacy::decode(encoded);
     benchmark::DoNotOptimize(res);
   }

@@ -701,6 +701,7 @@ TEST_F(ExtAuthzHttpClientTest, HttpCallFailureDoesNotSetStatusCode) {
   // Expected: status_code should be unset (0), not Forbidden.
   auto expected_response = Response{};
   expected_response.status = CheckStatus::Error;
+  // NOLINTNEXTLINE(clang-analyzer-optin.core.EnumCastOutOfRange)
   expected_response.status_code = static_cast<Http::Code>(0);
 
   client_->check(request_callbacks_, request, parent_span_, stream_info_);
@@ -720,6 +721,7 @@ TEST_F(ExtAuthzHttpClientTest, Http5xxResponseDoesNotSetStatusCode) {
   // Expected: status_code should be unset (0), not Forbidden.
   auto expected_response = Response{};
   expected_response.status = CheckStatus::Error;
+  // NOLINTNEXTLINE(clang-analyzer-optin.core.EnumCastOutOfRange)
   expected_response.status_code = static_cast<Http::Code>(0);
 
   client_->check(request_callbacks_, request, parent_span_, stream_info_);
@@ -737,6 +739,7 @@ TEST_F(ExtAuthzHttpClientTest, MissingClusterDoesNotSetStatusCode) {
   // Expected: status_code should be unset (0), not Forbidden.
   auto expected_response = Response{};
   expected_response.status = CheckStatus::Error;
+  // NOLINTNEXTLINE(clang-analyzer-optin.core.EnumCastOutOfRange)
   expected_response.status_code = static_cast<Http::Code>(0);
 
   EXPECT_CALL(cm_, getThreadLocalCluster(Eq("ext_authz"))).WillOnce(Return(nullptr));

@@ -548,6 +548,7 @@ TEST_F(DynamicModuleHttpFilterTest, GetSocketOptionBytesMissing) {
 TEST_F(DynamicModuleHttpFilterTest, SocketOptionInvalidState) {
   // Test with invalid state value (cast an invalid value).
   // Invalid state triggers ASSERT failure.
+  // NOLINTNEXTLINE(clang-analyzer-optin.core.EnumCastOutOfRange)
   const auto invalid_state = static_cast<envoy_dynamic_module_type_socket_option_state>(999);
   ASSERT_DEBUG_DEATH(envoy_dynamic_module_callback_http_set_socket_option_int(
                          filter_.get(), 1, 2, invalid_state,

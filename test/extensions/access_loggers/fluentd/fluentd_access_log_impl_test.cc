@@ -408,7 +408,7 @@ TEST_F(FluentdAccessLoggerCacheImplTest, CreateTwoLoggersDifferentHash) {
   Event::MockTimer* flush_timer2 = new Event::MockTimer(&dispatcher_);
   Event::MockTimer* retry_timer2 = new Event::MockTimer(&dispatcher_);
   UNREFERENCED_PARAMETER(retry_timer2);
-  EXPECT_CALL(*flush_timer2, enableTimer(_, _));
+  EXPECT_CALL(*flush_timer2, enableTimer(_, _)); // NOLINT(clang-analyzer-cplusplus.NewDeleteLeaks)
 
   envoy::extensions::access_loggers::fluentd::v3::FluentdAccessLogConfig config2;
   config2.set_cluster("different_cluster"); // config hash will be different than config1

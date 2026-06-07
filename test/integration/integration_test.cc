@@ -29,7 +29,6 @@
 
 using Envoy::Http::Headers;
 using Envoy::Http::HttpStatusIs;
-using testing::Combine;
 using testing::ContainsRegex;
 using testing::EndsWith;
 using testing::Eq;
@@ -37,7 +36,6 @@ using testing::Ge;
 using testing::HasSubstr;
 using testing::Not;
 using testing::StartsWith;
-using testing::Values;
 using testing::ValuesIn;
 
 namespace Envoy {

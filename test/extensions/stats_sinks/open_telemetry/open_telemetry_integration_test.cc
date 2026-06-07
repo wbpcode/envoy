@@ -56,6 +56,7 @@ public:
     // Missing stat tag-extraction rule for stat 'grpc.otlp_collector.streams_closed_x' and
     // stat_prefix 'otlp_collector'.
     skip_tag_extraction_rule_check_ = true;
+    // NOLINTNEXTLINE(clang-analyzer-optin.cplusplus.VirtualCall)
     driver_ = (std::get<2>(GetParam()) == ExporterType::GRPC) ? makeGrpcDriver(clientType())
                                                               : makeHttpDriver();
   }

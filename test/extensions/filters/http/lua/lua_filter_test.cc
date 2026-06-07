@@ -27,12 +27,10 @@
 using testing::_;
 using testing::AtLeast;
 using testing::Eq;
-using testing::HasSubstr;
 using testing::InSequence;
 using testing::Invoke;
 using testing::Return;
 using testing::ReturnRef;
-using testing::StrEq;
 
 namespace Envoy {
 namespace Extensions {

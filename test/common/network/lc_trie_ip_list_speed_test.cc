@@ -139,7 +139,7 @@ static void bmLinearIpListMatching(benchmark::State& state) {
   }
 
   size_t query_idx = 0;
-  for (auto _ : state) {
+  for (auto _ : state) { // NOLINT(clang-analyzer-deadcode.DeadStores)
     const auto& query_ip = test_ips[query_indices[query_idx % 1024]];
     bool result = ip_list->contains(*query_ip);
     benchmark::DoNotOptimize(result);
@@ -179,7 +179,7 @@ static void bmLcTrieIpListMatching(benchmark::State& state) {
   }
 
   size_t query_idx = 0;
-  for (auto _ : state) {
+  for (auto _ : state) { // NOLINT(clang-analyzer-deadcode.DeadStores)
     const auto& query_ip = test_ips[query_indices[query_idx % 1024]];
     bool result = !trie.getData(query_ip).empty();
     benchmark::DoNotOptimize(result);
@@ -215,7 +215,7 @@ static void bmLinearIpListMatchingIPv6(benchmark::State& state) {
   }
 
   size_t query_idx = 0;
-  for (auto _ : state) {
+  for (auto _ : state) { // NOLINT(clang-analyzer-deadcode.DeadStores)
     if (query_idx < query_indices.size()) {
       const auto& query_ip = test_ips[query_indices[query_idx % 512]];
       bool result = ip_list->contains(*query_ip);
@@ -256,7 +256,7 @@ static void bmLcTrieIpListMatchingIPv6(benchmark::State& state) {
   }
 
   size_t query_idx = 0;
-  for (auto _ : state) {
+  for (auto _ : state) { // NOLINT(clang-analyzer-deadcode.DeadStores)
     if (query_idx < query_indices.size()) {
       const auto& query_ip = test_ips[query_indices[query_idx % 512]];
       bool result = !trie.getData(query_ip).empty();

@@ -855,6 +855,7 @@ TEST_P(AggregateIntegrationTest, CircuitBreakerMaxRetriesTest) {
   // wait for the second request to arrive at cluster1
   waitForNextUpstreamRequest(FirstUpstreamIndex);
   // respond to the second request with a 503 to trigger a retry
+  // NOLINTNEXTLINE(clang-analyzer-cplusplus.Move)
   upstream_request_->encodeHeaders(Http::TestResponseHeaderMapImpl{{":status", "503"}}, true);
 
   // the aggregate_cluster the circuit breaker remains open and overflows

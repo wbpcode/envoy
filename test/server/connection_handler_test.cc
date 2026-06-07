@@ -788,7 +788,7 @@ TEST_F(ConnectionHandlerTest, RebalanceWithMultiAddressListener) {
   // Send connection to the first listener, expect mock_connection_balancer1 will be called.
   // then mock_connection_balancer1 will balance the connection to the same listener.
   EXPECT_CALL(*mock_connection_balancer1, pickTargetHandler(_))
-      .WillOnce(ReturnRef(*current_handler1));
+      .WillOnce(ReturnRef(*current_handler1)); // NOLINT(clang-analyzer-core.CallAndMessage)
   EXPECT_CALL(*access_log_, log(_, _));
   EXPECT_CALL(manager_, findFilterChain(_, _)).WillOnce(Return(nullptr));
 

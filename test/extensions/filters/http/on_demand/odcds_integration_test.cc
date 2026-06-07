@@ -629,6 +629,7 @@ class OdCdsAdsIntegrationTest
       public testing::TestWithParam<
           std::tuple<Network::Address::IpVersion, Grpc::ClientType, Grpc::SotwOrDelta, bool>> {
 public:
+  // NOLINTNEXTLINE(clang-analyzer-optin.cplusplus.VirtualCall)
   OdCdsAdsIntegrationTest() : AdsIntegrationTestBase(ipVersion(), sotwOrDelta()) {}
 
   void TearDown() override { cleanUpXdsConnection(); }

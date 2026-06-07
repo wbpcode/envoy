@@ -12,8 +12,6 @@
 
 #include "gmock/gmock.h"
 
-using testing::HasSubstr;
-
 namespace Envoy {
 namespace Extensions {
 namespace AccessLoggers {

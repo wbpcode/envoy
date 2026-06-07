@@ -300,6 +300,7 @@ TEST_F(MetadataFetcherTest, TestFailureToStringConversion) {
             "InvalidMetadata");
   EXPECT_EQ(fetcher_->failureToString(MetadataFetcher::MetadataReceiver::Failure::MissingConfig),
             "MissingConfig");
+  // NOLINTNEXTLINE(clang-analyzer-optin.core.EnumCastOutOfRange)
   EXPECT_EQ(fetcher_->failureToString(static_cast<MetadataFetcher::MetadataReceiver::Failure>(999)),
             "");
 }

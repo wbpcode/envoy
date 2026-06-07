@@ -29,12 +29,10 @@ namespace HttpFilters {
 namespace RateLimitQuota {
 namespace {
 
-using Envoy::ProtoEq;
 using envoy::config::cluster::v3::Cluster;
 using envoy::extensions::filters::http::rate_limit_quota::v3::RateLimitQuotaBucketSettings;
 using envoy::extensions::filters::http::rate_limit_quota::v3::RateLimitQuotaFilterConfig;
 using envoy::extensions::filters::network::http_connection_manager::v3::HttpConnectionManager;
-using envoy::service::rate_limit_quota::v3::BucketId;
 using envoy::service::rate_limit_quota::v3::RateLimitQuotaResponse;
 using envoy::service::rate_limit_quota::v3::RateLimitQuotaUsageReports;
 using Protobuf::util::MessageDifferencer;

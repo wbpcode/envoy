@@ -23,7 +23,6 @@
 
 using testing::_;
 using testing::NiceMock;
-using testing::Return;
 using testing::ReturnRef;
 
 namespace Envoy {

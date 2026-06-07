@@ -22,16 +22,11 @@ namespace HttpFilters {
 namespace CacheV2 {
 namespace {
 
-using ::Envoy::StatusHelpers::IsOk;
-using ::Envoy::StatusHelpers::IsOkAndHolds;
 using ::testing::_;
 using ::testing::Eq;
 using ::testing::Gt;
 using ::testing::IsNull;
-using ::testing::Not;
 using ::testing::NotNull;
-using ::testing::Optional;
-using ::testing::Property;
 using ::testing::Return;
 
 class CacheFilterTest : public ::testing::Test {

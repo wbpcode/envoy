@@ -30,7 +30,7 @@ public:
   // Returns the bytes actually written into a module buffer, clamped to its capacity so a
   // truncated result is observable.
   static std::string written(const char* buffer, size_t size, size_t capacity) {
-    return std::string(buffer, std::min(size, capacity));
+    return {buffer, std::min(size, capacity)};
   }
 
   // The snapshot callbacks take the opaque per-flush handle, so wrap the mock snapshot in a flush

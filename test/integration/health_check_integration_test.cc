@@ -845,6 +845,7 @@ TEST_P(GrpcHealthCheckIntegrationTest, SingleEndpointUnknownStatusGrpc) {
 
   // Endpoint responds to the health check
   grpc::health::v1::HealthCheckResponse response;
+  // NOLINTNEXTLINE(clang-analyzer-optin.core.EnumCastOutOfRange)
   response.set_status(static_cast<grpc::health::v1::HealthCheckResponse::ServingStatus>(123));
   // Send a grpc response.
   sendGrpcResponse(

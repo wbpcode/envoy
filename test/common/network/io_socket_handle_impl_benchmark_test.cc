@@ -45,7 +45,7 @@ private:
 static void bmGetOrCreateEnvoyAddressInstanceNoCache(benchmark::State& state) {
   std::vector<sockaddr_storage> addresses = Test::getSockAddrSampleAddresses(/*count=*/4);
   IoSocketHandleImplTestWrapper wrapper(/*cache_size=*/0);
-  for (auto _ : state) {
+  for (auto _ : state) { // NOLINT(clang-analyzer-deadcode.DeadStores)
     for (int i = 0; i < 50; ++i) {
       benchmark::DoNotOptimize(wrapper.getOrCreateEnvoyAddressInstances(addresses[0]));
       benchmark::DoNotOptimize(wrapper.getOrCreateEnvoyAddressInstances(addresses[1]));
@@ -57,7 +57,7 @@ BENCHMARK(bmGetOrCreateEnvoyAddressInstanceNoCache)->Iterations(1000);
 static void bmGetOrCreateEnvoyAddressInstanceConnectedSocket(benchmark::State& state) {
   std::vector<sockaddr_storage> addresses = Test::getSockAddrSampleAddresses(/*count=*/4);
   IoSocketHandleImplTestWrapper wrapper(/*cache_size=*/4);
-  for (auto _ : state) {
+  for (auto _ : state) { // NOLINT(clang-analyzer-deadcode.DeadStores)
     for (int i = 0; i < 50; ++i) {
       benchmark::DoNotOptimize(wrapper.getOrCreateEnvoyAddressInstances(addresses[0]));
       benchmark::DoNotOptimize(wrapper.getOrCreateEnvoyAddressInstances(addresses[1]));
@@ -69,7 +69,7 @@ BENCHMARK(bmGetOrCreateEnvoyAddressInstanceConnectedSocket)->Iterations(1000);
 static void bmGetOrCreateEnvoyAddressInstanceUnconnectedSocket(benchmark::State& state) {
   std::vector<sockaddr_storage> addresses = Test::getSockAddrSampleAddresses(/*count=*/100);
   IoSocketHandleImplTestWrapper wrapper(/*cache_size=*/4);
-  for (auto _ : state) {
+  for (auto _ : state) { // NOLINT(clang-analyzer-deadcode.DeadStores)
     for (const sockaddr_storage& ss : addresses) {
       benchmark::DoNotOptimize(wrapper.getOrCreateEnvoyAddressInstances(ss));
     }
@@ -80,7 +80,7 @@ BENCHMARK(bmGetOrCreateEnvoyAddressInstanceUnconnectedSocket)->Iterations(1000);
 static void bmGetOrCreateEnvoyAddressInstanceUnconnectedSocketLargerCache(benchmark::State& state) {
   std::vector<sockaddr_storage> addresses = Test::getSockAddrSampleAddresses(/*count=*/100);
   IoSocketHandleImplTestWrapper wrapper(/*cache_size=*/50);
-  for (auto _ : state) {
+  for (auto _ : state) { // NOLINT(clang-analyzer-deadcode.DeadStores)
     for (const sockaddr_storage& ss : addresses) {
       benchmark::DoNotOptimize(wrapper.getOrCreateEnvoyAddressInstances(ss));
     }

@@ -13,7 +13,6 @@
 #include "nlohmann/json.hpp"
 
 using testing::NiceMock;
-using testing::StrictMock;
 
 namespace Envoy {
 namespace Extensions {

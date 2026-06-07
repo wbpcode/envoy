@@ -1386,6 +1386,7 @@ TEST_F(NetworkExtProcFilterTest, HandleConnectionStatusUnknown) {
 
   auto response = std::make_unique<envoy::service::network_ext_proc::v3::ProcessingResponse>();
   response->set_connection_status(
+      // NOLINTNEXTLINE(clang-analyzer-optin.core.EnumCastOutOfRange)
       static_cast<envoy::service::network_ext_proc::v3::ProcessingResponse_ConnectionStatus>(999));
 
   EXPECT_CALL(connection_, close(_, _)).Times(0);

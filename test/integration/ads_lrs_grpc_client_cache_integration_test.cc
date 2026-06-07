@@ -19,6 +19,7 @@ class AdsLrsGrpcClientCacheIntegrationTest
           std::tuple<Network::Address::IpVersion, Grpc::ClientType, std::string>> {
 public:
   AdsLrsGrpcClientCacheIntegrationTest()
+      // NOLINTNEXTLINE(clang-analyzer-optin.cplusplus.VirtualCall)
       : HttpIntegrationTest(Http::CodecType::HTTP2, ipVersion()) {
     setUpstreamProtocol(FakeHttpConnection::Type::HTTP2);
     setCachedGrpcCLientForXdsFeatureValue();

@@ -24,7 +24,6 @@ namespace Common {
 namespace {
 
 using ::testing::NiceMock;
-using ::testing::Return;
 
 // ============================================================
 // OrcaLoadReportHandler static method tests

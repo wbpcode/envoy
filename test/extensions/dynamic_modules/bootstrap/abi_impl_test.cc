@@ -1287,7 +1287,7 @@ TEST_F(BootstrapAbiImplTest, TimerFired) {
   auto config = newDynamicModuleBootstrapExtensionConfig("test", "config", DefaultMetricsNamespace,
                                                          std::move(dynamic_module.value()),
                                                          dispatcher_, context_, context_.store_);
-  ASSERT_TRUE(config.ok()) << config.status();
+  ASSERT_TRUE(config.ok()) << config.status(); // NOLINT(clang-analyzer-cplusplus.NewDeleteLeaks)
   // Create a timer via the ABI callback. This will use the MockTimer we set up.
   auto* timer_ptr =
       envoy_dynamic_module_callback_bootstrap_extension_timer_new(config.value()->thisAsVoidPtr());
@@ -1656,7 +1656,7 @@ TEST_F(BootstrapAbiImplTest, TimerReEnable) {
   auto config = newDynamicModuleBootstrapExtensionConfig("test", "config", DefaultMetricsNamespace,
                                                          std::move(dynamic_module.value()),
                                                          dispatcher_, context_, context_.store_);
-  ASSERT_TRUE(config.ok()) << config.status();
+  ASSERT_TRUE(config.ok()) << config.status(); // NOLINT(clang-analyzer-cplusplus.NewDeleteLeaks)
   // Create a timer via the ABI callback.
   auto* timer_ptr =
       envoy_dynamic_module_callback_bootstrap_extension_timer_new(config.value()->thisAsVoidPtr());

@@ -105,7 +105,7 @@ TEST_F(OrcaOobManagerLifecycleTest, HostAddedSchedulesSession) {
 
   EXPECT_CALL(*manager, createCodecClient_(_)).WillOnce(Return(nullptr));
   attempt_timer->invokeCallback();
-  EXPECT_EQ(oobCounter("stream_failures"), 1);
+  EXPECT_EQ(oobCounter("stream_failures"), 1); // NOLINT(clang-analyzer-cplusplus.NewDeleteLeaks)
 }
 
 TEST_F(OrcaOobManagerLifecycleTest, HostRemovedDisarmsAndDecrementsGauge) {
@@ -113,7 +113,7 @@ TEST_F(OrcaOobManagerLifecycleTest, HostRemovedDisarmsAndDecrementsGauge) {
   ASSERT_OK(manager->initialize());
 
   installAttemptTimer();
-  auto host = makeHost();
+  auto host = makeHost(); // NOLINT(clang-analyzer-cplusplus.NewDeleteLeaks)
   priority_set_.runUpdateCallbacks(0, {host}, {});
   EXPECT_EQ(activeOobSessions(), 1);
 
@@ -131,6 +131,7 @@ TEST_F(OrcaOobManagerLifecycleTest, DestructionDisarmsActiveSessions) {
   ASSERT_OK(manager->initialize());
 
   installAttemptTimer();
+  // NOLINTNEXTLINE(clang-analyzer-cplusplus.NewDeleteLeaks)
   priority_set_.runUpdateCallbacks(0, {makeHost()}, {});
   EXPECT_EQ(activeOobSessions(), 1);
 
@@ -257,7 +258,7 @@ TEST_F(OrcaOobManagerWireTest, ReportReceivedUpdatesHostWeight) {
   expectCreateCodecClient(*manager, *attempt);
   attempt_timer->invokeCallback();
 
-  respondHeadersOk(*attempt);
+  respondHeadersOk(*attempt); // NOLINT(clang-analyzer-cplusplus.NewDeleteLeaks)
   xds::data::orca::v3::OrcaLoadReport empty_report;
   respondReport(*attempt, empty_report);
   EXPECT_EQ(oobCounter("reports_received"), 0);
@@ -296,6 +297,7 @@ TEST_F(OrcaOobManagerWireTest, CodecNoopCallbacksAreSafe) {
   expectCreateCodecClient(*manager, *attempt);
   attempt_timer->invokeCallback();
 
+  // NOLINTNEXTLINE(clang-analyzer-cplusplus.NewDeleteLeaks)
   attempt->response_decoder->decodeMetadata(std::make_unique<Http::MetadataMap>());
   attempt->response_decoder->decode1xxHeaders(std::make_unique<Http::TestResponseHeaderMapImpl>());
   std::ostringstream dump;
@@ -325,7 +327,7 @@ TEST_F(OrcaOobManagerWireTest, EndStreamDataWithoutTrailersIsTransientFailure) {
   EXPECT_CALL(dispatcher_, deferredDelete_(_)).Times(AtLeast(1));
   attempt_timer->invokeCallback();
 
-  respondHeadersOk(*attempt);
+  respondHeadersOk(*attempt); // NOLINT(clang-analyzer-cplusplus.NewDeleteLeaks)
   Buffer::OwnedImpl empty_data;
   attempt->response_decoder->decodeData(empty_data, true);
   EXPECT_EQ(oobCounter("stream_failures"), 1);
@@ -345,7 +347,7 @@ TEST_F(OrcaOobManagerWireTest, UnimplementedTrailerIsTerminal) {
   EXPECT_CALL(dispatcher_, deferredDelete_(_)).Times(AtLeast(1));
   attempt_timer->invokeCallback();
 
-  respondHeadersOk(*attempt);
+  respondHeadersOk(*attempt); // NOLINT(clang-analyzer-cplusplus.NewDeleteLeaks)
   respondTrailers(*attempt, Grpc::Status::WellKnownGrpcStatus::Unimplemented);
   EXPECT_EQ(oobCounter("stream_terminated"), 1);
   EXPECT_EQ(activeOobSessions(), 0);
@@ -365,7 +367,7 @@ TEST_F(OrcaOobManagerWireTest, GoAwayNoErrorDefersUntilNextDecode) {
   expectCreateCodecClient(*manager, *attempt);
   attempt_timer->invokeCallback();
 
-  respondHeadersOk(*attempt);
+  respondHeadersOk(*attempt); // NOLINT(clang-analyzer-cplusplus.NewDeleteLeaks)
   attempt->codec_client->raiseGoAway(Http::GoAwayErrorCode::NoError);
   EXPECT_EQ(oobCounter("stream_failures"), 0);
 
@@ -393,7 +395,7 @@ TEST_F(OrcaOobManagerWireTest, GoAwayOtherIsImmediateTransient) {
   EXPECT_CALL(dispatcher_, deferredDelete_(_)).Times(AtLeast(1));
   attempt_timer->invokeCallback();
 
-  respondHeadersOk(*attempt);
+  respondHeadersOk(*attempt); // NOLINT(clang-analyzer-cplusplus.NewDeleteLeaks)
   attempt->codec_client->raiseGoAway(Http::GoAwayErrorCode::Other);
   respondTrailers(*attempt, Grpc::Status::WellKnownGrpcStatus::Unimplemented);
   EXPECT_EQ(oobCounter("stream_failures"), 1);
@@ -416,7 +418,7 @@ TEST_F(OrcaOobManagerWireTest, ReportWithoutLbPolicyDataIncrementsReportErrors) 
   expectCreateCodecClient(*manager, *attempt);
   attempt_timer->invokeCallback();
 
-  respondHeadersOk(*attempt);
+  respondHeadersOk(*attempt); // NOLINT(clang-analyzer-cplusplus.NewDeleteLeaks)
   xds::data::orca::v3::OrcaLoadReport report;
   report.set_application_utilization(0.5);
   report.set_rps_fractional(1000);
@@ -446,6 +448,7 @@ TEST_F(OrcaOobManagerWireTest, NonGrpcResponseTransientFailure) {
   attempt_timer->invokeCallback();
 
   // Non-grpc 500 response, end_stream=true (server bailed cleanly).
+  // NOLINTNEXTLINE(clang-analyzer-cplusplus.NewDeleteLeaks)
   Http::TestResponseHeaderMapImpl headers{{":status", "500"}, {"content-type", "text/plain"}};
   attempt->response_decoder->decodeHeaders(
       std::make_unique<Http::TestResponseHeaderMapImpl>(headers), true);
@@ -472,6 +475,7 @@ TEST_F(OrcaOobManagerWireTest, NonGrpcResponseEndStreamFalseTransient) {
   attempt_timer->invokeCallback();
 
   // Non-grpc 503 with end_stream=false drives onRpcComplete's resetStream branch.
+  // NOLINTNEXTLINE(clang-analyzer-cplusplus.NewDeleteLeaks)
   Http::TestResponseHeaderMapImpl headers{{":status", "503"}, {"content-type", "text/plain"}};
   attempt->response_decoder->decodeHeaders(
       std::make_unique<Http::TestResponseHeaderMapImpl>(headers), false);
@@ -495,7 +499,7 @@ TEST_F(OrcaOobManagerWireTest, TrailersOnlyResponseTreatedAsTerminal) {
   // 200 OK + grpc-status + end_stream=true is the trailers-only frame; covers the
   // end_stream branch in decodeHeaders that bypasses decodeTrailers entirely.
   Http::TestResponseHeaderMapImpl headers{
-      {":status", "200"},
+      {":status", "200"}, // NOLINT(clang-analyzer-cplusplus.NewDeleteLeaks)
       {"content-type", "application/grpc"},
       {"grpc-status",
        absl::StrCat(static_cast<int>(Grpc::Status::WellKnownGrpcStatus::Unimplemented))}};
@@ -519,7 +523,7 @@ TEST_F(OrcaOobManagerWireTest, MalformedGrpcFrameTriggersTransientFailure) {
   EXPECT_CALL(dispatcher_, deferredDelete_(_)).Times(AtLeast(1));
   attempt_timer->invokeCallback();
 
-  respondHeadersOk(*attempt);
+  respondHeadersOk(*attempt); // NOLINT(clang-analyzer-cplusplus.NewDeleteLeaks)
   Buffer::OwnedImpl bad(std::string("\x02\x00\x00\x00\x00", 5));
   attempt->response_decoder->decodeData(bad, false);
   EXPECT_EQ(oobCounter("stream_failures"), 1);
@@ -539,7 +543,7 @@ TEST_F(OrcaOobManagerWireTest, CompressedFrameRejectedAsTransient) {
   EXPECT_CALL(dispatcher_, deferredDelete_(_)).Times(AtLeast(1));
   attempt_timer->invokeCallback();
 
-  respondHeadersOk(*attempt);
+  respondHeadersOk(*attempt); // NOLINT(clang-analyzer-cplusplus.NewDeleteLeaks)
   // Frame decodes cleanly; OobSession rejects compressed frames.
   Buffer::OwnedImpl bad(std::string("\x01\x00\x00\x00\x00", 5));
   attempt->response_decoder->decodeData(bad, false);
@@ -560,7 +564,7 @@ TEST_F(OrcaOobManagerWireTest, InvalidProtoPayloadTriggersTransientFailure) {
   EXPECT_CALL(dispatcher_, deferredDelete_(_)).Times(AtLeast(1));
   attempt_timer->invokeCallback();
 
-  respondHeadersOk(*attempt);
+  respondHeadersOk(*attempt); // NOLINT(clang-analyzer-cplusplus.NewDeleteLeaks)
   // Valid frame envelope (flag=0, length=1) wrapping a single-byte payload that is an
   // unterminated varint, so OrcaLoadReport::ParseFromZeroCopyStream returns false.
   Buffer::OwnedImpl bad(std::string("\x00\x00\x00\x00\x01\x80", 6));
@@ -593,7 +597,7 @@ TEST_F(OrcaOobManagerWireTest, EncodeHeadersFailureTriggersTransientFailure) {
   expectCreateCodecClient(*manager, *attempt);
   EXPECT_CALL(dispatcher_, deferredDelete_(_)).Times(AtLeast(1));
   attempt_timer->invokeCallback();
-  EXPECT_EQ(oobCounter("stream_failures"), 1);
+  EXPECT_EQ(oobCounter("stream_failures"), 1); // NOLINT(clang-analyzer-cplusplus.NewDeleteLeaks)
 }
 
 TEST_F(OrcaOobManagerWireTest, RemoteCloseTriggersTransientFailure) {
@@ -610,7 +614,7 @@ TEST_F(OrcaOobManagerWireTest, RemoteCloseTriggersTransientFailure) {
   EXPECT_CALL(dispatcher_, deferredDelete_(_)).Times(AtLeast(1));
   attempt_timer->invokeCallback();
 
-  respondHeadersOk(*attempt);
+  respondHeadersOk(*attempt); // NOLINT(clang-analyzer-cplusplus.NewDeleteLeaks)
   // Run OobSession's connection callback before CodecClient's callback so onConnectionEvent sees
   // codec_client_ live; CodecClient then resets the stream after OobSession has torn it down.
   ASSERT_GE(attempt->network_connection->callbacks_.size(), 2);
@@ -655,6 +659,7 @@ TEST_F(OrcaOobManagerWireTest, HostnameUsedAsAuthority) {
   wireConnectionFor(host, *attempt);
   expectCreateCodecClient(*manager, *attempt);
   attempt_timer->invokeCallback();
+  // NOLINTNEXTLINE(clang-analyzer-cplusplus.NewDeleteLeaks)
   EXPECT_EQ(captured_authority, "myorca.example");
 
   EXPECT_CALL(dispatcher_, deferredDelete_(_)).Times(AtLeast(1));
@@ -694,7 +699,7 @@ TEST_F(OrcaOobManagerWireTest, PipeHostFallsBackToClusterName) {
   expectCreateCodecClient(*manager, *attempt);
   attempt_timer->invokeCallback();
   // Pipe address has no ip(); authority falls through to the cluster name.
-  EXPECT_EQ(captured_authority, "fake_cluster");
+  EXPECT_EQ(captured_authority, "fake_cluster"); // NOLINT(clang-analyzer-cplusplus.NewDeleteLeaks)
 
   EXPECT_CALL(dispatcher_, deferredDelete_(_)).Times(AtLeast(1));
   manager.reset();
@@ -723,7 +728,7 @@ TEST_F(OrcaOobManagerWireTest, SyncLocalCloseDuringTearDownDoesNotDoubleCount) {
   EXPECT_CALL(dispatcher_, deferredDelete_(_)).Times(AtLeast(1));
   attempt_timer->invokeCallback();
 
-  respondHeadersOk(*attempt);
+  respondHeadersOk(*attempt); // NOLINT(clang-analyzer-cplusplus.NewDeleteLeaks)
   // GoAway(Other) -> handleTransientFailure -> tearDownCodec -> sync close -> sync
   // onConnectionEvent(LocalClose) re-entry. With the fix, the re-entry sees a null
   // codec_client_ and returns; stream_failures stays at 1.

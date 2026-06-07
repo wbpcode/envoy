@@ -1000,7 +1000,7 @@ TEST_P(SubsetLoadBalancerTest, ListAsAnyEnabled) {
   }
   TestLoadBalancerContext context({{"version", "1.2.1"}});
   EXPECT_TRUE(host_set_.hosts()[0] == lb_->chooseHost(&context).host);
-}
+} // NOLINT(clang-analyzer-cplusplus.NewDeleteLeaks)
 
 TEST_P(SubsetLoadBalancerTest, ListAsAnyEnabledMultipleLists) {
   EXPECT_CALL(subset_info_, fallbackPolicy())
@@ -1040,7 +1040,7 @@ TEST_P(SubsetLoadBalancerTest, ListAsAnyEnabledMultipleLists) {
 
   TestLoadBalancerContext context({{"version", "1.2.2"}});
   EXPECT_TRUE(host_set_.hosts()[1] == lb_->chooseHost(&context).host);
-}
+} // NOLINT(clang-analyzer-cplusplus.NewDeleteLeaks)
 
 TEST_P(SubsetLoadBalancerTest, ListAsAnyEnabledMultipleListsForSingleHost) {
   EXPECT_CALL(subset_info_, fallbackPolicy())
@@ -1080,7 +1080,7 @@ TEST_P(SubsetLoadBalancerTest, ListAsAnyEnabledMultipleListsForSingleHost) {
   TestLoadBalancerContext context({{"version", "1.2.1"}, {"hardware", "b"}});
   EXPECT_TRUE(host_set_.hosts()[0] == lb_->chooseHost(&context).host);
   EXPECT_TRUE(host_set_.hosts()[0] == lb_->chooseHost(&context).host);
-}
+} // NOLINT(clang-analyzer-cplusplus.NewDeleteLeaks)
 
 TEST_P(SubsetLoadBalancerTest, ListAsAnyDisable) {
   EXPECT_CALL(subset_info_, fallbackPolicy())
@@ -1103,7 +1103,7 @@ TEST_P(SubsetLoadBalancerTest, ListAsAnyDisable) {
   }
   TestLoadBalancerContext context({{"version", "1.2"}});
   EXPECT_TRUE(nullptr == lb_->chooseHost(&context).host);
-}
+} // NOLINT(clang-analyzer-cplusplus.NewDeleteLeaks)
 
 // Test that adding backends to a failover group causes no problems.
 TEST_P(SubsetLoadBalancerTest, UpdateFailover) {
@@ -1829,7 +1829,7 @@ TEST_P(SubsetLoadBalancerTest, ZoneAwareFallbackAfterUpdate) {
   // Force request out of small zone.
   EXPECT_CALL(random_, random()).WillOnce(Return(0)).WillOnce(Return(9999)).WillOnce(Return(2));
   EXPECT_EQ(host_set_.healthy_hosts_per_locality_->get()[1][1], lb_->chooseHost(nullptr).host);
-}
+} // NOLINT(clang-analyzer-cplusplus.NewDeleteLeaks)
 
 TEST_F(SubsetLoadBalancerTest, ZoneAwareFallbackDefaultSubset) {
   EXPECT_CALL(subset_info_, fallbackPolicy())
@@ -1964,7 +1964,7 @@ TEST_P(SubsetLoadBalancerTest, ZoneAwareFallbackDefaultSubsetAfterUpdate) {
   // Force request out of small zone.
   EXPECT_CALL(random_, random()).WillOnce(Return(0)).WillOnce(Return(9999)).WillOnce(Return(2));
   EXPECT_EQ(host_set_.healthy_hosts_per_locality_->get()[1][3], lb_->chooseHost(nullptr).host);
-}
+} // NOLINT(clang-analyzer-cplusplus.NewDeleteLeaks)
 
 TEST_F(SubsetLoadBalancerTest, ZoneAwareBalancesSubsets) {
   EXPECT_CALL(subset_info_, fallbackPolicy())
@@ -2095,7 +2095,7 @@ TEST_P(SubsetLoadBalancerTest, ZoneAwareBalancesSubsetsAfterUpdate) {
   // Force request out of small zone.
   EXPECT_CALL(random_, random()).WillOnce(Return(0)).WillOnce(Return(9999)).WillOnce(Return(2));
   EXPECT_EQ(host_set_.healthy_hosts_per_locality_->get()[1][3], lb_->chooseHost(&context).host);
-}
+} // NOLINT(clang-analyzer-cplusplus.NewDeleteLeaks)
 
 TEST_F(SubsetLoadBalancerTest, ZoneAwareComplicatedBalancesSubsets) {
   EXPECT_CALL(subset_info_, fallbackPolicy())

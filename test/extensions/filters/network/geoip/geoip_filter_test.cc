@@ -17,11 +17,9 @@
 #include "gtest/gtest.h"
 
 using testing::_;
-using testing::Invoke;
 
 // Import the shared geoip mocks from the HTTP filter tests.
 using Envoy::Extensions::HttpFilters::Geoip::DummyGeoipProviderFactory;
-using Envoy::Extensions::HttpFilters::Geoip::MockDriver;
 using Envoy::Extensions::HttpFilters::Geoip::MockDriverSharedPtr;
 
 namespace Envoy {

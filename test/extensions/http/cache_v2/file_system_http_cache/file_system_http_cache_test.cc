@@ -35,7 +35,6 @@ using Common::AsyncFiles::MockAsyncFileContext;
 using Common::AsyncFiles::MockAsyncFileHandle;
 using Common::AsyncFiles::MockAsyncFileManager;
 using Common::AsyncFiles::MockAsyncFileManagerFactory;
-using ::envoy::extensions::filters::http::cache_v2::v3::CacheV2Config;
 using StatusHelpers::HasStatusCode;
 using StatusHelpers::IsOkAndHolds;
 using ::testing::HasSubstr;

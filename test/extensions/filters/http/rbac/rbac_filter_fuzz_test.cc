@@ -16,7 +16,6 @@
 using Envoy::Extensions::HttpFilters::RBACFilter::RoleBasedAccessControlFilter;
 using Envoy::Extensions::HttpFilters::RBACFilter::RoleBasedAccessControlFilterConfig;
 using Envoy::Extensions::HttpFilters::RBACFilter::RoleBasedAccessControlFilterConfigSharedPtr;
-using testing::WithArgs;
 
 namespace Envoy {
 namespace Extensions {

@@ -265,7 +265,7 @@ static void bmRequestUnaryPassthrough(benchmark::State& state) {
       {"content-type", "application/grpc"}};
   std::string raw_payload = fixture.payload_.toString();
 
-  for (auto _ : state) {
+  for (auto _ : state) { // NOLINT(clang-analyzer-deadcode.DeadStores)
     auto filter = std::make_unique<FilterType>(*fixture.config_);
     filter->setDecoderFilterCallbacks(fixture.callbacks_);
     filter->decodeHeaders(headers, false);
@@ -291,7 +291,7 @@ static void bmRequestUnaryScrubbing(benchmark::State& state) {
       {"content-type", "application/grpc"}};
   std::string raw_payload = fixture.payload_.toString();
 
-  for (auto _ : state) {
+  for (auto _ : state) { // NOLINT(clang-analyzer-deadcode.DeadStores)
     auto filter = std::make_unique<FilterType>(*fixture.config_);
     filter->setDecoderFilterCallbacks(fixture.callbacks_);
     filter->decodeHeaders(headers, false);
@@ -321,7 +321,7 @@ static void bmRequestStreamingScrubbing(benchmark::State& state) {
   filter->setDecoderFilterCallbacks(fixture.callbacks_);
   filter->decodeHeaders(headers, false);
 
-  for (auto _ : state) {
+  for (auto _ : state) { // NOLINT(clang-analyzer-deadcode.DeadStores)
     Buffer::OwnedImpl iteration_data;
     iteration_data.add(raw_payload);
     auto status = filter->decodeData(iteration_data, false);
@@ -347,7 +347,7 @@ static void bmResponseUnaryPassthrough(benchmark::State& state) {
                                                {"content-type", "application/grpc"}};
   std::string raw_payload = fixture.payload_.toString();
 
-  for (auto _ : state) {
+  for (auto _ : state) { // NOLINT(clang-analyzer-deadcode.DeadStores)
     auto filter = std::make_unique<FilterType>(*fixture.config_);
     filter->setDecoderFilterCallbacks(fixture.callbacks_);
     filter->setEncoderFilterCallbacks(fixture.encoder_callbacks_);
@@ -376,7 +376,7 @@ static void bmResponseUnaryScrubbing(benchmark::State& state) {
                                                {"content-type", "application/grpc"}};
   std::string raw_payload = fixture.payload_.toString();
 
-  for (auto _ : state) {
+  for (auto _ : state) { // NOLINT(clang-analyzer-deadcode.DeadStores)
     auto filter = std::make_unique<FilterType>(*fixture.config_);
     filter->setDecoderFilterCallbacks(fixture.callbacks_);
     filter->setEncoderFilterCallbacks(fixture.encoder_callbacks_);
@@ -411,7 +411,7 @@ static void bmResponseStreamingScrubbing(benchmark::State& state) {
   filter->decodeHeaders(req_headers, true);
   filter->encodeHeaders(resp_headers, false);
 
-  for (auto _ : state) {
+  for (auto _ : state) { // NOLINT(clang-analyzer-deadcode.DeadStores)
     Buffer::OwnedImpl iteration_data;
     iteration_data.add(raw_payload);
     auto status = filter->encodeData(iteration_data, false);
@@ -440,7 +440,7 @@ static void bmRawProtoRoundTrip(benchmark::State& state) {
   }
   std::string raw_proto_bytes = grpc_payload.substr(5);
 
-  for (auto _ : state) {
+  for (auto _ : state) { // NOLINT(clang-analyzer-deadcode.DeadStores)
     TestProto::ScrubRequest temp_msg;
 
     // Parse (Deserialization).

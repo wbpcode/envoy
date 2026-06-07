@@ -32,7 +32,6 @@ namespace Udp {
 using ::testing::Eq;
 using ::testing::Invoke;
 using ::testing::NiceMock;
-using ::testing::NotNull;
 using ::testing::Return;
 
 class UdpUpstreamTest : public ::testing::Test {

@@ -23,7 +23,6 @@ using ::testing::_;
 using ::testing::AllOf;
 using ::testing::AnyNumber;
 using ::testing::Between;
-using ::testing::ElementsAre;
 using ::testing::Eq;
 using ::testing::ExplainMatchResult;
 using ::testing::IsEmpty;

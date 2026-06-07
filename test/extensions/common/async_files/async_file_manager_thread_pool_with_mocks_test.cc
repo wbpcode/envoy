@@ -27,7 +27,6 @@ namespace Extensions {
 namespace Common {
 namespace AsyncFiles {
 
-using StatusHelpers::IsOkAndHolds;
 using ::testing::_;
 using ::testing::Eq;
 using ::testing::InSequence;

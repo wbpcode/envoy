@@ -18,7 +18,6 @@ namespace SetFilterState {
 namespace {
 
 using testing::NiceMock;
-using testing::ReturnRef;
 
 class SetFilterStateTest : public testing::Test {
 public:

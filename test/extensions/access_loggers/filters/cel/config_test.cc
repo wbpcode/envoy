@@ -18,9 +18,7 @@ namespace Filters {
 namespace CEL {
 namespace {
 
-using ::testing::_;
 using ::testing::NiceMock;
-using ::testing::Return;
 
 class CELAccessLogFilterConfigTest : public testing::Test {
 protected:

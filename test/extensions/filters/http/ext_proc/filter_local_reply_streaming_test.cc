@@ -46,7 +46,6 @@ using ::Envoy::Http::FilterTrailersStatus;
 using ::Envoy::Http::RequestHeaderMapPtr;
 using ::Envoy::Http::ResponseHeaderMapPtr;
 using ::Envoy::Http::TestRequestTrailerMapImpl;
-using ::Envoy::Http::TestResponseHeaderMapImpl;
 
 using ::testing::Eq;
 using ::testing::Unused;

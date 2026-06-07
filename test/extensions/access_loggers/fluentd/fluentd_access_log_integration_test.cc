@@ -12,7 +12,6 @@
 #include "gtest/gtest.h"
 #include "msgpack.hpp"
 
-using testing::AssertionResult;
 using testing::Eq;
 
 namespace Envoy {

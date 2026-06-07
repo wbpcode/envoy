@@ -15,9 +15,6 @@
 #include "gtest/gtest.h"
 
 using absl::Status;
-using absl::StatusCode;
-using Envoy::Protobuf::Empty;
-using Envoy::Protobuf::TextFormat;
 
 using Envoy::Protobuf::util::MessageDifferencer;
 

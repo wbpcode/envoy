@@ -11450,6 +11450,7 @@ virtual_hosts:
   EXPECT_FALSE(
       internal_redirect_policy.shouldRedirectForResponseCode(static_cast<Http::Code>(305)));
   EXPECT_FALSE(
+      // NOLINTNEXTLINE(clang-analyzer-optin.core.EnumCastOutOfRange)
       internal_redirect_policy.shouldRedirectForResponseCode(static_cast<Http::Code>(306)));
   EXPECT_FALSE(
       internal_redirect_policy.shouldRedirectForResponseCode(static_cast<Http::Code>(307)));

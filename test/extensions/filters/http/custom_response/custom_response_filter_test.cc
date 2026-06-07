@@ -72,6 +72,7 @@ TEST_F(CustomResponseFilterTest, LocalData) {
   EXPECT_EQ(filter_->decodeHeaders(request_headers, false),
             ::Envoy::Http::FilterHeadersStatus::Continue);
   EXPECT_CALL(encoder_callbacks_,
+              // NOLINTNEXTLINE(clang-analyzer-optin.core.EnumCastOutOfRange)
               sendLocalReply(static_cast<::Envoy::Http::Code>(499), "not allowed", _, _, _));
   ON_CALL(encoder_callbacks_.stream_info_, getRequestHeaders())
       .WillByDefault(Return(&request_headers));

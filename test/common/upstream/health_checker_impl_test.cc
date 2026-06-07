@@ -6281,6 +6281,7 @@ TEST_F(GrpcHealthCheckerImplTest, GrpcFailUnknownHealthStatus) {
   EXPECT_CALL(event_logger_, logEjectUnhealthy(_, _, _, _));
   EXPECT_CALL(event_logger_, logUnhealthy(_, _, _, true, _));
 
+  // NOLINTNEXTLINE(clang-analyzer-optin.core.EnumCastOutOfRange)
   respondServiceStatus(0, static_cast<grpc::health::v1::HealthCheckResponse::ServingStatus>(999));
   EXPECT_TRUE(cluster_->prioritySet().getMockHostSet(0)->hosts_[0]->healthFlagGet(
       Host::HealthFlag::FAILED_ACTIVE_HC));

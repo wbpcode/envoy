@@ -113,7 +113,7 @@ void bmOpenTelemetrySinkFlushNoLimit(benchmark::State& state) {
 
   OpenTelemetrySink sink(flusher, exporter, 0);
 
-  for (auto _ : state) {
+  for (auto _ : state) { // NOLINT(clang-analyzer-deadcode.DeadStores)
     sink.flush(*setup.snapshot);
   }
 }
@@ -133,7 +133,7 @@ void bmOpenTelemetrySinkFlushTrafficSplit200(benchmark::State& state) {
 
   OpenTelemetrySink sink(flusher, exporter, 0);
 
-  for (auto _ : state) {
+  for (auto _ : state) { // NOLINT(clang-analyzer-deadcode.DeadStores)
     sink.flush(*setup.snapshot);
   }
 }

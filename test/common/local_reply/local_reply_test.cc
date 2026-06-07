@@ -245,6 +245,7 @@ TEST_F(LocalReplyTest, TestMapperRewrite) {
   // code=430 matches the fifth filter; rewrite nothing
   resetData(430);
   local->rewrite(&request_headers_, response_headers_, stream_info_, code_, body_, content_type_);
+  // NOLINTNEXTLINE(clang-analyzer-optin.core.EnumCastOutOfRange)
   EXPECT_EQ(code_, static_cast<Http::Code>(430));
   EXPECT_EQ(stream_info_.responseCode(), 430U);
   EXPECT_EQ(response_headers_.Status()->value().getStringView(), "430");

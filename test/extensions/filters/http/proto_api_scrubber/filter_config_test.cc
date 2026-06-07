@@ -22,17 +22,13 @@ namespace Extensions {
 namespace HttpFilters {
 namespace ProtoApiScrubber {
 namespace {
-using ::envoy::extensions::filters::http::proto_api_scrubber::v3::MethodRestrictions;
 using ::envoy::extensions::filters::http::proto_api_scrubber::v3::ProtoApiScrubberConfig;
-using ::envoy::extensions::filters::http::proto_api_scrubber::v3::RestrictionConfig;
 using Http::HttpMatchingData;
-using xds::type::matcher::v3::HttpAttributesCelMatchInput;
 using MatchTreeHttpMatchingDataSharedPtr = Matcher::MatchTreeSharedPtr<HttpMatchingData>;
 using Matcher::HasActionWithType;
 using Matcher::HasNoMatch;
 using StatusHelpers::HasStatus;
 using StatusHelpers::IsOk;
-using testing::AllOf;
 using testing::HasSubstr;
 using testing::NiceMock;
 

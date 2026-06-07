@@ -79,19 +79,19 @@ TEST(CharacterSetValidationTest, FromCharsInitializesCorrectly) {
 }
 
 // Primary template - selected if expression CAN be constexpr
-template <typename Lambda, int = (Lambda{}(), 0)> constexpr bool is_constexpr_impl(Lambda, int) {
+template <typename Lambda, int = (Lambda{}(), 0)> constexpr bool isConstexprImpl(Lambda, int) {
   return true;
 }
 
 // Fallback - selected if expression CANNOT be constexpr
-template <typename Lambda> constexpr bool is_constexpr_impl(Lambda, long) { return false; }
+template <typename Lambda> constexpr bool isConstexprImpl(Lambda, long) { return false; }
 
 TEST(CharacterSetValidationTest, WorksFromDynamicData) {
   // Code coverage says none of the functions are covered if we don't test using them
   // with dynamic data, since all constexpr usage is compiled-out!
   // absl::StrCat doesn't have a constexpr variant so this forces non-constexpr usage.
   static_assert(
-      !is_constexpr_impl([]() { return absl::StrCat("!"); }, 0),
+      !isConstexprImpl([]() { return absl::StrCat("!"); }, 0),
       "Oh no, StrCat can be constexpr-evaluated - replace StrCat with something that can't!");
   const CharTable kCharTable =
       (CharTable::fromChars(absl::StrCat("!")) | CharTable::fromChars(absl::StrCat("@$"))) &

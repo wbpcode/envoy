@@ -274,7 +274,7 @@ static void bmRouteTableSizeWithExactMatcherTree(benchmark::State& state) {
       *ConfigImpl::create(genMatcherTreeRouteConfig(state), factory_context,
                           ProtobufMessage::getNullValidationVisitor(), true);
 
-  for (auto _ : state) {
+  for (auto _ : state) { // NOLINT(clang-analyzer-deadcode.DeadStores)
     // Match against the last route in the config
     int last_route_num = state.range(0) - 1;
     config->route(genRequestHeaders(last_route_num), stream_info, 0);
@@ -303,7 +303,7 @@ static void bmRouteTableSizeWithPrefixMatcherTree(benchmark::State& state) {
       *ConfigImpl::create(genPrefixMatcherTreeRouteConfig(state), factory_context,
                           ProtobufMessage::getNullValidationVisitor(), true);
 
-  for (auto _ : state) {
+  for (auto _ : state) { // NOLINT(clang-analyzer-deadcode.DeadStores)
     // Match against the last route in the last shelf
     int shelf_count = static_cast<int>(std::sqrt(state.range(0)));
     int last_route_num = shelf_count - 1;

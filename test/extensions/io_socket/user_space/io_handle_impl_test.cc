@@ -618,7 +618,7 @@ TEST_F(IoHandleImplTest, EventScheduleBasic) {
   EXPECT_TRUE(schedulable_cb->enabled_);
   EXPECT_CALL(cb_, called(Event::FileReadyType::Write));
   schedulable_cb->invokeCallback();
-  EXPECT_FALSE(schedulable_cb->enabled_);
+  EXPECT_FALSE(schedulable_cb->enabled_); // NOLINT(clang-analyzer-cplusplus.NewDeleteLeaks)
 
   io_handle_->resetFileEvents();
 }
@@ -643,7 +643,7 @@ TEST_F(IoHandleImplTest, SetEnabledTriggerEventSchedule) {
     EXPECT_TRUE(schedulable_cb->enabled_);
     EXPECT_CALL(cb_, called(Event::FileReadyType::Write));
     schedulable_cb->invokeCallback();
-    ASSERT_FALSE(schedulable_cb->enabled_);
+    ASSERT_FALSE(schedulable_cb->enabled_); // NOLINT(clang-analyzer-cplusplus.NewDeleteLeaks)
   }
   {
     SCOPED_TRACE("enable write and writable.");
@@ -667,7 +667,7 @@ TEST_F(IoHandleImplTest, ReadAndWriteAreEdgeTriggered) {
         return absl::OkStatus();
       },
       Event::FileTriggerType::Edge, Event::FileReadyType::Read | Event::FileReadyType::Write);
-  ASSERT_TRUE(schedulable_cb->enabled_);
+  ASSERT_TRUE(schedulable_cb->enabled_); // NOLINT(clang-analyzer-cplusplus.NewDeleteLeaks)
   EXPECT_CALL(cb_, called(Event::FileReadyType::Write));
   schedulable_cb->invokeCallback();
   ASSERT_FALSE(schedulable_cb->enabled_);
@@ -697,7 +697,7 @@ TEST_F(IoHandleImplTest, DisablingEventsDisablesScheduling) {
         return absl::OkStatus();
       },
       Event::FileTriggerType::Edge, Event::FileReadyType::Write);
-  ASSERT_TRUE(schedulable_cb->enabled_);
+  ASSERT_TRUE(schedulable_cb->enabled_); // NOLINT(clang-analyzer-cplusplus.NewDeleteLeaks)
 
   // The write event is cleared and the read event is not ready.
   EXPECT_CALL(*schedulable_cb, cancel());
@@ -795,7 +795,7 @@ TEST_F(IoHandleImplTest, Close) {
   schedulable_cb->invokeCallback();
 
   // Not closed yet.
-  ASSERT_FALSE(should_close);
+  ASSERT_FALSE(should_close); // NOLINT(clang-analyzer-cplusplus.NewDeleteLeaks)
   io_handle_peer_->close();
   EXPECT_TRUE(schedulable_cb->enabled_);
   schedulable_cb->invokeCallback();
@@ -833,7 +833,7 @@ TEST_F(IoHandleImplTest, ShutdownRaisesReadEvent) {
         return absl::OkStatus();
       },
       Event::FileTriggerType::Edge, Event::FileReadyType::Read);
-  ASSERT_TRUE(schedulable_cb->enabled_);
+  ASSERT_TRUE(schedulable_cb->enabled_); // NOLINT(clang-analyzer-cplusplus.NewDeleteLeaks)
   schedulable_cb->invokeCallback();
 
   // Not closed yet.
@@ -873,7 +873,7 @@ TEST_F(IoHandleImplTest, WriteSchedulesWritableEvent) {
         return absl::OkStatus();
       },
       Event::FileTriggerType::Edge, Event::FileReadyType::Read | Event::FileReadyType::Write);
-  ASSERT_TRUE(schedulable_cb->enabled_);
+  ASSERT_TRUE(schedulable_cb->enabled_); // NOLINT(clang-analyzer-cplusplus.NewDeleteLeaks)
   schedulable_cb->invokeCallback();
   ASSERT_FALSE(schedulable_cb->enabled_);
 
@@ -912,7 +912,7 @@ TEST_F(IoHandleImplTest, WritevSchedulesWritableEvent) {
         return absl::OkStatus();
       },
       Event::FileTriggerType::Edge, Event::FileReadyType::Read | Event::FileReadyType::Write);
-  ASSERT_TRUE(schedulable_cb->enabled_);
+  ASSERT_TRUE(schedulable_cb->enabled_); // NOLINT(clang-analyzer-cplusplus.NewDeleteLeaks)
   schedulable_cb->invokeCallback();
   ASSERT_FALSE(schedulable_cb->enabled_);
 
@@ -966,7 +966,7 @@ TEST_F(IoHandleImplTest, ReadAfterPeerShutdownWrite) {
   EXPECT_TRUE(schedulable_cb->enabled_);
 
   schedulable_cb->invokeCallback();
-  ASSERT_FALSE(schedulable_cb->enabled_);
+  ASSERT_FALSE(schedulable_cb->enabled_); // NOLINT(clang-analyzer-cplusplus.NewDeleteLeaks)
   EXPECT_EQ(raw_data, accumulator);
 
   io_handle_->close();
@@ -1011,7 +1011,7 @@ TEST_F(IoHandleImplTest, NotifyWritableAfterShutdownWrite) {
   EXPECT_CALL(cb_, called(Event::FileReadyType::Read));
   schedulable_cb->invokeCallback();
 
-  io_handle_peer_->close();
+  io_handle_peer_->close(); // NOLINT(clang-analyzer-cplusplus.NewDeleteLeaks)
 }
 
 TEST_F(IoHandleImplTest, ClosedPeerHandleAllowsWrite) {
@@ -1030,7 +1030,7 @@ TEST_F(IoHandleImplTest, ClosedPeerHandleAllowsWrite) {
       },
       Event::FileTriggerType::Edge, Event::FileReadyType::Write);
   // The peer's receive buffer is full, so no Write event is raised.
-  ASSERT_FALSE(schedulable_cb->enabled_);
+  ASSERT_FALSE(schedulable_cb->enabled_); // NOLINT(clang-analyzer-cplusplus.NewDeleteLeaks)
 
   // We suddenly close the peer handle, even though there is data left to send to it.
   io_handle_peer_->close();
@@ -1104,7 +1104,7 @@ TEST_F(IoHandleImplTest, ActivateEvent) {
       Event::FileTriggerType::Edge, Event::FileReadyType::Read);
   EXPECT_FALSE(schedulable_cb->enabled_);
   io_handle_->activateFileEvents(Event::FileReadyType::Read);
-  EXPECT_TRUE(schedulable_cb->enabled_);
+  EXPECT_TRUE(schedulable_cb->enabled_); // NOLINT(clang-analyzer-cplusplus.NewDeleteLeaks)
 }
 
 // This is a compatibility test for Envoy Connection. When a connection is destroyed, the Envoy
@@ -1126,7 +1126,7 @@ TEST_F(IoHandleImplTest, EventCallbackIsNotInvokedIfHandleIsClosed) {
       Event::FileTriggerType::Edge, Event::FileReadyType::Read);
   EXPECT_FALSE(schedulable_cb->enabled_);
   io_handle_->activateFileEvents(Event::FileReadyType::Read);
-  EXPECT_TRUE(schedulable_cb->enabled_);
+  EXPECT_TRUE(schedulable_cb->enabled_); // NOLINT(clang-analyzer-cplusplus.NewDeleteLeaks)
 
   {
     EXPECT_CALL(check_event_cb, Call()).Times(0);

@@ -30,7 +30,6 @@ namespace {
 using ::Envoy::Matcher::ActionFactory;
 using ::Envoy::Matcher::ActionMatchResult;
 using ::Envoy::Matcher::CustomMatcherFactory;
-using ::Envoy::Matcher::DataInputGetResult;
 using ::Envoy::Matcher::HasInsufficientData;
 using ::Envoy::Matcher::HasNoMatch;
 using ::Envoy::Matcher::HasStringAction;

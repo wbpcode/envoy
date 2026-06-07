@@ -755,7 +755,7 @@ TEST_F(RedisClusterLoadBalancerTest, LocalZoneAffinityWithLocalReplica) {
   validateAssignment(hosts, expected_assignments, true,
                      NetworkFilters::Common::Redis::Client::ReadPolicy::LocalZoneAffinity,
                      "zone-a");
-}
+} // NOLINT(clang-analyzer-cplusplus.NewDeleteLeaks)
 
 // Tests for LOCAL_ZONE_AFFINITY when no local replica exists - should fall back to any replica
 TEST_F(RedisClusterLoadBalancerTest, LocalZoneAffinityNoLocalReplica) {
@@ -782,7 +782,7 @@ TEST_F(RedisClusterLoadBalancerTest, LocalZoneAffinityNoLocalReplica) {
   validateAssignment(hosts, expected_assignments, true,
                      NetworkFilters::Common::Redis::Client::ReadPolicy::LocalZoneAffinity,
                      "zone-c");
-}
+} // NOLINT(clang-analyzer-cplusplus.NewDeleteLeaks)
 
 // Tests for LOCAL_ZONE_AFFINITY when no replica exists - should fall back to primary
 TEST_F(RedisClusterLoadBalancerTest, LocalZoneAffinityNoReplica) {
@@ -807,7 +807,7 @@ TEST_F(RedisClusterLoadBalancerTest, LocalZoneAffinityNoReplica) {
   validateAssignment(hosts, expected_assignments, true,
                      NetworkFilters::Common::Redis::Client::ReadPolicy::LocalZoneAffinity,
                      "zone-a");
-}
+} // NOLINT(clang-analyzer-cplusplus.NewDeleteLeaks)
 
 // Tests for LOCAL_ZONE_AFFINITY_REPLICAS_AND_PRIMARY with local replica
 TEST_F(RedisClusterLoadBalancerTest, LocalZoneAffinityReplicasAndPrimaryWithLocalReplica) {
@@ -835,7 +835,7 @@ TEST_F(RedisClusterLoadBalancerTest, LocalZoneAffinityReplicasAndPrimaryWithLoca
       hosts, expected_assignments, true,
       NetworkFilters::Common::Redis::Client::ReadPolicy::LocalZoneAffinityReplicasAndPrimary,
       "zone-a");
-}
+} // NOLINT(clang-analyzer-cplusplus.NewDeleteLeaks)
 
 // Tests for LOCAL_ZONE_AFFINITY_REPLICAS_AND_PRIMARY - prefer local primary when no local replica
 TEST_F(RedisClusterLoadBalancerTest, LocalZoneAffinityReplicasAndPrimaryLocalPrimary) {
@@ -863,7 +863,7 @@ TEST_F(RedisClusterLoadBalancerTest, LocalZoneAffinityReplicasAndPrimaryLocalPri
       hosts, expected_assignments, true,
       NetworkFilters::Common::Redis::Client::ReadPolicy::LocalZoneAffinityReplicasAndPrimary,
       "zone-a");
-}
+} // NOLINT(clang-analyzer-cplusplus.NewDeleteLeaks)
 
 // Tests for LOCAL_ZONE_AFFINITY_REPLICAS_AND_PRIMARY - fall back to any replica when no local hosts
 TEST_F(RedisClusterLoadBalancerTest, LocalZoneAffinityReplicasAndPrimaryFallbackToReplica) {
@@ -891,7 +891,7 @@ TEST_F(RedisClusterLoadBalancerTest, LocalZoneAffinityReplicasAndPrimaryFallback
       hosts, expected_assignments, true,
       NetworkFilters::Common::Redis::Client::ReadPolicy::LocalZoneAffinityReplicasAndPrimary,
       "zone-c");
-}
+} // NOLINT(clang-analyzer-cplusplus.NewDeleteLeaks)
 
 // Tests for LOCAL_ZONE_AFFINITY_REPLICAS_AND_PRIMARY - fall back to primary when no replicas
 TEST_F(RedisClusterLoadBalancerTest, LocalZoneAffinityReplicasAndPrimaryNoReplica) {
@@ -917,7 +917,7 @@ TEST_F(RedisClusterLoadBalancerTest, LocalZoneAffinityReplicasAndPrimaryNoReplic
       hosts, expected_assignments, true,
       NetworkFilters::Common::Redis::Client::ReadPolicy::LocalZoneAffinityReplicasAndPrimary,
       "zone-c");
-}
+} // NOLINT(clang-analyzer-cplusplus.NewDeleteLeaks)
 
 // Tests for LOCAL_ZONE_AFFINITY when zone discovery fails - hosts have no zones set
 // Should fall back to any-replica behavior (same as PreferReplica)
@@ -976,7 +976,7 @@ TEST_F(RedisClusterLoadBalancerTest, LocalZoneAffinityReplicasAndPrimaryUnhealth
       hosts, expected_assignments, true,
       NetworkFilters::Common::Redis::Client::ReadPolicy::LocalZoneAffinityReplicasAndPrimary,
       "zone-a");
-}
+} // NOLINT(clang-analyzer-cplusplus.NewDeleteLeaks)
 
 // Tests for LOCAL_ZONE_AFFINITY with empty client zone - should behave like PreferReplica
 TEST_F(RedisClusterLoadBalancerTest, LocalZoneAffinityEmptyClientZone) {

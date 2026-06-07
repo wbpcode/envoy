@@ -61,15 +61,11 @@ using ::envoy::service::ext_proc::v3::ProcessingResponse;
 using ::envoy::service::ext_proc::v3::TrailersResponse;
 
 using ::Envoy::Http::Filter1xxHeadersStatus;
-using ::Envoy::Http::FilterChainFactoryCallbacks;
 using ::Envoy::Http::FilterDataStatus;
 using ::Envoy::Http::FilterFactoryCb;
 using ::Envoy::Http::FilterHeadersStatus;
 using ::Envoy::Http::FilterTrailersStatus;
 using ::Envoy::Http::LowerCaseString;
-using ::Envoy::Http::MockStreamDecoderFilter;
-using ::Envoy::Http::MockStreamEncoderFilter;
-using ::Envoy::Http::RequestHeaderMap;
 using ::Envoy::Http::RequestHeaderMapPtr;
 using ::Envoy::Http::ResponseHeaderMap;
 using ::Envoy::Http::ResponseHeaderMapPtr;

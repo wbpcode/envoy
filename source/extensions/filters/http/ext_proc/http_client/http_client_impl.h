@@ -28,6 +28,7 @@ public:
                     std::shared_ptr<const Http::HttpServiceHeadersApplicator> headers_applicator)
       : config_(config), context_(context), headers_applicator_(std::move(headers_applicator)) {}
 
+  // NOLINTNEXTLINE(clang-analyzer-optin.cplusplus.VirtualCall)
   ~ExtProcHttpClient() override { cancel(); }
 
   void sendRequest(envoy::service::ext_proc::v3::ProcessingRequest&& req, bool end_stream,

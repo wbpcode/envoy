@@ -1,6 +1,5 @@
 #include "test/integration/ads_xdstp_config_sources_integration.h"
 
-using testing::AssertionResult;
 using testing::Ge;
 
 namespace Envoy {

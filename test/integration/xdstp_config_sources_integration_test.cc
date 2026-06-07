@@ -23,7 +23,6 @@
 
 #include "gtest/gtest.h"
 
-using testing::AssertionResult;
 using testing::Eq;
 using testing::Ge;
 

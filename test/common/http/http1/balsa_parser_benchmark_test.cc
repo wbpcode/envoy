@@ -104,7 +104,7 @@ void bmParseHeaders(benchmark::State& state) {
     }
   }
 
-  for (auto _ : state) {
+  for (auto _ : state) { // NOLINT(clang-analyzer-deadcode.DeadStores)
     HeaderCountingCallbacks callbacks;
     BalsaParser parser(MessageType::Request, &callbacks, request.size(), false, false);
     const size_t parsed = parser.execute(request.data(), request.size());

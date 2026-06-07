@@ -22,9 +22,7 @@ namespace Envoy {
 namespace Upstream {
 namespace {
 
-using ::testing::ElementsAre;
 using ::testing::InSequence;
-using ::testing::UnorderedElementsAre;
 
 class XdstpOdCdsApiImplTest : public testing::Test {
 public:

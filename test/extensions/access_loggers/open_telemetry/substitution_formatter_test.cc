@@ -26,7 +26,6 @@ using OpenTelemetryFormatMap = std::list<std::pair<std::string, std::string>>;
 using testing::Const;
 using testing::NiceMock;
 using testing::Return;
-using testing::ReturnPointee;
 using testing::ReturnRef;
 
 namespace Envoy {

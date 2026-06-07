@@ -400,6 +400,7 @@ TEST_F(ExtAuthzGrpcClientTest, AuthorizationErrorWithEmptyErrorResponseStatus) {
   // When the error_response has no HTTP status code, the gRPC client doesn't set a default.
   // The filter will use status_on_error configuration instead.
   auto authz_response =
+      // NOLINTNEXTLINE(clang-analyzer-optin.core.EnumCastOutOfRange)
       TestCommon::makeAuthzResponse(CheckStatus::Error, static_cast<Http::Code>(0), expected_body,
                                     expected_headers, HeaderValueOptionVector{}, grpc_status);
 

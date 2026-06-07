@@ -728,8 +728,10 @@ TEST_F(DnsCacheImplTest, DisableResolveTimeout) {
   Network::DnsResolver::ResolveCb resolve_cb;
   Event::MockTimer* refresh_timer = new Event::MockTimer(&context_.server_context_.dispatcher_);
   (void)refresh_timer; // Silent unused warning.
+  // NOLINTNEXTLINE(clang-analyzer-cplusplus.NewDeleteLeaks)
   Event::MockTimer* timeout_timer = new Event::MockTimer(&context_.server_context_.dispatcher_);
   (void)timeout_timer; // Silent unused warning.
+  // NOLINTNEXTLINE(clang-analyzer-cplusplus.NewDeleteLeaks)
   EXPECT_CALL(*resolver_, resolve("foo.com", _, _))
       .WillOnce(DoAll(SaveArg<2>(&resolve_cb), Return(&resolver_->active_query_)));
   auto result = dns_cache_->loadDnsCacheEntry("foo.com", 80, false, callbacks);
@@ -1093,7 +1095,9 @@ TEST_F(DnsCacheImplTest, DisableRefreshOnFailureContainsFailedHost) {
 
   // The previous resolution was a failure, so this should result in a cache miss.
   refresh_timer = new Event::MockTimer(&context_.server_context_.dispatcher_);
+  // NOLINTNEXTLINE(clang-analyzer-cplusplus.NewDeleteLeaks)
   (void)refresh_timer; // Silent unused warning.
+  // NOLINTNEXTLINE(clang-analyzer-cplusplus.NewDeleteLeaks)
   query_timeout_timer = new Event::MockTimer(&context_.server_context_.dispatcher_);
   EXPECT_CALL(*query_timeout_timer, enableTimer(std::chrono::milliseconds(5000), nullptr));
   EXPECT_CALL(*resolver_, resolve("foo.com", _, _))

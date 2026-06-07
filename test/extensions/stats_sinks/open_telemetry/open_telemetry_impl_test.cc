@@ -13,7 +13,6 @@
 #include "gtest/gtest.h"
 
 using testing::_;
-using testing::ByMove;
 using testing::NiceMock;
 using testing::Return;
 using testing::ReturnRef;

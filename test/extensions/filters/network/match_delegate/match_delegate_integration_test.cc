@@ -17,7 +17,6 @@ namespace NetworkFilters {
 namespace MatchDelegate {
 namespace {
 
-using envoy::extensions::common::matching::v3::ExtensionWithMatcher;
 using Envoy::Protobuf::StringValue;
 using Envoy::Protobuf::UInt32Value;
 

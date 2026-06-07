@@ -16,8 +16,6 @@
 #include "gtest/gtest.h"
 
 using ::envoy::extensions::filters::http::cache::v3::CacheConfig;
-using ::testing::_;
-using ::testing::AnyNumber;
 using ::testing::Not;
 
 namespace Envoy {

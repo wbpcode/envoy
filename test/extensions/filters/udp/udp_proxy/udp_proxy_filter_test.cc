@@ -43,7 +43,6 @@ using testing::Return;
 using testing::ReturnNew;
 using testing::ReturnRef;
 using testing::SaveArg;
-using testing::Throw;
 
 namespace Envoy {
 namespace Extensions {

@@ -22,15 +22,10 @@ namespace ExternalProcessing {
 namespace {
 
 using envoy::extensions::filters::http::ext_proc::v3::ProcessingMode;
-using envoy::service::ext_proc::v3::BodyResponse;
-using envoy::service::ext_proc::v3::CommonResponse;
 using envoy::service::ext_proc::v3::HeadersResponse;
-using envoy::service::ext_proc::v3::HttpBody;
 using envoy::service::ext_proc::v3::HttpHeaders;
-using envoy::service::ext_proc::v3::HttpTrailers;
 using envoy::service::ext_proc::v3::ProcessingRequest;
 using envoy::service::ext_proc::v3::ProcessingResponse;
-using envoy::service::ext_proc::v3::TrailersResponse;
 using Extensions::HttpFilters::ExternalProcessing::HeaderProtosEqual;
 
 using ::testing::_;

@@ -67,7 +67,7 @@ TEST(RefcountPtr, Operators) {
   shared2.reset();
   EXPECT_EQ(nullptr, shared2);
   EXPECT_EQ(1, shared3.use_count());
-}
+} // NOLINT(clang-analyzer-cplusplus.NewDeleteLeaks)
 
 } // namespace Stats
 } // namespace Envoy

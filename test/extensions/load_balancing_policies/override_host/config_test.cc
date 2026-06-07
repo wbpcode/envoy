@@ -30,7 +30,6 @@ using ::Envoy::Config::Utility;
 using ::envoy::extensions::load_balancing_policies::override_host::v3::OverrideHost;
 using ::Envoy::Upstream::MockHostSet;
 using ::test::load_balancing_policies::override_host::Config;
-using ::testing::HasSubstr;
 
 TEST(OverrideHostLbConfigTest, NoFallbackLb) {
   NiceMock<Envoy::Server::Configuration::MockServerFactoryContext> context;

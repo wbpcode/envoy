@@ -575,6 +575,7 @@ TEST_F(HttpConnectionManagerImplTest, DrainConnectionUponCompletionVsOnDrainTime
   EXPECT_CALL(response_encoder_, encodeHeaders(_, true));
   filter->callbacks_->streamInfo().setResponseCodeDetails("");
   filter->callbacks_->encodeHeaders(
+      // NOLINTNEXTLINE(clang-analyzer-cplusplus.NewDeleteLeaks)
       ResponseHeaderMapPtr{new TestResponseHeaderMapImpl{{":status", "200"}}}, true, "details");
 
   // After the response is complete, connection should be closed since drain_state is Closing.

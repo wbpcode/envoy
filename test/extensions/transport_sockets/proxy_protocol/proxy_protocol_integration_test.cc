@@ -761,7 +761,7 @@ TEST_P(ProxyProtocolTLVsIntegrationTest, TestV2TLVProxyProtocolWithCustomMetadat
     EXPECT_EQ(static_cast<uint8_t>(observed_data[offset + 1]), 0x00);
     EXPECT_EQ(static_cast<uint8_t>(observed_data[offset + 2]), 0x03);
     EXPECT_EQ(observed_data.substr(offset + 3, 3), "bar");
-    offset += 6;
+    offset += 6; // NOLINT(clang-analyzer-deadcode.DeadStores)
   } else if (GetParam() == Envoy::Network::Address::IpVersion::v6) {
     // Expected downstream proxy protocol header (IPv6).
     const uint8_t v2_protocol_ipv6[] = {
@@ -789,7 +789,7 @@ TEST_P(ProxyProtocolTLVsIntegrationTest, TestV2TLVProxyProtocolWithCustomMetadat
     EXPECT_EQ(static_cast<uint8_t>(observed_data[offset + 1]), 0x00);
     EXPECT_EQ(static_cast<uint8_t>(observed_data[offset + 2]), 0x03);
     EXPECT_EQ(observed_data.substr(offset + 3, 3), "bar");
-    offset += 6;
+    offset += 6; // NOLINT(clang-analyzer-deadcode.DeadStores)
   }
 
   tcp_client->close();

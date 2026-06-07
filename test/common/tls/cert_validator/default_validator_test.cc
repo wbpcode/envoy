@@ -687,6 +687,7 @@ public:
   explicit MockCertificateValidationContextConfig(const std::string& s) : s_(s) {
     auto matcher = envoy::extensions::transport_sockets::tls::v3::SubjectAltNameMatcher();
     matcher.set_san_type(
+        // NOLINTNEXTLINE(clang-analyzer-optin.core.EnumCastOutOfRange)
         static_cast<envoy::extensions::transport_sockets::tls::v3::SubjectAltNameMatcher_SanType>(
             123));
     matchers_.emplace_back(matcher);

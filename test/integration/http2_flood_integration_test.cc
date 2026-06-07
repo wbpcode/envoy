@@ -1630,6 +1630,7 @@ TEST_P(Http2FloodMitigationTest, HpackCookieBomb) {
   setup_frame.appendStaticHeader(Http2Frame::StaticHeaderIndex::SchemeHttps);
   setup_frame.appendHeaderWithoutIndexing(Http2Frame::StaticHeaderIndex::Path, "/content");
   setup_frame.appendHeaderWithoutIndexing(Http2Frame::StaticHeaderIndex::Authority, "localhost");
+  // NOLINTNEXTLINE(clang-analyzer-optin.core.EnumCastOutOfRange)
   setup_frame.appendHeaderWithIncrementalIndexing(static_cast<Http2Frame::StaticHeaderIndex>(32),
                                                   "session=" + std::string(1024, 'X'));
   setup_frame.adjustPayloadSize();

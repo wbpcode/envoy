@@ -15,7 +15,6 @@ namespace {
 
 using testing::_;
 using testing::NiceMock;
-using testing::Return;
 
 class McpFilterConfigTest : public testing::Test {
 public:

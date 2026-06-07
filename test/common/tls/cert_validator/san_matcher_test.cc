@@ -79,6 +79,7 @@ TEST(SanMatcherConfigTest, UnspecifiedSanType) {
                           "Proto constraint validation failed");
 
   auto san_type =
+      // NOLINTNEXTLINE(clang-analyzer-optin.core.EnumCastOutOfRange)
       static_cast<envoy::extensions::transport_sockets::tls::v3::SubjectAltNameMatcher::SanType>(
           static_cast<int>(123));
   san_matcher.set_san_type(san_type);

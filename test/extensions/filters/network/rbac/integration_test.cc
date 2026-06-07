@@ -340,6 +340,7 @@ typed_config:
 
     // Save all original filters
     std::vector<envoy::config::listener::v3::Filter> original_filters;
+    original_filters.reserve(l->filter_chains(0).filters_size());
     for (int i = 0; i < l->filter_chains(0).filters_size(); i++) {
       original_filters.push_back(*l->mutable_filter_chains(0)->mutable_filters(i));
     }

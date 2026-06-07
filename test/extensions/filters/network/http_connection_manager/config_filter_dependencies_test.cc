@@ -23,7 +23,6 @@ namespace NetworkFilters {
 namespace HttpConnectionManager {
 namespace {
 
-using envoy::extensions::filters::network::http_connection_manager::v3::HttpConnectionManager;
 using envoy::extensions::filters::network::http_connection_manager::v3::HttpFilter;
 
 void setRouterFilter(HttpFilter* filter) {

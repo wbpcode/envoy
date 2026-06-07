@@ -174,6 +174,7 @@ TEST_P(WasmNetworkFilterTest, CloseStream) {
   EXPECT_CALL(filter(),
               log_(spdlog::level::trace, Eq(absl::string_view("onDownstreamConnectionClose 2 2"))));
 
+  // NOLINTNEXTLINE(clang-analyzer-optin.core.EnumCastOutOfRange)
   filter().onEvent(static_cast<Network::ConnectionEvent>(9999)); // Does nothing.
   filter().onEvent(Network::ConnectionEvent::RemoteClose);
 }

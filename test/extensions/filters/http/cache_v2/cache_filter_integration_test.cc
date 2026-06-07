@@ -21,7 +21,6 @@ using testing::Eq;
 using testing::HasSubstr;
 using testing::Not;
 using testing::Pointee;
-using testing::Property;
 
 // TODO(toddmgreer): Expand integration test to include age header values,
 // expiration, HEAD requests, config customizations,

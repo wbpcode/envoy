@@ -2059,6 +2059,7 @@ TEST_P(ClusterManagerLifecycleTest, MergedUpdates) {
 
   // Ensure the merged updates were applied.
   timer->invokeCallback();
+  // NOLINTNEXTLINE(clang-analyzer-cplusplus.NewDeleteLeaks)
   EXPECT_EQ(1, factory_.stats_.counter("cluster_manager.cluster_updated").value());
   EXPECT_EQ(1, factory_.stats_.counter("cluster_manager.cluster_updated_via_merge").value());
   EXPECT_EQ(0, factory_.stats_.counter("cluster_manager.update_merge_cancelled").value());

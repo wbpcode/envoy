@@ -4196,7 +4196,7 @@ TEST_P(Http2CodecImplTest, ShouldBufferDeferredBodyNoEndstream) {
   }
 
   // Dispatch potential frames from server, for example, the window update frames.
-  driveToCompletion();
+  driveToCompletion(); // NOLINT(clang-analyzer-cplusplus.NewDeleteLeaks)
 }
 
 TEST_P(Http2CodecImplTest, ShouldBufferDeferredBodyWithEndStream) {
@@ -4235,7 +4235,7 @@ TEST_P(Http2CodecImplTest, ShouldBufferDeferredBodyWithEndStream) {
     EXPECT_CALL(request_decoder_, decodeData(_, true));
     process_buffered_data_callback->invokeCallback();
   }
-}
+} // NOLINT(clang-analyzer-cplusplus.NewDeleteLeaks)
 
 TEST_P(Http2CodecImplTest,
        ShouldGracefullyHandleBufferedDataConsumedByNetworkEventInsteadOfCallback) {
@@ -4273,7 +4273,7 @@ TEST_P(Http2CodecImplTest,
     EXPECT_CALL(request_decoder_, decodeTrailers_(_)).Times(0);
     process_buffered_data_callback->invokeCallback();
   }
-}
+} // NOLINT(clang-analyzer-cplusplus.NewDeleteLeaks)
 
 TEST_P(Http2CodecImplTest, CanHandleMultipleBufferedDataProcessingOnAStream) {
   // We must initialize before dtor, otherwise we'll touch uninitialized
@@ -4347,6 +4347,7 @@ TEST_P(Http2CodecImplTest,
   // Now invoke the deferred processing callback until we drain buffered data.
   {
     InSequence seq;
+    // NOLINTNEXTLINE(clang-analyzer-core.DivideZero)
     int num_iterations_to_drain_data = request_body_size / server_connection_.bufferLimit();
     for (int i = 0; i < num_iterations_to_drain_data; ++i) {
       EXPECT_CALL(request_decoder_, decodeData(_, false));

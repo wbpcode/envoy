@@ -15,10 +15,7 @@ namespace HttpFilters {
 namespace ExternalProcessing {
 namespace {
 
-using ::Envoy::Http::TestRequestHeaderMapImpl;
 using ::Envoy::Http::TestRequestTrailerMapImpl;
-using ::Envoy::Http::TestResponseHeaderMapImpl;
-using ::Envoy::Http::TestResponseTrailerMapImpl;
 
 #ifdef USE_CEL_PARSER
 

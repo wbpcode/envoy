@@ -2545,6 +2545,7 @@ TEST_F(DynamicModuleClusterTest, AsyncHostSelectionCompleteAfterLbDestroyedDrops
   NiceMock<Upstream::MockLoadBalancerContext> context;
   EXPECT_CALL(context, onAsyncHostSelection(_, _)).Times(0);
 
+  // NOLINTNEXTLINE(clang-analyzer-cplusplus.NewDelete)
   envoy_dynamic_module_callback_cluster_lb_async_host_selection_complete(
       raw_lb_ptr, static_cast<void*>(&context), nullptr, {"dropped", 7});
 }

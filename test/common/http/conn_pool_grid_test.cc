@@ -955,7 +955,7 @@ TEST_F(ConnectivityGridTest, TimeoutThenSuccessParallelFirstConnects) {
 
   // Kick off the second and third connections.
   failover_timer->invokeCallback();
-  EXPECT_NE(grid_->http2Pool(), nullptr);
+  EXPECT_NE(grid_->http2Pool(), nullptr); // NOLINT(clang-analyzer-cplusplus.NewDeleteLeaks)
   if (Runtime::runtimeFeatureEnabled("envoy.reloadable_features.http3_happy_eyeballs")) {
     EXPECT_NE(grid_->alternate(), nullptr);
   }
@@ -997,7 +997,7 @@ TEST_F(ConnectivityGridTest, TimeoutThenSuccessParallelSecondConnectsFirstFail) 
 
   // Kick off the second connection.
   failover_timer->invokeCallback();
-  EXPECT_NE(grid_->http2Pool(), nullptr);
+  EXPECT_NE(grid_->http2Pool(), nullptr); // NOLINT(clang-analyzer-cplusplus.NewDeleteLeaks)
 
   // onPoolReady should be passed from the pool back to the original caller.
   EXPECT_NE(grid_->callbacks(1), nullptr);
@@ -1031,7 +1031,7 @@ TEST_F(ConnectivityGridTest, TcpFailsFollowedByH3Failure) {
 
   // Kick off the second connection.
   failover_timer->invokeCallback();
-  EXPECT_NE(grid_->http2Pool(), nullptr);
+  EXPECT_NE(grid_->http2Pool(), nullptr); // NOLINT(clang-analyzer-cplusplus.NewDeleteLeaks)
 
   // TCP pool failed first. Failure shouldn't be propagated to the original caller, but wait for
   // HTTP/3 pool to finish.
@@ -1069,7 +1069,7 @@ TEST_F(ConnectivityGridTest, H3FailsFirstFollowedByTcpFailure) {
 
   // Kick off the second connection.
   failover_timer->invokeCallback();
-  EXPECT_NE(grid_->http2Pool(), nullptr);
+  EXPECT_NE(grid_->http2Pool(), nullptr); // NOLINT(clang-analyzer-cplusplus.NewDeleteLeaks)
 
   // HTTP/3 pool fails first. Failure shouldn't be propagated to the original caller, but instead
   // wait for the HTTP/2 pool to finish.
@@ -1111,7 +1111,7 @@ TEST_F(ConnectivityGridTest, Http3BrokenWithExpiredHttpServerPropertiesCacheEntr
 
   // Kick off the second connection.
   failover_timer->invokeCallback();
-  EXPECT_NE(grid_->http2Pool(), nullptr);
+  EXPECT_NE(grid_->http2Pool(), nullptr); // NOLINT(clang-analyzer-cplusplus.NewDeleteLeaks)
 
   // onPoolReady should be passed from the pool back to the original caller.
   EXPECT_NE(grid_->callbacks(1), nullptr);
@@ -1261,7 +1261,7 @@ TEST_F(ConnectivityGridTest, TimeoutDoubleFailureParallel) {
 
   // Kick off the second connection.
   failover_timer->invokeCallback();
-  EXPECT_NE(grid_->http2Pool(), nullptr);
+  EXPECT_NE(grid_->http2Pool(), nullptr); // NOLINT(clang-analyzer-cplusplus.NewDeleteLeaks)
 
   // onPoolFailure should not be passed up the first time. Instead the grid
   // should wait on the second pool.
@@ -1845,7 +1845,7 @@ TEST_F(ConnectivityGridTest, ConnectionCloseDuringAsyncConnect) {
   EXPECT_CALL(os_sys_calls, send(_, _, _, _)).WillOnce(Return(Api::SysCallSizeResult{-1, 101}));
   EXPECT_CALL(callbacks_.pool_failure_, ready());
   async_connect_callback->invokeCallback();
-}
+} // NOLINT(clang-analyzer-cplusplus.NewDeleteLeaks)
 
 TEST_F(ConnectivityGridTest, DestroyGridWithActiveH2Attempts) {
   Envoy::LogLevelSetter save_levels(spdlog::level::trace);

@@ -34,7 +34,6 @@
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
 
-using Envoy::Http::LowerCaseString;
 using testing::_;
 using testing::Contains;
 using testing::InSequence;
@@ -44,7 +43,6 @@ using testing::NiceMock;
 using testing::Not;
 using testing::Return;
 using testing::ReturnRef;
-using testing::Values;
 
 namespace Envoy {
 namespace Extensions {
