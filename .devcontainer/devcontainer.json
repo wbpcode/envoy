@@ -8,13 +8,16 @@
     "--cap-add=NET_ADMIN",
     "--security-opt=seccomp=unconfined",
     "--volume=${env:HOME}:${env:HOME}",
-    "--volume=envoy-build:/build",
+    "--volume=envoy-build-1-32:/build",
     "--network=host",
     // Uncomment next line if you have devcontainer.env
     // "--env-file=.devcontainer/devcontainer.env"
   ],
   "containerEnv": {
     "ENVOY_SRCDIR": "${containerWorkspaceFolder}",
+    "HTTPS_PROXY": "${env:VSCODE_CONTAINER_HTTPS_PROXY}",
+    "HTTP_PROXY": "${env:VSCODE_CONTAINER_HTTP_PROXY}",
+    "NO_PROXY": "${env:VSCODE_CONTAINER_NO_PROXY}"
   },
   "remoteUser": "vscode",
   "containerUser": "vscode",
