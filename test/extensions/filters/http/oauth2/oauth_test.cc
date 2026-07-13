@@ -550,7 +550,7 @@ TEST_F(OAuth2ClientTest, CancelSuppressesLateOnSuccess) {
           }));
 
   client_->setCallbacks(*mock_callbacks_);
-  client_->asyncGetAccessToken("a", "b", "c", "d", "e");
+  client_->asyncGetAccessToken("a", "b", "c", "d");
 
   // cancel() should cancel the in-flight request.
   EXPECT_CALL(request_, cancel());
