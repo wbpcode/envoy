@@ -79,8 +79,6 @@ private:
   OptRef<ResourceState> getRequestedResourceState(absl::string_view resource_name);
   OptRef<const ResourceState> getRequestedResourceState(absl::string_view resource_name) const;
 
-  bool isInitialRequestForLegacyWildcard();
-
   // Not all xDS resources support heartbeats due to there being specific information encoded in
   // an empty response, which is indistinguishable from a heartbeat in some cases. For now we just
   // disable heartbeats for these resources (currently only VHDS).
@@ -98,7 +96,6 @@ private:
   // also be a part of wildcard subscription.
   absl::node_hash_map<std::string, std::string> ambiguous_resource_state_;
 
-  bool in_initial_legacy_wildcard_{true};
   bool any_request_sent_yet_in_current_stream_{};
   bool should_send_initial_resource_versions_{true};
 

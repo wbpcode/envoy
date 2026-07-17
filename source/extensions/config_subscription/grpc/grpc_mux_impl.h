@@ -199,6 +199,11 @@ private:
             }
             return resource_name;
           });
+      // A wildcard subscription is represented as an empty resource list on the state-of-the-world
+      // wire, so never track "*" itself: an empty resources_ already means "interested in
+      // everything" for both the request built in sendDiscoveryRequest() and the delivery routing
+      // in onDiscoveryResponse().
+      resources_.erase(std::string(Wildcard));
       std::vector<std::string> removed_resources;
       if (eds_resources_cache_.has_value() || parent_.xds_config_tracker_.has_value()) {
         // Computes the removed resources.

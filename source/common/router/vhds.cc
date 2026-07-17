@@ -80,6 +80,10 @@ VhdsSubscription::VhdsSubscription(RouteConfigUpdatePtr& config_update_info,
                      // watch without being subscribed on the wire.
                      subscription_->accept(
                          {config_update_info_->protobufConfigurationCast().name() + "/*"});
+                     // Start with no concrete resources: this is a wildcard subscription on the
+                     // wire (the subscription implementation normalizes the empty set to "*"). The
+                     // accept() glob above scopes routing to this route configuration, so the watch
+                     // is not a catch-all wildcard despite the wildcard wire subscription.
                      subscription_->start({});
                    }),
       resource_type_helper_(factory_context.messageValidationContext().dynamicValidationVisitor(),

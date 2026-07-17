@@ -206,8 +206,12 @@ INSTANTIATE_TEST_SUITE_P(
 
 // Checks if subscriptionUpdatePending returns correct value depending on scenario.
 TEST_P(DeltaSubscriptionStateTestBlank, SubscriptionPendingTest) {
-  // We should send a request, because nothing has been sent out yet. Note that this means
-  // subscribing to the wildcard resource.
+  // A subscription with no interest yet is NOT pending: a blank delta subscription is no longer
+  // implicitly wildcard; wildcard must be requested explicitly via "*".
+  EXPECT_FALSE(subscriptionUpdatePending());
+
+  // Subscribing to the wildcard makes it pending. (A lone "*" is encoded as an empty request.)
+  updateSubscriptionInterest({WildcardStr}, {});
   EXPECT_TRUE(subscriptionUpdatePending());
   getNextRequestAckless();
 
@@ -243,7 +247,8 @@ TEST_P(DeltaSubscriptionStateTestBlank, SubscriptionPendingTest) {
 }
 
 TEST_P(DeltaSubscriptionStateTestBlank, DynamicContextChange) {
-  // Initial request
+  // A wildcard subscription (requested explicitly via "*") is pending its initial request.
+  updateSubscriptionInterest({WildcardStr}, {});
   EXPECT_TRUE(subscriptionUpdatePending());
   getNextRequestAckless();
   EXPECT_FALSE(subscriptionUpdatePending());
@@ -373,7 +378,8 @@ TEST_P(DeltaSubscriptionStateTestBlank, ResourceTransitionWithWildcardFromReques
 // Check that we move the resource from wildcard subscription to requested without losing version
 // information about it.
 TEST_P(DeltaSubscriptionStateTestBlank, ResourceTransitionWithWildcardFromWildcardToRequested) {
-  updateSubscriptionInterest({}, {});
+  // Explicit wildcard subscription; a lone "*" is encoded as an empty resource list on the wire.
+  updateSubscriptionInterest({WildcardStr}, {});
   auto req = getNextRequestAckless();
   EXPECT_TRUE(req->resource_names_subscribe().empty());
   EXPECT_TRUE(req->resource_names_unsubscribe().empty());
@@ -595,10 +601,16 @@ INSTANTIATE_TEST_SUITE_P(
                                                          {LegacyOrUnified::Unified, true}}));
 
 // Delta subscription state of a wildcard subscription request.
-class WildcardDeltaSubscriptionStateTest : public DeltaSubscriptionStateTestWithResources {
+class WildcardDeltaSubscriptionStateTest : public DeltaSubscriptionStateTestBase {
 public:
-  WildcardDeltaSubscriptionStateTest()
-      : DeltaSubscriptionStateTestWithResources(TypeUrl, GetParam(), {}) {}
+  WildcardDeltaSubscriptionStateTest() : DeltaSubscriptionStateTestBase(TypeUrl, GetParam()) {
+    // Establish an explicit wildcard subscription. A lone "*" is encoded as an empty resource list
+    // on the wire, so the initial request's subscribe and unsubscribe are both empty.
+    updateSubscriptionInterest({WildcardStr}, {});
+    auto cur_request = getNextRequestAckless();
+    EXPECT_TRUE(cur_request->resource_names_subscribe().empty());
+    EXPECT_TRUE(cur_request->resource_names_unsubscribe().empty());
+  }
 };
 
 INSTANTIATE_TEST_SUITE_P(

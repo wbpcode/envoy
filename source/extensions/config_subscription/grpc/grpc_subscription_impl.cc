@@ -7,6 +7,7 @@
 #include "source/common/common/assert.h"
 #include "source/common/common/logger.h"
 #include "source/common/common/utility.h"
+#include "source/common/config/utility.h"
 #include "source/common/config/xds_resource.h"
 #include "source/common/grpc/common.h"
 #include "source/common/protobuf/protobuf.h"
@@ -37,7 +38,14 @@ void GrpcSubscriptionImpl::start(const absl::flat_hash_set<std::string>& resourc
     init_fetch_timeout_timer_->enableTimer(init_fetch_timeout_);
   }
 
-  watch_ = grpc_mux_->addWatch(type_url_, resources, *this, resource_decoder_, options_);
+  // A subscription started with no resources is a wildcard subscription. Normalize it to the
+  // explicit wildcard "*" here, at the entry point, so that all downstream state (watch map,
+  // subscription state) is recorded uniformly in terms of "*" and needs no notion of "empty means
+  // wildcard". The request encoder translates a sole "*" back to the empty (legacy) wildcard form
+  // on the wire, so this is purely internal and does not change what is sent to the server.
+  const absl::flat_hash_set<std::string> effective_resources =
+      resources.empty() ? absl::flat_hash_set<std::string>{std::string(Wildcard)} : resources;
+  watch_ = grpc_mux_->addWatch(type_url_, effective_resources, *this, resource_decoder_, options_);
 
   // Apply any accept() patterns declared before start(). This happens before grpc_mux_->start()
   // below (and delivery to a watch only ever happens via an async discovery response), so the

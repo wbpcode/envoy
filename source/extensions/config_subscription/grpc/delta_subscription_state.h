@@ -147,8 +147,6 @@ private:
   OptRef<ResourceState> getRequestedResourceState(absl::string_view resource_name);
   OptRef<const ResourceState> getRequestedResourceState(absl::string_view resource_name) const;
 
-  bool isInitialRequestForLegacyWildcard();
-
   // A map from resource name to per-resource version. The keys of this map are exactly the resource
   // names we are currently interested in. Those in the waitingForServer state currently don't have
   // any version for that resource: we need to inform the server if we lose interest in them, but we
@@ -171,7 +169,6 @@ private:
   UntypedConfigUpdateCallbacks& watch_map_;
   XdsConfigTrackerOptRef xds_config_tracker_;
 
-  bool in_initial_legacy_wildcard_{true};
   bool any_request_sent_yet_in_current_stream_{};
   bool should_send_initial_resource_versions_{true};
   bool dynamic_context_changed_{};

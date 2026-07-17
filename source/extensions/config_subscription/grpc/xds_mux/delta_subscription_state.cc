@@ -26,9 +26,6 @@ void DeltaSubscriptionState::updateSubscriptionInterest(
     const absl::flat_hash_set<std::string>& cur_added,
     const absl::flat_hash_set<std::string>& cur_removed) {
   for (const auto& a : cur_added) {
-    if (in_initial_legacy_wildcard_ && a != Wildcard) {
-      in_initial_legacy_wildcard_ = false;
-    }
     // If the requested resource existed as a wildcard resource,
     // transition it to requested. Otherwise mark it as a resource
     // waiting for the server to receive the version.
@@ -79,7 +76,6 @@ void DeltaSubscriptionState::updateSubscriptionInterest(
     names_added_.erase(r);
     if (actually_erased) {
       names_removed_.insert(r);
-      in_initial_legacy_wildcard_ = false;
     }
   }
   // If we unsubscribe from wildcard resource, drop all the resources that came from wildcard from
@@ -104,12 +100,11 @@ bool DeltaSubscriptionState::subscriptionUpdatePending() const {
     if (!requested_resource_state_.empty()) {
       return true;
     }
-    // So there are no new names and we are interested in nothing. This may either mean that we want
-    // the legacy wildcard subscription to kick in or we actually unsubscribed from everything. If
-    // the latter is true, then we should not be sending any requests. In such case the initial
-    // wildcard mode will be false. Otherwise it means that the legacy wildcard request should be
-    // sent.
-    return in_initial_legacy_wildcard_;
+    // There are no new names and we are interested in nothing (not even the wildcard "*", which a
+    // wildcard subscription holds explicitly in requested_resource_state_), so there is nothing to
+    // send. An empty first request would be interpreted by the server as a (legacy) wildcard
+    // subscription, which is not what we want here.
+    return false;
   }
 
   // At this point, we have no changes in subscription resources and this isn't a first request in
@@ -253,7 +248,6 @@ DeltaSubscriptionState::getNextRequestInternal() {
   request->set_type_url(typeUrl());
   if (!any_request_sent_yet_in_current_stream_) {
     any_request_sent_yet_in_current_stream_ = true;
-    const bool is_legacy_wildcard = isInitialRequestForLegacyWildcard();
     // initial_resource_versions "must be populated for first request in a stream".
     // Also, since this might be a new server, we must explicitly state *all* of our subscription
     // interest.
@@ -279,8 +273,10 @@ DeltaSubscriptionState::getNextRequestInternal() {
       }
     }
     // If this is a legacy wildcard request, then make sure that the resource_names_subscribe is
-    // empty.
-    if (is_legacy_wildcard) {
+    // empty. A pure wildcard subscription ("*" and nothing else) is encoded as an empty resource
+    // list on the wire; never send "*" itself. A wildcard combined with explicitly-requested
+    // resources must still send "*", so only clear when "*" is the sole entry to subscribe.
+    if (names_added_.size() == 1 && *names_added_.begin() == Wildcard) {
       names_added_.clear();
     }
     names_removed_.clear();
@@ -294,39 +290,6 @@ DeltaSubscriptionState::getNextRequestInternal() {
   names_removed_.clear();
 
   return request;
-}
-
-bool DeltaSubscriptionState::isInitialRequestForLegacyWildcard() {
-  if (in_initial_legacy_wildcard_) {
-    requested_resource_state_.insert_or_assign(Wildcard, ResourceState::waitingForServer());
-    ASSERT(requested_resource_state_.contains(Wildcard));
-    ASSERT(!wildcard_resource_state_.contains(Wildcard));
-    ASSERT(!ambiguous_resource_state_.contains(Wildcard));
-    return true;
-  }
-
-  // If we are here, this means that we lost our initial wildcard mode, because we subscribed to
-  // something in the past. We could still be in the situation now that all we are subscribed to now
-  // is wildcard resource, so in such case try to send a legacy wildcard subscription request
-  // anyway. For this to happen, two conditions need to apply:
-  //
-  // 1. No change in interest.
-  // 2. The only requested resource is Wildcard resource.
-  //
-  // The invariant of the code here is that this code is executed only when
-  // subscriptionUpdatePending actually returns true, which in our case can only happen if the
-  // requested resources state_ isn't empty.
-  ASSERT(!requested_resource_state_.empty());
-
-  // If our subscription interest didn't change then the first condition for using legacy wildcard
-  // subscription is met.
-  if (!names_added_.empty() || !names_removed_.empty()) {
-    return false;
-  }
-  // If we requested only a wildcard resource then the second condition for using legacy wildcard
-  // condition is met.
-  return requested_resource_state_.size() == 1 &&
-         requested_resource_state_.begin()->first == Wildcard;
 }
 
 void DeltaSubscriptionState::addResourceStateFromServer(

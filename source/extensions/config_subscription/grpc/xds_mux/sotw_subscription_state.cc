@@ -26,6 +26,10 @@ void SotwSubscriptionState::updateSubscriptionInterest(
   for (const auto& r : cur_removed) {
     names_tracked_.erase(r);
   }
+  // A wildcard subscription is represented as an empty resource list on the state-of-the-world
+  // wire, so keep "*" out of the tracked names. Routing is handled separately by the watch map
+  // (which does treat "*" as wildcard), so dropping it here only affects the request sent upstream.
+  names_tracked_.erase(std::string(Envoy::Config::Wildcard));
   if (!cur_added.empty() || !cur_removed.empty()) {
     update_pending_ = true;
   }

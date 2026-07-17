@@ -307,7 +307,9 @@ TEST_P(NewGrpcMuxImplTest, DynamicContextParameters) {
   setup();
   InSequence s;
   auto foo_sub = grpc_mux_->addWatch("foo", {"x", "y"}, callbacks_, resource_decoder_, {});
-  auto bar_sub = grpc_mux_->addWatch("bar", {}, callbacks_, resource_decoder_, {});
+  // A wildcard watch is now requested with an explicit "*" (the subscription implementation
+  // normalizes an empty start to "*"); it is still encoded as an empty resource list on the wire.
+  auto bar_sub = grpc_mux_->addWatch("bar", {"*"}, callbacks_, resource_decoder_, {});
   EXPECT_CALL(*async_client_, startRaw(_, _, _, _)).WillOnce(Return(&async_stream_));
   expectSendMessage({.type_url = "foo", .resource_names_subscribe = {"x", "y"}});
   expectSendMessage({.type_url = "bar"});
@@ -321,6 +323,9 @@ TEST_P(NewGrpcMuxImplTest, DynamicContextParameters) {
   expectSendMessage({.type_url = "bar"});
   EXPECT_TRUE(local_info_.context_provider_.update_cb_handler_.runCallbacks("bar").ok());
 
+  // Watches are destroyed in reverse declaration order: bar (wildcard) first, then foo. Removing
+  // the last wildcard watcher unsubscribes "*".
+  expectSendMessage({.type_url = "bar", .resource_names_unsubscribe = {"*"}});
   expectSendMessage({.type_url = "foo", .resource_names_unsubscribe = {"x", "y"}});
 }
 
@@ -402,7 +407,9 @@ TEST_P(NewGrpcMuxImplTest, ReconnectionResetsWildcardSubscription) {
   setup();
   InSequence s;
   const std::string& type_url = Config::TestTypeUrl::get().ClusterLoadAssignment;
-  auto foo_sub = grpc_mux_->addWatch(type_url, {}, callbacks_, resource_decoder_, {});
+  // Wildcard watch requested explicitly with "*" (empty start is normalized to "*" by the
+  // subscription implementation); still encoded as an empty resource list on the wire.
+  auto foo_sub = grpc_mux_->addWatch(type_url, {"*"}, callbacks_, resource_decoder_, {});
   EXPECT_CALL(*async_client_, startRaw(_, _, _, _)).WillOnce(Return(&async_stream_));
   // Send a wildcard request on new connection.
   expectSendMessage({.type_url = type_url});
@@ -481,7 +488,9 @@ TEST_P(NewGrpcMuxImplTest, ReconnectionResetsWildcardSubscription) {
         {.type_url = type_url, .initial_resource_versions = {{"x", "1000"}, {"y", "2000"}}});
   }
   remoteClose();
-  // Destruction of wildcard will not issue unsubscribe requests for the resources.
+  // Destroying the wildcard watch removes the last interest in "*", so an explicit unsubscribe for
+  // the wildcard is issued. The individual wildcard-provided resources (x, y) are not unsubscribed.
+  expectSendMessage({.type_url = type_url, .resource_names_unsubscribe = {"*"}});
 }
 
 // Test that we simply ignore a message for an unknown type_url, with no ill effects.
@@ -914,7 +923,9 @@ TEST_P(NewGrpcMuxImplTest, MuxDynamicReplacementWhenConnected) {
   InSequence s;
 
   auto foo_sub = grpc_mux_->addWatch("type_url_foo", {"x", "y"}, callbacks_, resource_decoder_, {});
-  auto bar_sub = grpc_mux_->addWatch("type_url_bar", {}, callbacks_, resource_decoder_, {});
+  // Wildcard watch requested explicitly with "*" (empty start is normalized to "*" by the
+  // subscription implementation); still encoded as an empty resource list on the wire.
+  auto bar_sub = grpc_mux_->addWatch("type_url_bar", {"*"}, callbacks_, resource_decoder_, {});
   EXPECT_CALL(*async_client_, startRaw(_, _, _, _)).WillOnce(Return(&async_stream_));
   expectSendMessage({.type_url = "type_url_foo", .resource_names_subscribe = {"x", "y"}});
   expectSendMessage({.type_url = "type_url_bar"});
@@ -941,7 +952,11 @@ TEST_P(NewGrpcMuxImplTest, MuxDynamicReplacementWhenConnected) {
       std::make_unique<JitteredExponentialBackOffStrategy>(
           SubscriptionFactory::RetryInitialDelayMs, SubscriptionFactory::RetryMaxDelayMs, random_),
       empty_ads_config));
-  // Ending test, removing subscriptions for type_url_foo.
+  // Ending test, removing subscriptions. Watches are destroyed in reverse declaration order:
+  // type_url_bar (wildcard) first (unsubscribing "*"), then type_url_foo.
+  expectSendMessage({.type_url = "type_url_bar",
+                     .resource_names_unsubscribe = {"*"},
+                     .async_stream = &replaced_async_stream_});
   expectSendMessage({.type_url = "type_url_foo",
                      .resource_names_unsubscribe = {"x", "y"},
                      .async_stream = &replaced_async_stream_});
