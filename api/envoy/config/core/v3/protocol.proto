@@ -169,7 +169,6 @@ message QuicProtocolOptions {
   // In order to use a different network interface other than the platform's default one,
   // a customized :ref:`client_packet_writer <envoy_v3_api_field_config.core.v3.QuicProtocolOptions.client_packet_writer>` needs to be configured to
   // create UDP sockets on non-default networks.
-  // Only takes effect when runtime key ``envoy.reloadable_features.use_migration_in_quiche`` is true.
   // If absent, the feature will be disabled.
   // [#not-implemented-hide:]
   ConnectionMigrationSettings connection_migration = 11;
