@@ -55,7 +55,7 @@ TEST(CallbacksHandlerTest, DestroyHandlerFirst) {
   EXPECT_FALSE(wrapper_ptr->callbacks().has_value());
 }
 
-// Destroying the wrapper first leaves the handler safe to reset and destroy.
+// Destroying the wrapper first leaves the handler safe to cancel and destroy.
 TEST(CallbacksHandlerTest, DestroyWrapperFirst) {
   TestCallbacks cbs;
   Handler handler;
@@ -63,30 +63,30 @@ TEST(CallbacksHandlerTest, DestroyWrapperFirst) {
     Wrapper wrapper(handler, cbs);
     EXPECT_TRUE(wrapper.callbacks().has_value());
   }
-  // Wrapper gone: handler is unlinked. reset() and destruction must be safe no-ops.
-  handler.reset();
+  // Wrapper gone: handler is unlinked. cancel() and destruction must be safe no-ops.
+  handler.cancel();
   SUCCEED();
 }
 
-// Explicit reset() from the handler side invalidates the wrapper.
-TEST(CallbacksHandlerTest, ExplicitHandlerReset) {
+// Explicit cancel() from the handler side invalidates the wrapper.
+TEST(CallbacksHandlerTest, ExplicitHandlerCancel) {
   TestCallbacks cbs;
   Handler handler;
   Wrapper wrapper(handler, cbs);
 
-  handler.reset();
+  handler.cancel();
   EXPECT_FALSE(wrapper.callbacks().has_value());
-  // Double reset / destruction are safe.
-  handler.reset();
+  // Double cancel / destruction are safe.
+  handler.cancel();
 }
 
-// Explicit reset() from the wrapper side unlinks the handler.
-TEST(CallbacksHandlerTest, ExplicitWrapperReset) {
+// Explicit cancel() from the wrapper side unlinks the handler.
+TEST(CallbacksHandlerTest, ExplicitWrapperCancel) {
   TestCallbacks cbs;
   Handler handler;
   Wrapper wrapper(handler, cbs);
 
-  wrapper.reset();
+  wrapper.cancel();
   EXPECT_FALSE(wrapper.callbacks().has_value());
   // Handler no longer points at the wrapper; destroying it is a no-op.
 }
@@ -191,46 +191,84 @@ TEST(CallbacksHandlerTest, MoveAssignHandlerOverLiveLink) {
   EXPECT_TRUE(w2->callbacks().has_value());
 
   // Destroying h1 (which now drives w2) invalidates w2.
-  h1.reset();
+  h1.cancel();
   EXPECT_FALSE(w2->callbacks().has_value());
 }
 
-// A subclass can observe peer-initiated teardown by overriding onPeerReset(), and active
-// teardown by overriding reset(). Stays move-able because it declares no dtor/copy/move.
-class ObservingHandler : public Handler {
+// A wrapper subclass can observe peer-initiated teardown by overriding onPeerCancel(), and active
+// teardown by overriding cancel(). It stays move-able because it declares no dtor/copy/move (a
+// user-provided non-copy/move constructor does not suppress the implicit move operations).
+class ObservingWrapper : public Wrapper {
 public:
-  void reset() override {
-    ++reset_calls_;
-    Handler::reset();
+  ObservingWrapper(Handler& handler, TestCallbacks& cbs, int* cancel_calls, int* peer_cancel_calls)
+      : Wrapper(handler, cbs), cancel_calls_(cancel_calls), peer_cancel_calls_(peer_cancel_calls) {}
+
+  void cancel() override {
+    if (cancel_calls_ != nullptr) {
+      ++*cancel_calls_;
+    }
+    Wrapper::cancel();
   }
-  int reset_calls_{0};
-  int peer_reset_calls_{0};
 
 protected:
-  void onPeerReset() override {
-    ++peer_reset_calls_;
-    Handler::onPeerReset();
+  void onPeerCancel() override {
+    if (peer_cancel_calls_ != nullptr) {
+      ++*peer_cancel_calls_;
+    }
+    Wrapper::onPeerCancel();
   }
+
+private:
+  int* cancel_calls_;
+  int* peer_cancel_calls_;
 };
 
-TEST(CallbacksHandlerTest, SubclassObservesTeardown) {
-  TestCallbacks cbs;
-  ObservingHandler handler;
-  {
-    Wrapper wrapper(handler, cbs);
-    EXPECT_TRUE(wrapper.callbacks().has_value());
-    // Wrapper destroyed here -> handler->onPeerReset() dispatches to the override.
-  }
-  EXPECT_EQ(1, handler.peer_reset_calls_);
-  EXPECT_EQ(0, handler.reset_calls_);
+// The wrapper subclass must remain move-able for the pair to stay stack-friendly.
+static_assert(std::is_move_constructible_v<ObservingWrapper>);
+static_assert(std::is_move_assignable_v<ObservingWrapper>);
 
-  // Explicit reset() dispatches to the override too.
-  ObservingHandler handler2;
-  TestCallbacks cbs2;
-  Wrapper wrapper2(handler2, cbs2);
-  handler2.reset();
-  EXPECT_EQ(1, handler2.reset_calls_);
-  EXPECT_FALSE(wrapper2.callbacks().has_value());
+TEST(CallbacksHandlerTest, SubclassWrapperObservesTeardown) {
+  TestCallbacks cbs;
+
+  // Peer-initiated teardown: destroying the handler dispatches to the wrapper's onPeerCancel
+  // override, not to cancel().
+  {
+    int cancel_calls = 0;
+    int peer_cancel_calls = 0;
+    std::optional<Handler> handler;
+    handler.emplace();
+    ObservingWrapper wrapper(*handler, cbs, &cancel_calls, &peer_cancel_calls);
+    EXPECT_TRUE(wrapper.callbacks().has_value());
+
+    handler.reset(); // Destroy the handler -> wrapper->onPeerCancel().
+    EXPECT_EQ(0, cancel_calls);
+    EXPECT_EQ(1, peer_cancel_calls);
+    EXPECT_FALSE(wrapper.callbacks().has_value());
+  }
+
+  // Active teardown: an explicit cancel() dispatches to the override.
+  {
+    int cancel_calls = 0;
+    int peer_cancel_calls = 0;
+    Handler handler;
+    ObservingWrapper wrapper(handler, cbs, &cancel_calls, &peer_cancel_calls);
+
+    wrapper.cancel();
+    EXPECT_EQ(1, cancel_calls);
+    EXPECT_EQ(0, peer_cancel_calls);
+    EXPECT_FALSE(wrapper.callbacks().has_value());
+  }
+
+  // Destruction runs the qualified base cancel(), so neither subclass override fires during
+  // teardown of the wrapper itself.
+  {
+    int cancel_calls = 0;
+    int peer_cancel_calls = 0;
+    Handler handler;
+    { ObservingWrapper wrapper(handler, cbs, &cancel_calls, &peer_cancel_calls); }
+    EXPECT_EQ(0, cancel_calls);
+    EXPECT_EQ(0, peer_cancel_calls);
+  }
 }
 
 // Attaching a second wrapper to a handler that already has one trips the ASSERT (debug builds).

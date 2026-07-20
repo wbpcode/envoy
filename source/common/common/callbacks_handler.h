@@ -19,20 +19,20 @@ namespace Common {
  *     std::function, a member, a container, ...). The async code calls wrapper.callbacks() and,
  *     only if it still has_value(), invokes the callbacks.
  *
- * Each side holds an OptRef to the other. When either side is reset() or destroyed it nulls out
+ * Each side holds an OptRef to the other. When either side is cancel()led or destroyed it nulls out
  * the peer's back-reference, so neither can ever dangle:
  *   - Destroying the handler clears the wrapper's callbacks_, so wrapper.callbacks() becomes empty
  *     and the async side learns the requester is gone.
  *   - Destroying the wrapper clears the handler's pointer to it, so the handler's own destruction
  *     is a no-op.
  *
- * The cycle is broken by onPeerReset(): the side that initiates teardown clears its own pointer
- * FIRST and then calls the peer's onPeerReset(), which only nulls fields and never calls back.
+ * The cycle is broken by onPeerCancel(): the side that initiates teardown clears its own pointer
+ * FIRST and then calls the peer's onPeerCancel(), which only nulls fields and never calls back.
  * Hence no infinite recursion and no use-after-clear.
  *
  * Establishing a pair (the handler must out-exist the wrapper's construction call):
  *   CallbacksHandler<MyCallbacks> handler;
- *   CallbacksWrapper wrapper(handler, my_callbacks);   // wires both directions
+ *   CallbacksHandler<MyCallbacks>::CallbacksWrapper wrapper(handler, my_callbacks); // wires both ways
  *   // hand `wrapper` (by move) to the async operation; keep `handler` near `my_callbacks`.
  *
  * Threading: NOT thread-safe. Both ends must live on, and be mutated from, the same thread
@@ -44,14 +44,15 @@ namespace Common {
  * peer at the new address, which is what lets callers keep the pair on the stack / inline instead
  * of paying for a heap allocation.
  *
- * Extending the classes: CallbacksHandler::reset()/onPeerReset() are virtual so a subclass can
- * observe teardown. IMPORTANT for extenders -- to stay move-able (the whole point of this type), a
- * subclass MUST NOT hand-declare a destructor or any copy/move operation, because doing so
- * suppresses the implicitly-generated move operations and, since copy is deleted, leaves the
- * subclass immovable. Put cleanup in an override of reset()/onPeerReset(), not in a destructor.
- * Note the base destructor calls CallbacksHandler::reset() non-virtually, so a subclass override of
- * reset() does NOT run during base destruction -- override onPeerReset() (called when the peer
- * tears the link down) or do per-instance cleanup in member destruction order instead.
+ * Extending the classes: CallbacksWrapper::cancel()/onPeerCancel() (and its destructor) are virtual
+ * so a subclass can observe teardown. IMPORTANT for extenders -- to stay move-able (the whole point
+ * of this type), a subclass MUST NOT hand-declare a destructor or any copy/move operation, because
+ * doing so suppresses the implicitly-generated move operations and, since copy is deleted, leaves
+ * the subclass immovable. Put cleanup in an override of cancel()/onPeerCancel(), not in a
+ * destructor. Note the base destructor calls CallbacksWrapper::cancel() non-virtually, so a subclass
+ * override of cancel() does NOT run during base destruction -- override onPeerCancel() (called when
+ * the peer tears the link down) or do per-instance cleanup in member destruction order instead.
+ * (CallbacksHandler's own cancel()/onPeerCancel() are non-virtual and not extension points.)
  */
 template <class CallbacksType> class CallbacksHandler {
 public:
@@ -71,16 +72,16 @@ public:
     CallbacksWrapper& operator=(CallbacksWrapper&& to_move) noexcept {
       if (this != &to_move) {
         // Detach our current handler (clears its back-pointer) and our callbacks before adopting.
-        reset();
+        cancel();
         moveFrom(to_move);
       }
       return *this;
     }
 
-    ~CallbacksWrapper() { CallbacksWrapper::reset(); }
+    virtual ~CallbacksWrapper() { CallbacksWrapper::cancel(); }
 
     /**
-     * @return an OptRef to the callbacks, empty if the handler has been destroyed or reset. The
+     * @return an OptRef to the callbacks, empty if the handler has been destroyed or cancelled. The
      *         async side should call this and only invoke the callbacks if has_value() is true.
      */
     OptRef<CallbacksType> callbacks() const { return callbacks_; }
@@ -89,25 +90,25 @@ public:
      * Actively tears down this side of the link: forgets the callbacks and tells the handler to
      * drop its pointer to this wrapper. Idempotent.
      */
-    void reset() {
+    virtual void cancel() {
       callbacks_.reset();
       auto handler = handler_;
       handler_.reset();
 
       if (handler.has_value()) {
-        handler->onPeerReset();
+        handler->onPeerCancel();
       }
     }
 
   protected:
     // Called BY the handler when the handler is the one tearing the link down. Only nulls fields;
     // never calls back into the handler (that is what breaks the teardown cycle).
-    void onPeerReset() {
+    virtual void onPeerCancel() {
       handler_.reset();
       callbacks_.reset();
     }
 
-    // The handler needs access to onPeerReset()/handler_ on wrapper instances other than the one
+    // The handler needs access to onPeerCancel()/handler_ on wrapper instances other than the one
     // it encloses. (The reverse direction needs no friend: a nested class already has access to its
     // enclosing class's members.)
     friend class CallbacksHandler;
@@ -140,35 +141,33 @@ public:
   CallbacksHandler& operator=(CallbacksHandler&& to_move) noexcept {
     if (this != &to_move) {
       // Virtual: runs any subclass teardown, then drops our current wrapper's back-pointer.
-      reset();
+      cancel();
       moveFrom(to_move);
     }
     return *this;
   }
 
-  // Virtual destructor calls reset() NON-virtually (qualified) so it always runs this class's
-  // teardown regardless of any subclass override; see the class comment for the implication.
-  virtual ~CallbacksHandler() { CallbacksHandler::reset(); }
+  // Destructor tears down the link via cancel(). CallbacksHandler::cancel() is non-virtual, so
+  // (unlike the wrapper) there is no override to run here anyway.
+  ~CallbacksHandler() { CallbacksHandler::cancel(); }
 
   /**
    * Actively tears down this side of the link: tells the wrapper to forget its callbacks (so the
-   * async side sees callbacks() as empty) and drops our pointer to it. Idempotent. Virtual so a
-   * subclass can observe/extend teardown.
+   * async side sees callbacks() as empty) and drops our pointer to it. Idempotent.
    */
-  virtual void reset() {
+  void cancel() {
     auto wrapper = wrapper_;
     wrapper_.reset();
 
     if (wrapper.has_value()) {
-      wrapper->onPeerReset();
+      wrapper->onPeerCancel();
     }
   }
 
 protected:
   // Called BY the wrapper when the wrapper is the one tearing the link down. Only nulls our
-  // pointer; never calls back into the wrapper. Virtual so a subclass can observe peer-initiated
-  // teardown (this is the hook that DOES run when the wrapper is destroyed first).
-  virtual void onPeerReset() { wrapper_.reset(); }
+  // pointer; never calls back into the wrapper.
+  void onPeerCancel() { wrapper_.reset(); }
 
   OptRef<CallbacksWrapper> wrapper_;
 
