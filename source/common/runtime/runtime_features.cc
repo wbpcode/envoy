@@ -58,6 +58,7 @@ RUNTIME_GUARD(envoy_reloadable_features_http1_use_balsa_parser);
 RUNTIME_GUARD(envoy_reloadable_features_http2_discard_host_header);
 RUNTIME_GUARD(envoy_reloadable_features_http2_include_cookies_in_limits);
 RUNTIME_GUARD(envoy_reloadable_features_http2_no_protocol_error_upon_clean_close);
+RUNTIME_GUARD(envoy_reloadable_features_http2_track_size_of_dropped_host_header);
 // Ignore the automated "remove this flag" issue: we should keep this for 1 year.
 RUNTIME_GUARD(envoy_reloadable_features_http2_use_visitor_for_data);
 RUNTIME_GUARD(envoy_reloadable_features_http3_happy_eyeballs);
