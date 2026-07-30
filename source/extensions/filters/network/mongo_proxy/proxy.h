@@ -7,6 +7,7 @@
 #include <string>
 
 #include "envoy/access_log/access_log.h"
+#include "envoy/common/random_generator.h"
 #include "envoy/common/time.h"
 #include "envoy/event/timer.h"
 #include "envoy/network/connection.h"
@@ -108,8 +109,8 @@ public:
   ProxyFilter(const std::string& stat_prefix, Stats::Scope& scope, Runtime::Loader& runtime,
               AccessLogSharedPtr access_log,
               const Filters::Common::Fault::FaultDelayConfigSharedPtr& fault_config,
-              const Network::DrainDecision& drain_decision, TimeSource& time_system,
-              bool emit_dynamic_metadata, const MongoStatsSharedPtr& stats,
+              const Network::DrainDecision& drain_decision, Random::RandomGenerator& random,
+              TimeSource& time_system, bool emit_dynamic_metadata, const MongoStatsSharedPtr& stats,
               uint32_t max_bson_depth);
   ~ProxyFilter() override;
 
@@ -139,6 +140,7 @@ public:
   void onEvent(Network::ConnectionEvent event) override;
   void onAboveWriteBufferHighWatermark() override {}
   void onBelowWriteBufferLowWatermark() override {}
+  void onDrain(Network::ConnectionDrainEvent event) override { connection_drain_event_ = event; }
 
   void setDynamicMetadata(std::string operation, std::string resource);
 
@@ -177,6 +179,10 @@ private:
 
   void doDecode(Buffer::Instance& buffer);
   void logMessage(Message& message, bool full);
+  // Returns true if the connection should be drain-closed. When the runtime feature
+  // "envoy.reloadable_features.use_connection_level_drain" is enabled this is decided from the
+  // connection-level drain event delivered via onDrain(); otherwise it polls the DrainDecision.
+  bool shouldDrainClose();
   void onDrainClose();
   std::optional<std::chrono::milliseconds> delayDuration();
   void delayInjectionTimerCallback();
@@ -186,6 +192,9 @@ private:
   MongoProxyStats stats_;
   Runtime::Loader& runtime_;
   const Network::DrainDecision& drain_decision_;
+  Random::RandomGenerator& random_;
+  // Set when the connection is notified of a drain sequence via onDrain().
+  absl::optional<Network::ConnectionDrainEvent> connection_drain_event_;
   Buffer::OwnedImpl read_buffer_;
   Buffer::OwnedImpl write_buffer_;
   bool sniffing_{true};

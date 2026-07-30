@@ -424,6 +424,7 @@ envoy_cc_library(
         "//source/common/http/matching:data_impl_lib",
         "//source/common/json:json_streamer_lib",
         "//source/common/matcher:matcher_lib",
+        "//source/common/network:drain_close_util_lib",
         "//source/common/network:proxy_protocol_filter_state_lib",
         "//source/common/network:utility_lib",
         "//source/common/quic:quic_server_factory_stub_lib",

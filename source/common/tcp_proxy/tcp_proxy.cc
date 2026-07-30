@@ -30,6 +30,7 @@
 #include "source/common/formatter/substitution_format_string.h"
 #include "source/common/http/request_id_extension_impl.h"
 #include "source/common/network/application_protocol.h"
+#include "source/common/network/drain_close_util.h"
 #include "source/common/network/proxy_protocol_filter_state.h"
 #include "source/common/network/socket_option_factory.h"
 #include "source/common/network/transport_socket_options_impl.h"
@@ -1285,8 +1286,19 @@ void Filter::onUpstreamData(Buffer::Instance& data, bool end_stream) {
 
 void Filter::maybeCloseDownstreamForDrainClose() {
   if (!config_->checkDrainClose() || downstream_closed_ ||
-      read_callbacks_->connection().state() != Network::Connection::State::Open ||
-      !config_->drainDecision().drainClose(config_->drainCloseScope())) {
+      read_callbacks_->connection().state() != Network::Connection::State::Open) {
+    return;
+  }
+
+  // When connection-level drain is enabled, decide whether to drain-close based solely on the drain
+  // notification this connection received via onDrain() (its start time, duration and strategy) and
+  // ignore the configured DrainDecision entirely. This keeps the drain timeline consistent with the
+  // main thread's drain decision. Otherwise fall back to polling the DrainDecision.
+  const bool drain_close =
+      Runtime::runtimeFeatureEnabled("envoy.reloadable_features.use_connection_level_drain")
+          ? shouldDrainCloseFromConnectionDrain()
+          : config_->drainDecision().drainClose(config_->drainCloseScope());
+  if (!drain_close) {
     return;
   }
 
@@ -1294,6 +1306,14 @@ void Filter::maybeCloseDownstreamForDrainClose() {
   config_->stats().downstream_cx_drain_close_.inc();
   read_callbacks_->connection().close(Network::ConnectionCloseType::FlushWrite,
                                       StreamInfo::LocalCloseReasons::get().TcpProxyDrainClose);
+}
+
+bool Filter::shouldDrainCloseFromConnectionDrain() {
+  if (!connection_drain_event_.has_value()) {
+    return false;
+  }
+  return Network::shouldDrainClose(read_callbacks_->connection().dispatcher().timeSource(),
+                                   config_->randomGenerator(), *connection_drain_event_);
 }
 
 void Filter::onUpstreamEvent(Network::ConnectionEvent event) {

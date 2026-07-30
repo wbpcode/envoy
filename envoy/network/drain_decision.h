@@ -5,6 +5,8 @@
 
 #include "envoy/common/callback.h"
 #include "envoy/common/pure.h"
+#include "envoy/common/time.h"
+#include "envoy/server/drain_strategy.h"
 
 #include "absl/base/attributes.h"
 #include "absl/status/status.h"
@@ -27,6 +29,25 @@ enum class DrainDirection {
    * Drain both inbound and outbound connections.
    */
   All,
+};
+
+/**
+ * Describes a drain sequence that a connection has been notified of via
+ * Network::Connection::onDrain(). The values are captured once on the main thread at the moment
+ * the drain sequence is initiated and are propagated unchanged to
+ * every affected connection so that all connections share a single, consistent view of the drain
+ * timeline regardless of when each connection is notified. Callbacks can use these values to
+ * reproduce the same gradual/immediate drain behavior that Server::DrainManagerImpl::drainClose()
+ * would apply, without polling a DrainDecision.
+ */
+struct ConnectionDrainEvent {
+  // The monotonic time at which the drain sequence was initiated on the main thread.
+  MonotonicTime start_time;
+  // The total configured drain duration (Server::Options::drainTime()).
+  std::chrono::seconds drain_time;
+  // The configured drain strategy (Server::Options::drainStrategy()): gradual ramp-up vs.
+  // immediate.
+  Server::DrainStrategy strategy;
 };
 
 class DrainDecision {

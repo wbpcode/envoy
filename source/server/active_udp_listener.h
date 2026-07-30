@@ -114,10 +114,13 @@ public:
   void onFilterChainDraining(const std::list<const Network::FilterChain*>&) override {
     IS_ENVOY_BUG("unexpected call to onFilterChainDraining");
   }
-  void onFilterChainDrainStart(const std::list<const Network::FilterChain*>&) override {
+  void onFilterChainDrainStart(const std::list<const Network::FilterChain*>&,
+                               Network::ConnectionDrainEvent) override {
     IS_ENVOY_BUG("unexpected call to onFilterChainDrainStart");
   }
-  void onListenerDrainStart() override { IS_ENVOY_BUG("unexpected call to onListenerDrainStart"); }
+  void onListenerDrainStart(Network::ConnectionDrainEvent) override {
+    IS_ENVOY_BUG("unexpected call to onListenerDrainStart");
+  }
 
   // Network::UdpListenerFilterManager
   void addReadFilter(Network::UdpListenerReadFilterPtr&& filter) override;

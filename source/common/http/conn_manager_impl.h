@@ -118,6 +118,7 @@ public:
       codec_->onUnderlyingConnectionBelowWriteBufferLowWatermark();
     }
   }
+  void onDrain(Network::ConnectionDrainEvent info) override;
 
   TimeSource& timeSource() { return time_source_; }
 
@@ -640,6 +641,13 @@ private:
   bool shouldDeferRequestProxyingToNextIoCycle();
   void onDeferredRequestProcessing();
 
+  // Returns true if this connection has been notified of a drain sequence (via onDrain()) and,
+  // based on the drain start time, duration and strategy captured at that point, the connection
+  // should now be drain-closed. This reproduces the gradual/immediate behavior of
+  // Server::DrainManagerImpl::drainClose() without polling a DrainDecision, and is only consulted
+  // when the runtime feature "envoy.reloadable_features.use_connection_level_drain" is enabled.
+  bool shouldDrainCloseFromConnectionDrain();
+
   enum class DrainState { NotDraining, Draining, Closing };
 
   ConnectionManagerConfigSharedPtr config_;
@@ -649,6 +657,10 @@ private:
   std::list<ActiveStreamPtr> streams_;
   Stats::TimespanPtr conn_length_;
   const Network::DrainDecision& drain_close_;
+  // Set when the connection is notified of a drain sequence via onDrain(). Carries the drain start
+  // time, duration and strategy so the drain-close decision can be computed at the connection level
+  // (see shouldDrainCloseFromConnectionDrain()).
+  std::optional<Network::ConnectionDrainEvent> connection_drain_event_;
   DrainState drain_state_{DrainState::NotDraining};
   UserAgent user_agent_;
   // An idle timer for the connection. This is only armed when there are no streams on the

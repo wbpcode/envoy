@@ -275,6 +275,9 @@ TEST_P(TcpProxyTest, DrainCloseIgnoredWhenFlagDisabled) {
 }
 
 TEST_P(TcpProxyTest, DrainCloseAfterDownstreamRead) {
+  // This test covers the legacy path where drain-close is decided by polling the DrainDecision.
+  scoped_runtime_.mergeValues(
+      {{"envoy.reloadable_features.use_connection_level_drain", "false"}});
   auto config = defaultConfig();
   config.mutable_check_drain_close()->set_value(true);
   setup(1, config);
@@ -293,6 +296,9 @@ TEST_P(TcpProxyTest, DrainCloseAfterDownstreamRead) {
 }
 
 TEST_P(TcpProxyTest, DrainCloseUsesInboundOnlyScopeForInboundListeners) {
+  // This test covers the legacy path where drain-close is decided by polling the DrainDecision.
+  scoped_runtime_.mergeValues(
+      {{"envoy.reloadable_features.use_connection_level_drain", "false"}});
   auto config = defaultConfig();
   config.mutable_check_drain_close()->set_value(true);
   EXPECT_CALL(factory_context_.listener_info_, direction())
@@ -313,6 +319,9 @@ TEST_P(TcpProxyTest, DrainCloseUsesInboundOnlyScopeForInboundListeners) {
 }
 
 TEST_P(TcpProxyTest, DrainCloseAfterDownstreamWrite) {
+  // This test covers the legacy path where drain-close is decided by polling the DrainDecision.
+  scoped_runtime_.mergeValues(
+      {{"envoy.reloadable_features.use_connection_level_drain", "false"}});
   auto config = defaultConfig();
   config.mutable_check_drain_close()->set_value(true);
   setup(1, config);
@@ -322,6 +331,48 @@ TEST_P(TcpProxyTest, DrainCloseAfterDownstreamWrite) {
   Buffer::OwnedImpl buffer("world");
   EXPECT_CALL(factory_context_.drain_manager_, drainClose(Network::DrainDirection::All))
       .WillOnce(Return(true));
+  EXPECT_CALL(filter_callbacks_.connection_, write(BufferEqual(&buffer), false));
+  EXPECT_CALL(filter_callbacks_.connection_,
+              close(Network::ConnectionCloseType::FlushWrite,
+                    StreamInfo::LocalCloseReasons::get().TcpProxyDrainClose));
+  upstream_callbacks_->onUpstreamData(buffer, false);
+}
+
+// Equivalent of DrainCloseAfterDownstreamRead using the connection-level drain path: the connection
+// is notified via onDrain() (Immediate strategy) and the drain-close decision is derived from that
+// event instead of polling the DrainDecision (which must not be consulted).
+TEST_P(TcpProxyTest, DrainCloseAfterDownstreamReadViaConnectionDrain) {
+  auto config = defaultConfig();
+  config.mutable_check_drain_close()->set_value(true);
+  setup(1, config);
+
+  EXPECT_CALL(factory_context_.drain_manager_, drainClose(_)).Times(0);
+  filter_callbacks_.connection_.raiseConnectionDrain(Network::ConnectionDrainEvent{
+      {}, std::chrono::seconds(0), Server::DrainStrategy::Immediate});
+  EXPECT_CALL(filter_callbacks_.connection_,
+              close(Network::ConnectionCloseType::FlushWrite,
+                    StreamInfo::LocalCloseReasons::get().TcpProxyDrainClose));
+
+  raiseEventUpstreamConnected(0);
+
+  Buffer::OwnedImpl buffer("hello");
+  EXPECT_CALL(*upstream_connections_.at(0), write(BufferEqual(&buffer), false));
+  filter_->onData(buffer, false);
+}
+
+// Equivalent of DrainCloseAfterDownstreamWrite using the connection-level drain path.
+TEST_P(TcpProxyTest, DrainCloseAfterDownstreamWriteViaConnectionDrain) {
+  auto config = defaultConfig();
+  config.mutable_check_drain_close()->set_value(true);
+  setup(1, config);
+
+  EXPECT_CALL(factory_context_.drain_manager_, drainClose(_)).Times(0);
+  filter_callbacks_.connection_.raiseConnectionDrain(Network::ConnectionDrainEvent{
+      {}, std::chrono::seconds(0), Server::DrainStrategy::Immediate});
+
+  raiseEventUpstreamConnected(0);
+
+  Buffer::OwnedImpl buffer("world");
   EXPECT_CALL(filter_callbacks_.connection_, write(BufferEqual(&buffer), false));
   EXPECT_CALL(filter_callbacks_.connection_,
               close(Network::ConnectionCloseType::FlushWrite,

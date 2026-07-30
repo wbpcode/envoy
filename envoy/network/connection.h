@@ -10,6 +10,7 @@
 #include "envoy/common/scope_tracker.h"
 #include "envoy/event/deferred_deletable.h"
 #include "envoy/network/address.h"
+#include "envoy/network/drain_decision.h"
 #include "envoy/network/filter.h"
 #include "envoy/network/listen_socket.h"
 #include "envoy/network/socket.h"
@@ -70,8 +71,11 @@ public:
    *
    * The connection remains usable after this call; it is not closed by onDrain() itself.
    * The default implementation is a no-op.
+   * @param info describes the drain sequence (its start time, duration and strategy) as decided on
+   *        the main thread. Callbacks may use it to reproduce gradual/immediate drain timing.
+   *        Passed by value; it is a small trivially-copyable struct.
    */
-  virtual void onDrain() {}
+  virtual void onDrain(ConnectionDrainEvent info) { (void)info; }
 };
 
 /**
@@ -182,8 +186,9 @@ public:
    * registered ConnectionCallbacks. Drain is a notification only: the connection is
    * not closed and remains usable. Callbacks may react by initiating a graceful
    * shutdown of any higher-level state (e.g. HTTP/2 GOAWAY).
+   * @param info describes the drain sequence (start time, duration and strategy).
    */
-  virtual void onDrain() PURE;
+  virtual void onDrain(ConnectionDrainEvent info) PURE;
 
   /**
    * Close the connection.

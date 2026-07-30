@@ -20,10 +20,12 @@ envoy_extension_cc_test(
     rbe_pool = "6gig",
     deps = [
         "//source/extensions/filters/network/reverse_tunnel/drain_aware_hcm:drain_aware_config",
+        "//test/mocks:common_lib",
         "//test/mocks/event:event_mocks",
         "//test/mocks/http:http_mocks",
         "//test/mocks/network:network_mocks",
         "//test/test_common:status_utility_lib",
+        "//test/test_common:test_runtime_lib",
     ],
 )
 

@@ -84,8 +84,9 @@ Http::ServerConnectionPtr DrainAwareHttpConnectionManagerConfig::createCodec(
   // /drain_listeners fires the listener-level drain decision; the server-wide drain manager
   // only fires on hot-restart / full server shutdown.
   return std::make_unique<DrainAwareServerConnection>(
-      std::move(codec), connection.dispatcher(), factory_context_.drainDecision(),
-      std::move(on_local_drain), std::move(callbacks_wrapper));
+      std::move(codec), connection, factory_context_.drainDecision(),
+      factory_context_.serverFactoryContext().api().randomGenerator(), std::move(on_local_drain),
+      std::move(callbacks_wrapper));
 }
 
 absl::StatusOr<Network::FilterFactoryCb>

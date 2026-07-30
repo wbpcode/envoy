@@ -46,6 +46,7 @@
 #include "source/common/http/path_utility.h"
 #include "source/common/http/status.h"
 #include "source/common/http/utility.h"
+#include "source/common/network/drain_close_util.h"
 #include "source/common/network/utility.h"
 #include "source/common/router/config_impl.h"
 #include "source/common/runtime/runtime_features.h"
@@ -654,6 +655,20 @@ void ConnectionManagerImpl::onEvent(Network::ConnectionEvent event) {
     doConnectionClose(std::nullopt, StreamInfo::CoreResponseFlag::DownstreamConnectionTermination,
                       details);
   }
+}
+
+void ConnectionManagerImpl::onDrain(Network::ConnectionDrainEvent info) {
+  // Record the drain sequence details captured on the main thread. The actual drain-close is
+  // decided lazily (per response) in shouldDrainCloseFromConnectionDrain() so that the connection
+  // is drained gradually according to the configured drain strategy, rather than all at once.
+  connection_drain_event_ = info;
+}
+
+bool ConnectionManagerImpl::shouldDrainCloseFromConnectionDrain() {
+  if (!connection_drain_event_.has_value()) {
+    return false;
+  }
+  return Network::shouldDrainClose(time_source_, random_generator_, *connection_drain_event_);
 }
 
 void ConnectionManagerImpl::doConnectionClose(
@@ -1958,9 +1973,16 @@ void ConnectionManagerImpl::ActiveStream::encodeHeaders(ResponseHeaderMap& heade
   // See if we want to drain/close the connection. Send the go away frame prior to encoding the
   // header block. Only drain if the drain direction is not inbound only or the connection is
   // inbound.
+  // When connection-level drain is enabled, decide whether to drain-close based solely on the drain
+  // notification this connection received via onDrain() (its start time, duration and strategy) and
+  // ignore the listener's DrainDecision entirely. This keeps the drain timeline consistent with the
+  // main thread's drain decision. Otherwise fall back to polling the DrainDecision.
+  const bool drain_close =
+      Runtime::runtimeFeatureEnabled("envoy.reloadable_features.use_connection_level_drain")
+          ? connection_manager_.shouldDrainCloseFromConnectionDrain()
+          : connection_manager_.drain_close_.drainClose(drain_scope);
   if (connection_manager_.drain_state_ == DrainState::NotDraining &&
-      (connection_manager_.drain_close_.drainClose(drain_scope) ||
-       drain_connection_due_to_overload)) {
+      (drain_close || drain_connection_due_to_overload)) {
 
     // This doesn't really do anything for HTTP/1.1 other then give the connection another boost
     // of time to race with incoming requests. For HTTP/2 connections, send a GOAWAY frame to

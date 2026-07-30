@@ -377,10 +377,10 @@ TEST_P(ConnectionImplTest, DrainFiresOnDrainOnAllCallbacks) {
   client_connection_->addConnectionCallbacks(cb_b);
 
   // client_callbacks_ was registered by setUpBasicConnection(); it also receives onDrain().
-  EXPECT_CALL(client_callbacks_, onDrain());
-  EXPECT_CALL(cb_a, onDrain());
-  EXPECT_CALL(cb_b, onDrain());
-  client_connection_->onDrain();
+  EXPECT_CALL(client_callbacks_, onDrain(_));
+  EXPECT_CALL(cb_a, onDrain(_));
+  EXPECT_CALL(cb_b, onDrain(_));
+  client_connection_->onDrain(Network::ConnectionDrainEvent{});
 
   client_connection_->removeConnectionCallbacks(cb_a);
   client_connection_->removeConnectionCallbacks(cb_b);
@@ -398,10 +398,10 @@ TEST_P(ConnectionImplTest, DrainSkipsRemovedCallbacks) {
   // removeConnectionCallbacks nulls out the slot without resizing; onDrain() must skip it.
   client_connection_->removeConnectionCallbacks(removed_cb);
 
-  EXPECT_CALL(client_callbacks_, onDrain());
-  EXPECT_CALL(kept_cb, onDrain());
+  EXPECT_CALL(client_callbacks_, onDrain(_));
+  EXPECT_CALL(kept_cb, onDrain(_));
   // removed_cb.onDrain must NOT be invoked (StrictMock catches it).
-  client_connection_->onDrain();
+  client_connection_->onDrain(Network::ConnectionDrainEvent{});
 
   client_connection_->removeConnectionCallbacks(kept_cb);
   disconnect(true);

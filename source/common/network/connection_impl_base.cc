@@ -28,10 +28,10 @@ void ConnectionImplBase::removeConnectionCallbacks(ConnectionCallbacks& callback
   }
 }
 
-void ConnectionImplBase::onDrain() {
+void ConnectionImplBase::onDrain(ConnectionDrainEvent info) {
   for (ConnectionCallbacks* callback : callbacks_) {
     if (callback != nullptr) {
-      callback->onDrain();
+      callback->onDrain(info);
     }
   }
 }

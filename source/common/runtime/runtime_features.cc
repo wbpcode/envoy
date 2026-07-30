@@ -137,6 +137,9 @@ RUNTIME_GUARD(envoy_reloadable_features_upstream_bind_config_fix_port_exhaustion
 RUNTIME_GUARD(envoy_reloadable_features_upstream_wasm_filter_uses_root_scope);
 RUNTIME_GUARD(envoy_reloadable_features_uri_template_match_on_asterisk);
 RUNTIME_GUARD(envoy_reloadable_features_uri_template_mixed_variable_literals);
+// Decide connection drain-close (HCM, TCP proxy) from the connection-level drain notification
+// (Network::Connection::onDrain()) rather than by polling the listener DrainDecision.
+RUNTIME_GUARD(envoy_reloadable_features_use_connection_level_drain);
 RUNTIME_GUARD(envoy_reloadable_features_use_migration_in_quiche);
 RUNTIME_GUARD(envoy_reloadable_features_use_response_decoder_handle);
 RUNTIME_GUARD(envoy_reloadable_features_validate_upstream_headers);

@@ -8,6 +8,7 @@
 #include "envoy/config/listener/v3/listener.pb.h"
 #include "envoy/event/dispatcher.h"
 #include "envoy/event/timer.h"
+#include "envoy/server/listener_manager.h"
 
 #include "source/common/common/assert.h"
 
@@ -180,6 +181,14 @@ void DrainManagerImpl::startDrainSequence(Network::DrainDirection direction,
 
   // Signal to child drain-managers to start their drain sequence
   children_->runCallbacks();
+
+  // If this is the server-wide drain manager (as opposed to a per-listener drain manager), notify
+  // the connections of the affected listeners that draining has begun so connection-level drain
+  // logic (Network::Connection::onDrain()) can react. Per-listener drain managers are excluded so
+  // this fires exactly once per server drain sequence.
+  if (&server_.drainManager() == this) {
+    server_.listenerManager().onServerDrainStart(direction);
+  }
   // Schedule callback to run at end of drain time
   drain_tick_timers_[direction] = dispatcher_.createTimer([this, direction]() {
     for (auto& cb : drain_complete_cbs_) {

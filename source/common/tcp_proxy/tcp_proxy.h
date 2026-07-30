@@ -14,6 +14,7 @@
 #include "envoy/http/header_evaluator.h"
 #include "envoy/http/request_id_extension.h"
 #include "envoy/network/connection.h"
+#include "envoy/network/drain_decision.h"
 #include "envoy/network/filter.h"
 #include "envoy/runtime/runtime.h"
 #include "envoy/server/filter_config.h"
@@ -667,6 +668,9 @@ protected:
     void onEvent(Network::ConnectionEvent event) override { parent_.onDownstreamEvent(event); }
     void onAboveWriteBufferHighWatermark() override;
     void onBelowWriteBufferLowWatermark() override;
+    void onDrain(Network::ConnectionDrainEvent info) override {
+      parent_.connection_drain_event_ = info;
+    }
 
     Filter& parent_;
     bool on_high_watermark_called_{false};
@@ -701,6 +705,12 @@ protected:
   void onUpstreamData(Buffer::Instance& data, bool end_stream);
   void onUpstreamEvent(Network::ConnectionEvent event);
   void maybeCloseDownstreamForDrainClose();
+  // Returns true if the downstream connection has been notified of a drain sequence (via onDrain())
+  // and, based on the drain start time, duration and strategy captured at that point, should now be
+  // drain-closed. Reproduces the gradual/immediate behavior of
+  // Server::DrainManagerImpl::drainClose() without polling a DrainDecision; only consulted when the
+  // runtime feature "envoy.reloadable_features.use_connection_level_drain" is enabled.
+  bool shouldDrainCloseFromConnectionDrain();
   void onUpstreamConnection();
   void onIdleTimeout();
   void resetIdleTimer();
@@ -724,6 +734,10 @@ protected:
   Network::ReadFilterCallbacks* read_callbacks_{};
 
   DownstreamCallbacks downstream_callbacks_;
+  // Set when the downstream connection is notified of a drain sequence via onDrain(). Carries the
+  // drain start time, duration and strategy so the drain-close decision can be computed at the
+  // connection level (see shouldDrainCloseFromConnectionDrain()).
+  std::optional<Network::ConnectionDrainEvent> connection_drain_event_;
   Event::TimerPtr idle_timer_;
   Event::TimerPtr connection_duration_timer_;
   Event::TimerPtr access_log_flush_timer_;

@@ -85,7 +85,7 @@ public:
   void write(Buffer::Instance& data, bool end_stream) override;
   void addConnectionCallbacks(ConnectionCallbacks& cb) override;
   void removeConnectionCallbacks(ConnectionCallbacks& cb) override;
-  void onDrain() override;
+  void onDrain(ConnectionDrainEvent info) override;
 
   // Methods which are applied to each connection attempt.
   void enableHalfClose(bool enabled) override;

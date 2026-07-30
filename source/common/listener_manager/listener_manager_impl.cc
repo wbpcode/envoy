@@ -8,6 +8,7 @@
 #include "envoy/config/listener/v3/listener.pb.h"
 #include "envoy/config/listener/v3/listener_components.pb.h"
 #include "envoy/extensions/transport_sockets/raw_buffer/v3/raw_buffer.pb.h"
+#include "envoy/network/drain_decision.h"
 #include "envoy/network/filter.h"
 #include "envoy/network/listener.h"
 #include "envoy/registry/registry.h"
@@ -747,9 +748,14 @@ void ListenerManagerImpl::drainListener(ListenerImplPtr&& listener) {
 
   // Notify existing connections on this listener that draining has begun so that callbacks
   // (e.g. HTTP/2 codecs) can react before the drain timer expires and connections are
-  // forcibly closed.
+  // forcibly closed. The drain start time, duration and strategy are captured once here so that
+  // every connection shares a single, consistent drain timeline regardless of which worker it
+  // lives on or when it is notified.
+  const Network::ConnectionDrainEvent listener_drain_event{
+      server_.api().timeSource().monotonicTime(), server_.options().drainTime(),
+      server_.options().drainStrategy()};
   for (const auto& worker : workers_) {
-    worker->onListenerDrain(*draining_it->listener_);
+    worker->onListenerDrain(listener_tag, listener_drain_event);
   }
 
   // Start the drain sequence which completes when the listener's drain manager has completed
@@ -945,16 +951,20 @@ void ListenerManagerImpl::drainFilterChains(ListenerImplPtr&& draining_listener,
 
   // Notify existing connections in the draining filter chains that draining has begun so
   // callbacks (e.g. HTTP/2 codecs) can react before the drain timer expires and the
-  // connections are forcibly closed.
+  // connections are forcibly closed. The drain start time, duration and strategy are captured
+  // once here so that every connection shares a single, consistent drain timeline.
+  const std::chrono::seconds drain_time = server_.options().drainTime();
+  const Network::ConnectionDrainEvent filter_chain_drain_event{
+      server_.api().timeSource().monotonicTime(), drain_time, server_.options().drainStrategy()};
   for (const auto& worker : workers_) {
     worker->onFilterChainDrain(draining_group->getDrainingListenerTag(),
-                               draining_group->getDrainingFilterChains());
+                               draining_group->getDrainingFilterChains(), filter_chain_drain_event);
   }
 
   // Start the drain sequence which completes when the listener's drain manager has completed
   // draining at whatever the server configured drain times are.
   draining_group->startDrainSequence(
-      server_.options().drainTime(), server_.dispatcher(), [this, draining_group]() -> void {
+      drain_time, server_.dispatcher(), [this, draining_group]() -> void {
         draining_group->getDrainingListener().debugLog(
             absl::StrCat("removing draining filter chains from listener ",
                          draining_group->getDrainingListener().name()));
@@ -1184,6 +1194,26 @@ void ListenerManagerImpl::stopListeners(StopListenersType stop_listeners_type,
           }
         }
       });
+    }
+  }
+}
+
+void ListenerManagerImpl::onServerDrainStart(Network::DrainDirection direction) {
+  // Capture the drain start time, duration and strategy once so every notified connection shares a
+  // single, consistent drain timeline. Direction is honored by only notifying listeners whose
+  // traffic direction is covered by the drain, so the connection-level drain logic itself does not
+  // need to re-check direction.
+  const Network::ConnectionDrainEvent event{server_.api().timeSource().monotonicTime(),
+                                             server_.options().drainTime(),
+                                             server_.options().drainStrategy()};
+  for (Network::ListenerConfig& listener : listeners()) {
+    if (direction == Network::DrainDirection::InboundOnly &&
+        listener.listenerInfo()->direction() != envoy::config::core::v3::INBOUND) {
+      continue;
+    }
+    const uint64_t listener_tag = listener.listenerTag();
+    for (const auto& worker : workers_) {
+      worker->onListenerDrain(listener_tag, event);
     }
   }
 }
