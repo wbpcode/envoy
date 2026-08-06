@@ -33,6 +33,8 @@ namespace {
 
 using ::Envoy::StatusHelpers::HasStatusMessage;
 using ::Envoy::StatusHelpers::IsOk;
+using ::Envoy::StatusHelpers::IsOkAndHolds;
+using ::testing::_;
 using ::testing::Not;
 
 class VhdsTest : public testing::Test {
@@ -80,12 +82,26 @@ vhds:
   buildRemovedResources(const std::vector<std::string>& removed) {
     return Protobuf::RepeatedPtrField<std::string>{removed.begin(), removed.end()};
   }
-  RouteConfigUpdatePtr
+  // Applies a route configuration to a fresh receiver. The receiver creates and owns the VHDS
+  // subscription of the route configuration itself, so this is also what instantiates VHDS, and a
+  // VHDS configuration that doesn't validate surfaces as a failed status here.
+  absl::StatusOr<RouteConfigUpdatePtr>
   makeRouteConfigUpdate(const envoy::config::route::v3::RouteConfiguration& rc) {
     RouteConfigUpdatePtr config_update_info =
-        std::make_unique<RouteConfigUpdateReceiverImpl>(proto_traits_, factory_context_);
-    config_update_info->onRdsUpdate(rc, init_manager_, "1");
+        std::make_unique<RouteConfigUpdateReceiverImpl>(proto_traits_, factory_context_, context_);
+    config_update_info->routeConfigProvider() = provider_;
+    RETURN_IF_NOT_OK(config_update_info->onRdsUpdate(rc, init_manager_, "1").status());
     return config_update_info;
+  }
+
+  // Delivers a VHDS response to the subscription that the receiver created.
+  absl::Status deliverVhdsUpdate(const std::vector<envoy::config::route::v3::VirtualHost>& added,
+                                 const std::vector<std::string>& removed = {}) {
+    const auto added_resources = buildAddedResources(added);
+    const auto decoded_resources =
+        TestUtility::decodeResources<envoy::config::route::v3::VirtualHost>(added_resources);
+    return factory_context_.cluster_manager_.subscription_factory_.callbacks_->onConfigUpdate(
+        decoded_resources.refvec_, buildRemovedResources(removed), "1");
   }
 
   ProtoTraitsImpl proto_traits_;
@@ -104,11 +120,7 @@ vhds:
 TEST_F(VhdsTest, VhdsInstantiationShouldSucceedWithDELTA_GRPC) {
   const auto route_config =
       TestUtility::parseYaml<envoy::config::route::v3::RouteConfiguration>(default_vhds_config_);
-  RouteConfigUpdatePtr config_update_info = makeRouteConfigUpdate(route_config);
-
-  EXPECT_OK(VhdsSubscription::createVhdsSubscription(config_update_info, factory_context_, context_,
-                                                     provider_)
-                .status());
+  EXPECT_OK(makeRouteConfigUpdate(route_config).status());
 }
 
 // verify that api_type: GRPC fails validation
@@ -124,12 +136,7 @@ vhds:
         envoy_grpc:
           cluster_name: xds_cluster
   )EOF");
-  RouteConfigUpdatePtr config_update_info = makeRouteConfigUpdate(route_config);
-
-  EXPECT_THAT(VhdsSubscription::createVhdsSubscription(config_update_info, factory_context_,
-                                                       context_, provider_)
-                  .status(),
-              Not(IsOk()));
+  EXPECT_THAT(makeRouteConfigUpdate(route_config).status(), Not(IsOk()));
 }
 
 // Verify that VHDS over GRPC fails when ADS is using DELTA_GRPC.
@@ -147,12 +154,7 @@ vhds:
         envoy_grpc:
           cluster_name: xds_cluster
   )EOF");
-  RouteConfigUpdatePtr config_update_info = makeRouteConfigUpdate(route_config);
-
-  EXPECT_THAT(VhdsSubscription::createVhdsSubscription(config_update_info, factory_context_,
-                                                       context_, provider_)
-                  .status(),
-              Not(IsOk()));
+  EXPECT_THAT(makeRouteConfigUpdate(route_config).status(), Not(IsOk()));
 }
 
 // verify that ADS with DELTA_GRPC in bootstrap passes validation
@@ -170,11 +172,7 @@ vhds:
   config_source:
     ads: {}
   )EOF");
-  RouteConfigUpdatePtr config_update_info = makeRouteConfigUpdate(route_config);
-
-  EXPECT_OK(VhdsSubscription::createVhdsSubscription(config_update_info, factory_context_, context_,
-                                                     provider_)
-                .status());
+  EXPECT_OK(makeRouteConfigUpdate(route_config).status());
 }
 
 // verify that ADS without ADS configured in bootstrap fails validation
@@ -188,12 +186,9 @@ vhds:
   config_source:
     ads: {}
   )EOF");
-  RouteConfigUpdatePtr config_update_info = makeRouteConfigUpdate(route_config);
-
-  auto result = VhdsSubscription::createVhdsSubscription(config_update_info, factory_context_,
-                                                         context_, provider_);
-  EXPECT_THAT(result, HasStatusMessage(
-                          "vhds: ADS config source specified but no ADS configured in bootstrap."));
+  EXPECT_THAT(makeRouteConfigUpdate(route_config),
+              HasStatusMessage(
+                  "vhds: ADS config source specified but no ADS configured in bootstrap."));
 }
 
 // verify that ADS without DELTA_GRPC api_type in bootstrap fails validation
@@ -211,12 +206,8 @@ vhds:
   config_source:
     ads: {}
   )EOF");
-  RouteConfigUpdatePtr config_update_info = makeRouteConfigUpdate(route_config);
-
-  auto result = VhdsSubscription::createVhdsSubscription(config_update_info, factory_context_,
-                                                         context_, provider_);
   EXPECT_THAT(
-      result,
+      makeRouteConfigUpdate(route_config),
       HasStatusMessage("vhds: ADS must use DELTA_GRPC api_type when used as VHDS config source."));
 }
 
@@ -224,11 +215,7 @@ vhds:
 TEST_F(VhdsTest, VhdsAddsVirtualHosts) {
   const auto route_config =
       TestUtility::parseYaml<envoy::config::route::v3::RouteConfiguration>(default_vhds_config_);
-  RouteConfigUpdatePtr config_update_info = makeRouteConfigUpdate(route_config);
-
-  VhdsSubscriptionPtr subscription = VhdsSubscription::createVhdsSubscription(
-                                         config_update_info, factory_context_, context_, provider_)
-                                         .value();
+  RouteConfigUpdatePtr config_update_info = makeRouteConfigUpdate(route_config).value();
   EXPECT_EQ(0UL, config_update_info->protobufConfigurationCast().virtual_hosts_size());
 
   auto vhost = buildVirtualHost("vhost1", "vhost.first");
@@ -285,11 +272,7 @@ vhds:
         envoy_grpc:
           cluster_name: xds_cluster
   )EOF");
-  RouteConfigUpdatePtr config_update_info = makeRouteConfigUpdate(route_config);
-
-  VhdsSubscriptionPtr subscription = VhdsSubscription::createVhdsSubscription(
-                                         config_update_info, factory_context_, context_, provider_)
-                                         .value();
+  RouteConfigUpdatePtr config_update_info = makeRouteConfigUpdate(route_config).value();
   EXPECT_EQ(1UL, config_update_info->protobufConfigurationCast().virtual_hosts_size());
   EXPECT_EQ("vhost_rds1", config_update_info->protobufConfigurationCast().virtual_hosts(0).name());
 
@@ -302,7 +285,8 @@ vhds:
       decoded_resources.refvec_, removed_resources, "1"));
   EXPECT_EQ(2UL, config_update_info->protobufConfigurationCast().virtual_hosts_size());
 
-  config_update_info->onRdsUpdate(updated_route_config, init_manager_, "2");
+  EXPECT_THAT(config_update_info->onRdsUpdate(updated_route_config, init_manager_, "2"),
+              IsOkAndHolds(true));
 
   EXPECT_EQ(3UL, config_update_info->protobufConfigurationCast().virtual_hosts_size());
   auto actual_vhost_0 = config_update_info->protobufConfigurationCast().virtual_hosts(0);
@@ -314,6 +298,109 @@ vhds:
               "vhost_rds2" == actual_vhost_2.name());
   EXPECT_TRUE("vhost_vhds1" == actual_vhost_0.name() || "vhost_vhds1" == actual_vhost_1.name() ||
               "vhost_vhds1" == actual_vhost_2.name());
+}
+
+// Verify that a route configuration that uses VHDS isn't warmed up until the first batch of virtual
+// hosts has been fetched, i.e. that the VHDS subscription registers with the init manager of the
+// update that created it.
+TEST_F(VhdsTest, RouteConfigurationWarmsUpWithTheInitialVhdsFetch) {
+  const auto route_config =
+      TestUtility::parseYaml<envoy::config::route::v3::RouteConfiguration>(default_vhds_config_);
+  RouteConfigUpdatePtr config_update_info = makeRouteConfigUpdate(route_config).value();
+
+  // Starting the init manager of the update starts the VHDS subscription, but the update stays
+  // warming: nothing has been fetched yet.
+  init_watcher_.expectReady().Times(0);
+  init_manager_.initialize(init_watcher_);
+  EXPECT_EQ(Init::Manager::State::Initializing, init_manager_.state());
+  EXPECT_EQ(0UL, config_update_info->protobufConfigurationCast().virtual_hosts_size());
+  ::testing::Mock::VerifyAndClearExpectations(&init_watcher_);
+
+  // The first VHDS response completes the warming up of the update.
+  init_watcher_.expectReady();
+  EXPECT_OK(deliverVhdsUpdate({buildVirtualHost("vhost1", "vhost.first")}));
+  EXPECT_EQ(Init::Manager::State::Initialized, init_manager_.state());
+  EXPECT_EQ(1UL, config_update_info->protobufConfigurationCast().virtual_hosts_size());
+}
+
+// Verify that a VHDS subscription created by an update that is superseded before it finished warming
+// up is not lost. The VHDS configuration of the superseding update is unchanged, so it doesn't
+// create a subscription of its own and has to keep the one that is already running.
+TEST_F(VhdsTest, VhdsSubscriptionSurvivesASupersededRdsUpdate) {
+  const auto route_config =
+      TestUtility::parseYaml<envoy::config::route::v3::RouteConfiguration>(default_vhds_config_);
+  auto updated_route_config = route_config;
+  *updated_route_config.mutable_virtual_hosts()->Add() =
+      buildVirtualHost("vhost_rds1", "vhost.rds.first");
+
+  RouteConfigUpdatePtr config_update_info = makeRouteConfigUpdate(route_config).value();
+  init_manager_.initialize(init_watcher_);
+
+  // A second RDS update arrives while the first one is still warming up. Its VHDS configuration is
+  // identical, so no second subscription is created.
+  EXPECT_CALL(factory_context_.cluster_manager_.subscription_factory_,
+              subscriptionFromConfigSource(_, _, _, _, _, _))
+      .Times(0);
+  EXPECT_THAT(config_update_info->onRdsUpdate(updated_route_config, init_manager_, "2"),
+              IsOkAndHolds(true));
+
+  // The subscription of the first update is still live, so its virtual hosts still land in the
+  // newest route configuration, and they finish warming it up.
+  init_watcher_.expectReady();
+  EXPECT_OK(deliverVhdsUpdate({buildVirtualHost("vhost_vhds1", "vhost.first")}));
+  EXPECT_EQ(Init::Manager::State::Initialized, init_manager_.state());
+  EXPECT_EQ(2UL, config_update_info->protobufConfigurationCast().virtual_hosts_size());
+}
+
+// Verify that the VHDS subscription is only recreated when the VHDS configuration itself changes,
+// and that it is dropped and recreated across removal and re-addition of VHDS.
+TEST_F(VhdsTest, VhdsSubscriptionFollowsTheVhdsConfiguration) {
+  const auto route_config =
+      TestUtility::parseYaml<envoy::config::route::v3::RouteConfiguration>(default_vhds_config_);
+  auto same_vhds_config = route_config;
+  *same_vhds_config.mutable_virtual_hosts()->Add() =
+      buildVirtualHost("vhost_rds1", "vhost.rds.first");
+  auto no_vhds_config = same_vhds_config;
+  no_vhds_config.clear_vhds();
+
+  // The first update creates the subscription.
+  RouteConfigUpdatePtr config_update_info = makeRouteConfigUpdate(route_config).value();
+
+  // An unchanged VHDS configuration keeps it.
+  EXPECT_CALL(factory_context_.cluster_manager_.subscription_factory_,
+              subscriptionFromConfigSource(_, _, _, _, _, _))
+      .Times(0);
+  EXPECT_THAT(config_update_info->onRdsUpdate(same_vhds_config, init_manager_, "2"),
+              IsOkAndHolds(true));
+  ::testing::Mock::VerifyAndClearExpectations(
+      &factory_context_.cluster_manager_.subscription_factory_);
+
+  // Removing VHDS drops it, so re-adding the very same VHDS configuration creates a new one.
+  EXPECT_THAT(config_update_info->onRdsUpdate(no_vhds_config, init_manager_, "3"),
+              IsOkAndHolds(true));
+  EXPECT_CALL(factory_context_.cluster_manager_.subscription_factory_,
+              subscriptionFromConfigSource(_, _, _, _, _, _))
+      .Times(1);
+  EXPECT_THAT(config_update_info->onRdsUpdate(same_vhds_config, init_manager_, "4"),
+              IsOkAndHolds(true));
+}
+
+// Verify that an on-demand update request against a route configuration that doesn't use VHDS is a
+// no-op rather than a crash.
+TEST_F(VhdsTest, OnDemandUpdateWithoutVhdsIsANoop) {
+  const auto route_config =
+      TestUtility::parseYaml<envoy::config::route::v3::RouteConfiguration>(R"EOF(
+name: my_route
+virtual_hosts:
+- name: vhost_rds1
+  domains: ["vhost.rds.first"]
+  routes:
+  - match: { prefix: "/rdsone" }
+    route: { cluster: my_service }
+  )EOF");
+  RouteConfigUpdatePtr config_update_info = makeRouteConfigUpdate(route_config).value();
+
+  config_update_info->updateOnDemand("my_route/vhost.rds.first");
 }
 
 } // namespace

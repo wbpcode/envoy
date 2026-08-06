@@ -68,9 +68,6 @@ public:
 
   RouteConfigUpdatePtr& routeConfigUpdate() { return config_update_info_; }
   void updateOnDemand(const std::string& aliases);
-  void maybeCreateInitManager(const std::string& version_info,
-                              std::unique_ptr<Init::ManagerImpl>& init_manager,
-                              std::unique_ptr<Cleanup>& resume_rds);
 
 protected:
   RdsRouteConfigSubscription(
@@ -83,8 +80,6 @@ protected:
       absl::Status& creation_status);
 
 private:
-  absl::Status beforeProviderUpdate(std::unique_ptr<Init::ManagerImpl>& noop_init_manager,
-                                    std::unique_ptr<Cleanup>& resume_rds) override;
   absl::Status afterProviderUpdate() override;
 
   ABSL_MUST_USE_RESULT Common::CallbackHandlePtr
@@ -92,7 +87,6 @@ private:
     return update_callback_manager_.add(callback);
   }
 
-  VhdsSubscriptionPtr vhds_subscription_;
   RouteConfigUpdatePtr config_update_info_;
   Common::CallbackManager<absl::Status> update_callback_manager_;
 

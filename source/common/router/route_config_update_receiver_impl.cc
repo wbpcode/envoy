@@ -54,9 +54,9 @@ ConfigTraitsImpl::createConfig(const Protobuf::Message& rc,
       std::shared_ptr<ConfigImpl>);
 }
 
-bool RouteConfigUpdateReceiverImpl::onRdsUpdate(const Protobuf::Message& rc,
-                                                Init::Manager& init_manager,
-                                                const std::string& version_info) {
+absl::StatusOr<bool> RouteConfigUpdateReceiverImpl::onRdsUpdate(const Protobuf::Message& rc,
+                                                                Init::Manager& init_manager,
+                                                                const std::string& version_info) {
   uint64_t new_hash = base_.getHash(rc);
   if (!base_.checkHash(new_hash)) {
     return false;
@@ -83,10 +83,40 @@ bool RouteConfigUpdateReceiverImpl::onRdsUpdate(const Protobuf::Message& rc,
   }
   base_.updateConfig(std::move(new_route_config), init_manager);
   base_.updateHash(new_hash);
-  vhds_configuration_changed_ = new_vhds_config_hash != last_vhds_config_hash_;
+  const bool vhds_configuration_changed = new_vhds_config_hash != last_vhds_config_hash_;
   last_vhds_config_hash_ = new_vhds_config_hash;
 
   base_.onUpdateCommon(version_info);
+
+  if (!protobufConfigurationCast().has_vhds()) {
+    // The new route configuration doesn't use VHDS. Drop the subscription of the previous one, if
+    // there was one, so that no more virtual hosts are pushed into a route configuration that
+    // didn't ask for them.
+    vhds_subscription_.reset();
+    return true;
+  }
+  if (vhds_configuration_changed) {
+    ENVOY_LOG(debug,
+              "rds: vhds configuration present/changed, (re)starting vhds: config_name={} hash={}",
+              protobufConfigurationCast().name(), configHash());
+    // (Re)start the VHDS subscription and register it with the init manager of this update, so that
+    // the first batch of virtual hosts is fetched before the new route configuration is published.
+    // The init manager is dedicated to this update and hasn't been initialized yet, so registering
+    // with it is always legal, whether or not this subscription has served an update before.
+    auto subscription_or_error = VhdsSubscription::createVhdsSubscription(
+        *this, factory_context_, stat_prefix_, route_config_provider_);
+    if (!subscription_or_error.ok()) {
+      // This route configuration can't have a VHDS subscription. The caller rejects the update, so
+      // also drop the subscription of the previous route configuration: the state it would push
+      // virtual hosts into has already been replaced by the rejected route configuration.
+      vhds_subscription_.reset();
+      return subscription_or_error.status();
+    }
+    // Assigning drops the subscription of the previous route configuration, which signals its init
+    // target ready, so it can't leave an abandoned update warming up forever.
+    vhds_subscription_ = std::move(subscription_or_error.value());
+    vhds_subscription_->registerInitTargetWithInitManager(init_manager);
+  }
   return true;
 }
 

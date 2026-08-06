@@ -48,12 +48,18 @@ public:
                             Init::Manager& init_manager, const std::string& version_info) PURE;
 
   /**
-   * @return bool return whether VHDS configuration has been changed in the last RDS update.
+   * The route configuration provider that the VHDS subscription owned by this receiver publishes
+   * to. The provider is created after the receiver, so it binds itself here once it exists. It is
+   * null until then, and stays null for a receiver whose route configuration never uses VHDS.
    */
-  // TODO(dmitri-d): Consider splitting RouteConfigUpdateReceiver into a RouteConfig state and a
-  // last update state. The latter could be passed to callbacks as a parameter, which would make the
-  // intent and the lifecycle of the "last update state" less muddled.
-  virtual bool vhdsConfigurationChanged() const PURE;
+  virtual Rds::RouteConfigProvider*& routeConfigProvider() PURE;
+
+  /**
+   * Requests an on-demand VHDS update for the given aliases. A no-op if the current route
+   * configuration doesn't use VHDS.
+   * @param aliases supplies the aliases to request.
+   */
+  virtual void updateOnDemand(const std::string& aliases) PURE;
 
   /**
    * @return the union of all resource names and aliases (if any) received with the last VHDS

@@ -8,6 +8,8 @@
 #include "envoy/init/manager.h"
 #include "envoy/rds/route_config_provider.h"
 
+#include "absl/status/statusor.h"
+
 namespace Envoy {
 namespace Rds {
 
@@ -26,11 +28,12 @@ public:
    * responsible for keeping it alive until the new RouteConfiguration is warmed up and published.
    * @param version_info supplies RouteConfiguration version.
    * @return bool whether the hash of the new config has been different than
-   * the hash of the current one and RouteConfiguration has been updated.
+   * the hash of the current one and RouteConfiguration has been updated, or an error status if the
+   * new config was applied but the resources it owns could not be set up.
    * @throw EnvoyException if the new config is invalid and can't be applied.
    */
-  virtual bool onRdsUpdate(const Protobuf::Message& rc, Init::Manager& init_manager,
-                           const std::string& version_info) PURE;
+  virtual absl::StatusOr<bool> onRdsUpdate(const Protobuf::Message& rc, Init::Manager& init_manager,
+                                           const std::string& version_info) PURE;
 
   /**
    * @return uint64_t the hash value of RouteConfiguration.

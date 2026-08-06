@@ -149,7 +149,17 @@ absl::Status RdsRouteConfigSubscription::onConfigUpdate(
   // update that turns out to be a no-op leaves a previous update that is still warming up alone.
   auto update_init_manager = std::make_unique<Init::ManagerImpl>(
       fmt::format("{} update-init-manager {}:{}", rds_type_, route_config_name_, version_info));
-  if (!config_update_info_->onRdsUpdate(route_config, *update_init_manager, version_info)) {
+  auto updated_or_error =
+      config_update_info_->onRdsUpdate(route_config, *update_init_manager, version_info);
+  if (!updated_or_error.ok()) {
+    // The route configuration was applied to the receiver but the resources it owns could not be
+    // set up, so it can't be warmed up and published. Report the failure to the xDS layer as a
+    // rejection, which signals readiness through onConfigUpdateFailed().
+    ENVOY_LOG(warn, "rds: route config '{}' rejected: {}", route_config_name_,
+              updated_or_error.status().message());
+    return updated_or_error.status();
+  }
+  if (!*updated_or_error) {
     // The route configuration is unchanged, so there is nothing to warm up and nothing to publish.
     // Note that update_init_manager is dropped here without ever being started, while a previous
     // update that is still warming up is deliberately left untouched.
@@ -173,11 +183,6 @@ absl::Status RdsRouteConfigSubscription::onConfigUpdate(
 }
 
 void RdsRouteConfigSubscription::onUpdateInitManagerReady() {
-  // These must outlive local_init_target_.ready() below: resume_rds is a Cleanup that resumes the
-  // VHDS subscription, and it has always run after this subscription signalled readiness.
-  std::unique_ptr<Init::ManagerImpl> noop_init_manager;
-  std::unique_ptr<Cleanup> resume_rds;
-
   Cleanup after_this_update([this]() {
     // The new route configuration is warmed up and published, so the per-update init manager isn't
     // needed anymore. The next update will create a new one.
@@ -203,8 +208,6 @@ void RdsRouteConfigSubscription::onUpdateInitManagerReady() {
 
   stats_.config_reload_.inc();
   stats_.config_reload_time_ms_.set(DateUtil::nowToMilliseconds(factory_context_.timeSource()));
-  publish_status_ = beforeProviderUpdate(noop_init_manager, resume_rds);
-  RETURN_ONLY_IF_NOT_OK_REF(publish_status_);
 
   ENVOY_LOG(debug, "rds: loading new configuration: config_name={} hash={}", route_config_name_,
             config_update_info_->configHash());
