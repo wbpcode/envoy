@@ -82,10 +82,6 @@ private:
   void onConfigUpdateFailed(Envoy::Config::ConfigUpdateFailureReason reason,
                             const EnvoyException*) override;
 
-  virtual absl::Status beforeProviderUpdate(std::unique_ptr<Init::ManagerImpl>&,
-                                            std::unique_ptr<Cleanup>&) {
-    return absl::OkStatus();
-  }
   virtual absl::Status afterProviderUpdate() { return absl::OkStatus(); }
 
   // Takes ownership of the init manager that is dedicated to the route configuration of the update

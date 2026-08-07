@@ -22,8 +22,8 @@ public:
   void onUpdateCommon(const std::string& version_info);
 
   // RouteConfigUpdateReceiver
-  bool onRdsUpdate(const Protobuf::Message& rc, Init::Manager& init_manager,
-                   const std::string& version_info) override;
+  absl::StatusOr<bool> onRdsUpdate(const Protobuf::Message& rc, Init::Manager& init_manager,
+                                   const std::string& version_info) override;
 
   uint64_t configHash() const override { return last_config_hash_; }
   const std::optional<RouteConfigProvider::ConfigInfo>& configInfo() const override;

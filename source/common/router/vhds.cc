@@ -21,11 +21,11 @@ namespace Envoy {
 namespace Router {
 
 absl::StatusOr<VhdsSubscriptionPtr> VhdsSubscription::createVhdsSubscription(
-    RouteConfigUpdatePtr& config_update_info,
+    RouteConfigUpdateReceiver& config_update_info,
     Server::Configuration::ServerFactoryContext& factory_context, const std::string& stat_prefix,
     Rds::RouteConfigProvider* route_config_provider) {
   const auto& vhds_config_source =
-      config_update_info->protobufConfigurationCast().vhds().config_source();
+      config_update_info.protobufConfigurationCast().vhds().config_source();
   // VHDS only supports Delta xDS. This can be specified either explicitly via DELTA_GRPC
   // or implicitly by using ADS when the parent ADS stream is in Delta mode.
   const bool is_ads = vhds_config_source.config_source_specifier_case() ==
@@ -61,20 +61,20 @@ absl::StatusOr<VhdsSubscriptionPtr> VhdsSubscription::createVhdsSubscription(
 }
 
 // Implements callbacks to handle DeltaDiscovery protocol for VirtualHostDiscoveryService
-VhdsSubscription::VhdsSubscription(RouteConfigUpdatePtr& config_update_info,
+VhdsSubscription::VhdsSubscription(RouteConfigUpdateReceiver& config_update_info,
                                    Server::Configuration::ServerFactoryContext& factory_context,
                                    const std::string& stat_prefix,
                                    Rds::RouteConfigProvider* route_config_provider,
                                    absl::Status& status)
     : config_update_info_(config_update_info),
       scope_(factory_context.scope().createScope(
-          stat_prefix + "vhds." + config_update_info_->protobufConfigurationCast().name() + ".")),
+          stat_prefix + "vhds." + config_update_info_.protobufConfigurationCast().name() + ".")),
       stats_({ALL_VHDS_STATS(POOL_COUNTER(*scope_))}),
       init_target_(fmt::format("VhdsConfigSubscription {}",
-                               config_update_info_->protobufConfigurationCast().name()),
+                               config_update_info_.protobufConfigurationCast().name()),
                    [this]() {
                      subscription_->start(
-                         {config_update_info_->protobufConfigurationCast().name()});
+                         {config_update_info_.protobufConfigurationCast().name()});
                    }),
       resource_type_helper_(factory_context.messageValidationContext().dynamicValidationVisitor(),
                             "name"),
@@ -84,7 +84,7 @@ VhdsSubscription::VhdsSubscription(RouteConfigUpdatePtr& config_update_info,
   options.use_namespace_matching_ = true;
   absl::StatusOr<Envoy::Config::SubscriptionPtr> status_or =
       factory_context.clusterManager().subscriptionFactory().subscriptionFromConfigSource(
-          config_update_info_->protobufConfigurationCast().vhds().config_source(),
+          config_update_info_.protobufConfigurationCast().vhds().config_source(),
           Grpc::Common::typeUrl(resource_name), *scope_, *this,
           resource_type_helper_.resourceDecoder(), options);
   SET_AND_RETURN_IF_NOT_OK(status_or.status(), status);
@@ -112,13 +112,13 @@ void VhdsSubscription::commitUpdateInitManager(
     ENVOY_LOG(debug,
               "vhds: route config '{}' was updated again while the previous update was still "
               "warming up, abandoning the previous update",
-              config_update_info_->protobufConfigurationCast().name());
+              config_update_info_.protobufConfigurationCast().name());
   }
   // Assigning the watcher first drops the abandoned watcher while its init manager is still around.
   // That is safe, the manager only holds a weak handle to it.
   update_init_watcher_ = std::make_unique<Init::WatcherImpl>(
       fmt::format("VHDS update-init-watcher {}:{}",
-                  config_update_info_->protobufConfigurationCast().name(), version_info),
+                  config_update_info_.protobufConfigurationCast().name(), version_info),
       [this]() { onUpdateInitManagerReady(); });
   update_init_manager_ = std::move(update_init_manager);
   // Note this publishes the update synchronously, i.e. before returning, if there is nothing to
@@ -160,8 +160,8 @@ absl::Status VhdsSubscription::onConfigUpdate(
   // turns out to be a no-op leaves a previous update that is still warming up alone.
   auto update_init_manager = std::make_unique<Init::ManagerImpl>(
       fmt::format("VHDS update-init-manager {}:{}",
-                  config_update_info_->protobufConfigurationCast().name(), version_info));
-  if (!config_update_info_->onVhdsUpdate(added_vhosts, std::move(added_resource_ids),
+                  config_update_info_.protobufConfigurationCast().name(), version_info));
+  if (!config_update_info_.onVhdsUpdate(added_vhosts, std::move(added_resource_ids),
                                          removed_resources, *update_init_manager, version_info)) {
     // The route configuration is unchanged, so there is nothing to warm up and nothing to publish.
     // Note that update_init_manager is dropped here without ever being started, while a previous
@@ -188,13 +188,13 @@ absl::Status VhdsSubscription::onConfigUpdate(
 void VhdsSubscription::onUpdateInitManagerReady() {
   stats_.config_reload_.inc();
   ENVOY_LOG(debug, "vhds: loading new configuration: config_name={} hash={}",
-            config_update_info_->protobufConfigurationCast().name(),
-            config_update_info_->configHash());
+            config_update_info_.protobufConfigurationCast().name(),
+            config_update_info_.configHash());
   if (route_config_provider_ != nullptr) {
     publish_status_ = route_config_provider_->onConfigUpdate();
     if (!publish_status_.ok()) {
       ENVOY_LOG(warn, "vhds: failed to apply the warmed up route config '{}': {}",
-                config_update_info_->protobufConfigurationCast().name(), publish_status_.message());
+                config_update_info_.protobufConfigurationCast().name(), publish_status_.message());
     }
   }
 

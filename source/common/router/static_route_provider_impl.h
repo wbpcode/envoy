@@ -89,7 +89,6 @@ private:
     // TODO(adisuissa): consider refactoring the VHDS and RDS config providers
     // to separate worker-thread/main-thread const/mutable use cases.
     const RouteConfigUpdateReceiver* const config_update_info_;
-    VhdsSubscriptionPtr vhds_subscription_;
     Server::Configuration::ServerFactoryContext& factory_context_;
     ThreadLocal::TypedSlot<ThreadLocalConfig> tls_;
     std::list<UpdateOnDemandCallback> config_update_callbacks_;

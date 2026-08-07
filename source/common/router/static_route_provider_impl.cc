@@ -81,18 +81,18 @@ StaticRouteConfigProviderImpl::VhdsContext::VhdsContext(
           route_config_provider_manager.protoTraits(), factory_context)),
       config_update_info_(config_update_info_mutable_.get()), factory_context_(factory_context),
       tls_(factory_context.threadLocal()) {
+  // The receiver creates the VHDS subscription itself, so bind the provider it publishes to before
+  // handing it the route configuration.
+  config_update_info_mutable_->routeConfigProvider() = &parent;
   // Emulate a config-update information gathering using a dynamic RouteConfigurationReceiver.
   // This route configuration is provided inline, so it inherits the init manager of its owner
-  // rather than getting a per-update one like the following VHDS updates do.
-  config_update_info_mutable_->onRdsUpdate(config, init_manager, "");
-  // TODO(adisuissa): Convert the THROW_OR_RETURN_VALUE to return an
+  // rather than getting a per-update one like the following VHDS updates do. The initial VHDS fetch
+  // therefore warms up together with the owner, e.g. the listener of an inline route configuration.
+  //
+  // TODO(adisuissa): Convert the THROW_IF_NOT_OK_REF to return an
   // absl::StatusOr<> and propagate the result through a StaticRouteConfigProviderImpl
   // create function.
-  vhds_subscription_ =
-      THROW_OR_RETURN_VALUE(VhdsSubscription::createVhdsSubscription(config_update_info_mutable_,
-                                                                     factory_context, "", &parent),
-                            VhdsSubscriptionPtr);
-  vhds_subscription_->registerInitTargetWithInitManager(factory_context.initManager());
+  THROW_IF_NOT_OK_REF(config_update_info_mutable_->onRdsUpdate(config, init_manager, "").status());
   tls_.set([initial_config = parent.base_.config()](Event::Dispatcher&) {
     return std::make_unique<ThreadLocalConfig>(initial_config);
   });
@@ -151,7 +151,7 @@ void StaticRouteConfigProviderImpl::VhdsContext::requestVirtualHostsUpdate(
       [this, maybe_still_alive = std::weak_ptr<bool>(still_alive_), alias, &thread_local_dispatcher,
        route_config_updated_cb]() -> void {
         if (maybe_still_alive.lock()) {
-          vhds_subscription_->updateOnDemand(alias);
+          config_update_info_mutable_->updateOnDemand(alias);
           config_update_callbacks_.push_back(
               {alias, thread_local_dispatcher, route_config_updated_cb});
         }

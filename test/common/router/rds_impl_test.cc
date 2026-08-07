@@ -571,7 +571,8 @@ TEST_F(RdsImplTest, FailureInvalidConfig) {
   ASSERT_EQ(config_impl_pointer, rds_subscription->routeConfigProvider()->config());
 }
 
-// rds and vhds configurations change together
+// An RDS update that carries a VHDS configuration isn't published until the first batch of virtual
+// hosts has been fetched, i.e. the route configuration warms up together with its VHDS subscription.
 TEST_F(RdsImplTest, VHDSandRDSupdateTogether) {
   setup();
 
@@ -623,13 +624,95 @@ TEST_F(RdsImplTest, VHDSandRDSupdateTogether) {
   const auto decoded_resources =
       TestUtility::decodeResources<envoy::config::route::v3::RouteConfiguration>(response1);
 
-  EXPECT_CALL(init_watcher_, ready());
+  // The update is accepted, but it stays warming up: the VHDS subscription it created registered
+  // with the init manager of the update, and it hasn't fetched anything yet. Nothing has been
+  // published to the workers, so the route configuration isn't visible yet.
+  init_watcher_.expectReady().Times(0);
   EXPECT_OK(rds_callbacks_->onConfigUpdate(decoded_resources.refvec_, response1.version_info()));
-  EXPECT_TRUE(rds_->configCast()->usesVhds());
+  EXPECT_FALSE(rds_->configCast()->usesVhds());
+  EXPECT_EQ(nullptr,
+            route(Http::TestRequestHeaderMapImpl{{":authority", "foo"}, {":path", "/foo"}}));
+  ::testing::Mock::VerifyAndClearExpectations(&init_watcher_);
 
+  // The first VHDS response finishes the warming up, which publishes the route configuration and
+  // signals readiness.
+  const auto vhost = TestUtility::parseYaml<envoy::config::route::v3::VirtualHost>(R"EOF(
+name: vhost_vhds
+domains: ["vhost.vhds"]
+routes:
+- match: { prefix: "/vhds" }
+  route: { cluster: vhds_cluster }
+)EOF");
+  envoy::service::discovery::v3::Resource resource;
+  resource.set_name(vhost.name());
+  resource.set_version("1");
+  ASSERT_TRUE(resource.mutable_resource()->PackFrom(vhost));
+  Protobuf::RepeatedPtrField<envoy::service::discovery::v3::Resource> added_resources;
+  *added_resources.Add() = resource;
+  const auto decoded_vhosts =
+      TestUtility::decodeResources<envoy::config::route::v3::VirtualHost>(added_resources);
+
+  EXPECT_CALL(init_watcher_, ready());
+  EXPECT_OK(server_factory_context_.cluster_manager_.subscription_factory_.callbacks_
+                ->onConfigUpdate(decoded_vhosts.refvec_, {}, "1"));
+
+  EXPECT_TRUE(rds_->configCast()->usesVhds());
   EXPECT_EQ("foo", route(Http::TestRequestHeaderMapImpl{{":authority", "foo"}, {":path", "/foo"}})
                        ->routeEntry()
                        ->clusterName());
+  EXPECT_EQ("vhds_cluster",
+            route(Http::TestRequestHeaderMapImpl{{":authority", "vhost.vhds"}, {":path", "/vhds"}})
+                ->routeEntry()
+                ->clusterName());
+}
+
+// An RDS update whose VHDS configuration can't be used is rejected, so that the xDS layer reports it
+// back to the management server instead of the update being silently dropped.
+TEST_F(RdsImplTest, VHDSConfigurationFailureRejectsTheRdsUpdate) {
+  setup();
+
+  // VHDS only supports delta xDS, so a non-delta config source can't be subscribed to.
+  const std::string response_json = R"EOF(
+{
+  "version_info": "1",
+  "resources": [
+    {
+      "@type": "type.googleapis.com/envoy.config.route.v3.RouteConfiguration",
+      "name": "foo_route_config",
+      "vhds": {
+        "config_source": {
+          "resource_api_version": "V3",
+          "api_config_source": {
+            "api_type": "GRPC",
+            "transport_api_version": "V3",
+            "grpc_services": {
+              "envoy_grpc": {
+                "cluster_name": "xds_cluster"
+              }
+            }
+          }
+        }
+      }
+    }
+  ]
+}
+)EOF";
+  auto response =
+      TestUtility::parseYaml<envoy::service::discovery::v3::DiscoveryResponse>(response_json);
+  const auto decoded_resources =
+      TestUtility::decodeResources<envoy::config::route::v3::RouteConfiguration>(response);
+
+  init_watcher_.expectReady().Times(0);
+  EXPECT_THAT(rds_callbacks_->onConfigUpdate(decoded_resources.refvec_, response.version_info()),
+              StatusHelpers::HasStatusMessage(
+                  "vhds: only 'DELTA_GRPC' or 'ADS' (which uses Delta xDS) is supported as a config "
+                  "source."));
+  EXPECT_EQ(nullptr, route(Http::TestRequestHeaderMapImpl{{":authority", "foo"}}));
+  ::testing::Mock::VerifyAndClearExpectations(&init_watcher_);
+
+  // The rejected update leaves the subscription unready. Readiness is signalled when it is torn
+  // down, so that a route configuration that can never be applied doesn't block startup forever.
+  init_watcher_.expectReady();
 }
 
 // Validate behavior when the config fails delivery at the subscription level.
@@ -702,44 +785,6 @@ public:
 
   RouteConfigProviderManagerImplPtr route_config_provider_manager_;
 };
-
-// Verifies that maybeCreateInitManager() creates a noop init manager if the main init manager is in
-// Initialized state already
-TEST_F(RdsRouteConfigSubscriptionTest, CreatesNoopInitManager) {
-  const std::string rds_config = R"EOF(
-  route_config_name: my_route
-  config_source:
-    api_config_source:
-      api_type: GRPC
-      grpc_services:
-        envoy_grpc:
-          cluster_name: xds_cluster
-)EOF";
-  const auto rds =
-      TestUtility::parseYaml<envoy::extensions::filters::network::http_connection_manager::v3::Rds>(
-          rds_config);
-  const auto route_config_provider = route_config_provider_manager_->createRdsRouteConfigProvider(
-      rds, server_factory_context_, "stat_prefix", outer_init_manager_);
-  RdsRouteConfigSubscription& subscription =
-      (dynamic_cast<RdsRouteConfigProviderImpl*>(route_config_provider.get()))->subscription();
-  init_watcher_.expectReady(); // The parent_init_target_ will call once.
-  outer_init_manager_.initialize(init_watcher_);
-  std::unique_ptr<Init::ManagerImpl> noop_init_manager;
-  std::unique_ptr<Cleanup> init_vhds;
-  subscription.maybeCreateInitManager("version_info", noop_init_manager, init_vhds);
-  // local_init_manager_ is not ready yet as the local_init_target_ is not ready.
-  EXPECT_EQ(init_vhds, nullptr);
-  EXPECT_EQ(noop_init_manager, nullptr);
-  // Now mark local_init_target_ ready by forcing an update failure.
-  auto* rds_callbacks_ = server_factory_context_.cluster_manager_.subscription_factory_.callbacks_;
-  EnvoyException e("test");
-  rds_callbacks_->onConfigUpdateFailed(Envoy::Config::ConfigUpdateFailureReason::UpdateRejected,
-                                       &e);
-  // Now noop init manager will be created as local_init_manager_ is initialized.
-  subscription.maybeCreateInitManager("version_info", noop_init_manager, init_vhds);
-  EXPECT_NE(init_vhds, nullptr);
-  EXPECT_NE(noop_init_manager, nullptr);
-}
 
 class RouteConfigProviderManagerImplTest : public RdsTestBase {
 public:

@@ -28,9 +28,9 @@ void RouteConfigUpdateReceiverImpl::onUpdateCommon(const std::string& version_in
 }
 
 // Rds::RouteConfigUpdateReceiver
-bool RouteConfigUpdateReceiverImpl::onRdsUpdate(const Protobuf::Message& rc,
-                                                Init::Manager& init_manager,
-                                                const std::string& version_info) {
+absl::StatusOr<bool> RouteConfigUpdateReceiverImpl::onRdsUpdate(const Protobuf::Message& rc,
+                                                                Init::Manager& init_manager,
+                                                                const std::string& version_info) {
   uint64_t new_hash = getHash(rc);
   if (!checkHash(new_hash)) {
     return false;

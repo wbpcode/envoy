@@ -41,8 +41,10 @@ struct VhdsStats {
 class VhdsSubscription : public Envoy::Config::SubscriptionCallbacks,
                          Logger::Loggable<Logger::Id::router> {
 public:
+  // @param config_update_info the receiver that owns this subscription. The virtual hosts of every
+  // update are pushed into it, and it outlives this subscription.
   static absl::StatusOr<std::unique_ptr<VhdsSubscription>>
-  createVhdsSubscription(RouteConfigUpdatePtr& config_update_info,
+  createVhdsSubscription(RouteConfigUpdateReceiver& config_update_info,
                          Server::Configuration::ServerFactoryContext& factory_context,
                          const std::string& stat_prefix,
                          Rds::RouteConfigProvider* route_config_provider);
@@ -61,7 +63,7 @@ public:
   }
 
 private:
-  VhdsSubscription(RouteConfigUpdatePtr& config_update_info,
+  VhdsSubscription(RouteConfigUpdateReceiver& config_update_info,
                    Server::Configuration::ServerFactoryContext& factory_context,
                    const std::string& stat_prefix, Rds::RouteConfigProvider* route_config_provider,
                    absl::Status& creation_status);
@@ -90,7 +92,7 @@ private:
   // the new route configuration and signals that this subscription is ready.
   void onUpdateInitManagerReady();
 
-  RouteConfigUpdatePtr& config_update_info_;
+  RouteConfigUpdateReceiver& config_update_info_;
   Stats::ScopeSharedPtr scope_;
   VhdsStats stats_;
   Envoy::Config::SubscriptionPtr subscription_;
