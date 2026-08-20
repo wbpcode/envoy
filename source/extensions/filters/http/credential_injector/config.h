@@ -23,11 +23,6 @@ protected:
       Stats::Scope& scope, Init::Manager& init_manager) const;
 
 private:
-  absl::StatusOr<Http::FilterFactoryCb> createFilterFactoryFromProtoTyped(
-      const envoy::extensions::filters::http::credential_injector::v3::CredentialInjector& config,
-      const std::string& stats_prefix, DualInfo dual_info,
-      Server::Configuration::ServerFactoryContext& context) override;
-
   absl::StatusOr<Http::FilterFactoryCb> createHttpFilterFactoryFromProtoTyped(
       const envoy::extensions::filters::http::credential_injector::v3::CredentialInjector& config,
       Server::Configuration::ServerFactoryContext& context,

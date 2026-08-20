@@ -16,9 +16,6 @@ public:
   CacheFilterFactory() : ExceptionFreeFactoryBase("envoy.filters.http.cache_v2") {}
 
 private:
-  absl::StatusOr<Http::FilterFactoryCb> createFilterFactoryFromProtoTyped(
-      const envoy::extensions::filters::http::cache_v2::v3::CacheV2Config& config,
-      const std::string& stats_prefix, Server::Configuration::FactoryContext& context) override;
   absl::StatusOr<Http::FilterFactoryCb> createHttpFilterFactoryFromProtoTyped(
       const envoy::extensions::filters::http::cache_v2::v3::CacheV2Config& config,
       Server::Configuration::ServerFactoryContext& context,

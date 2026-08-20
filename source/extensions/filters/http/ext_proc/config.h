@@ -24,11 +24,6 @@ private:
   static constexpr uint64_t DefaultMessageTimeoutMs = 200;
   static constexpr uint64_t DefaultMaxMessageTimeoutMs = 0;
 
-  absl::StatusOr<Http::FilterFactoryCb> createFilterFactoryFromProtoTyped(
-      const envoy::extensions::filters::http::ext_proc::v3::ExternalProcessor& proto_config,
-      const std::string& stats_prefix, DualInfo dual_info,
-      Server::Configuration::ServerFactoryContext& context) override;
-
   absl::StatusOr<Router::RouteSpecificFilterConfigConstSharedPtr>
   createRouteSpecificFilterConfigTyped(
       const envoy::extensions::filters::http::ext_proc::v3::ExtProcPerRoute& proto_config,

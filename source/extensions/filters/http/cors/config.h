@@ -19,10 +19,6 @@ class CorsFilterFactory : public Common::ExceptionFreeFactoryBase<
 public:
   CorsFilterFactory() : ExceptionFreeFactoryBase("envoy.filters.http.cors") {}
 
-  absl::StatusOr<Http::FilterFactoryCb> createFilterFactoryFromProtoTyped(
-      const envoy::extensions::filters::http::cors::v3::Cors& proto_config,
-      const std::string& stats_prefix, Server::Configuration::FactoryContext& context) override;
-
   absl::StatusOr<Http::FilterFactoryCb> createHttpFilterFactoryFromProtoTyped(
       const envoy::extensions::filters::http::cors::v3::Cors& proto_config,
       Server::Configuration::ServerFactoryContext& context,

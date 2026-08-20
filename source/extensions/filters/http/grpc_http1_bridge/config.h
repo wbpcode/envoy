@@ -20,11 +20,6 @@ public:
   GrpcHttp1BridgeFilterConfig()
       : ExceptionFreeFactoryBase("envoy.filters.http.grpc_http1_bridge") {}
 
-  absl::StatusOr<Http::FilterFactoryCb> createFilterFactoryFromProtoTyped(
-      const envoy::extensions::filters::http::grpc_http1_bridge::v3::Config& proto_config,
-      const std::string& stats_prefix,
-      Server::Configuration::FactoryContext& factory_context) override;
-
   absl::StatusOr<Http::FilterFactoryCb> createHttpFilterFactoryFromProtoTyped(
       const envoy::extensions::filters::http::grpc_http1_bridge::v3::Config& proto_config,
       Server::Configuration::ServerFactoryContext& factory_context,

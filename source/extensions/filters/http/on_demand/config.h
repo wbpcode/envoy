@@ -21,10 +21,6 @@ public:
   OnDemandFilterFactory() : ExceptionFreeFactoryBase(HttpFilterNames::get().OnDemand) {}
 
 private:
-  absl::StatusOr<Http::FilterFactoryCb> createFilterFactoryFromProtoTyped(
-      const envoy::extensions::filters::http::on_demand::v3::OnDemand& proto_config,
-      const std::string&, Server::Configuration::FactoryContext& context) override;
-
   absl::StatusOr<Http::FilterFactoryCb> createHttpFilterFactoryFromProtoTyped(
       const envoy::extensions::filters::http::on_demand::v3::OnDemand& proto_config,
       Server::Configuration::ServerFactoryContext& context,

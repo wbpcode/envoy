@@ -19,10 +19,9 @@ class FileServerFilterFactory
 public:
   FileServerFilterFactory();
 
-  absl::StatusOr<Http::FilterFactoryCb>
-  createFilterFactoryFromProtoTyped(const ProtoFileServerConfig& config,
-                                    const std::string& stats_prefix, DualInfo info,
-                                    Server::Configuration::ServerFactoryContext& context) override;
+  absl::StatusOr<Http::FilterFactoryCb> createHttpFilterFactoryFromProtoTyped(
+      const ProtoFileServerConfig& config, Server::Configuration::ServerFactoryContext& context,
+      Server::Configuration::ExtraFactoryContext& extra_context) override;
 
   absl::StatusOr<Router::RouteSpecificFilterConfigConstSharedPtr>
   createRouteSpecificFilterConfigTyped(const ProtoFileServerConfig& config,

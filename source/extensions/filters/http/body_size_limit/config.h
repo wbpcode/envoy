@@ -20,11 +20,6 @@ public:
   BodySizeLimitFilterFactory() : DualFactoryBase("envoy.filters.http.body_size_limit") {}
 
 private:
-  absl::StatusOr<Http::FilterFactoryCb> createFilterFactoryFromProtoTyped(
-      const envoy::extensions::filters::http::body_size_limit::v3::BodySizeLimit& proto_config,
-      const std::string& stats_prefix, DualInfo,
-      Server::Configuration::ServerFactoryContext& context) override;
-
   absl::StatusOr<Http::FilterFactoryCb> createHttpFilterFactoryFromProtoTyped(
       const envoy::extensions::filters::http::body_size_limit::v3::BodySizeLimit& proto_config,
       Server::Configuration::ServerFactoryContext& context,

@@ -74,32 +74,32 @@ absl::Status verifyFilterConfig(
 } // namespace
 
 absl::StatusOr<Http::FilterFactoryCb>
-ExternalProcessingFilterConfig::createFilterFactoryFromProtoTyped(
+ExternalProcessingFilterConfig::createHttpFilterFactoryFromProtoTyped(
     const envoy::extensions::filters::http::ext_proc::v3::ExternalProcessor& proto_config,
-    const std::string& stats_prefix, DualInfo dual_info,
-    Server::Configuration::ServerFactoryContext& context) {
+    Server::Configuration::ServerFactoryContext& context,
+    Server::Configuration::ExtraFactoryContext& extra_context) {
   // Verify configuration before creating FilterConfig
-  absl::Status result = verifyFilterConfig(proto_config);
-  if (!result.ok()) {
-    return result;
-  }
+  RETURN_IF_NOT_OK(verifyFilterConfig(proto_config));
 
   const uint32_t message_timeout_ms =
       PROTOBUF_GET_MS_OR_DEFAULT(proto_config, message_timeout, DefaultMessageTimeoutMs);
   const uint32_t max_message_timeout_ms =
       PROTOBUF_GET_MS_OR_DEFAULT(proto_config, max_message_timeout, DefaultMaxMessageTimeoutMs);
+  // Captured by the factory callback below, so hold a pointer rather than binding a local
+  // reference: the callback outlives this function.
+  Stats::Scope* scope = &extra_context.scopeOr(context);
   absl::Status config_creation_status = absl::OkStatus();
   auto filter_config = std::make_shared<FilterConfig>(
-      proto_config, std::chrono::milliseconds(message_timeout_ms), max_message_timeout_ms,
-      dual_info.scope, stats_prefix, dual_info.is_upstream,
+      proto_config, std::chrono::milliseconds(message_timeout_ms), max_message_timeout_ms, *scope,
+      extra_context.stats_prefix, extra_context.is_upstream,
       Envoy::Extensions::Filters::Common::Expr::getBuilder(context), context,
       config_creation_status);
   RETURN_IF_NOT_OK_REF(config_creation_status);
   if (proto_config.has_grpc_service()) {
     return [filter_config = std::move(filter_config), &context,
-            dual_info](Http::FilterChainFactoryCallbacks& callbacks) {
-      auto client = createExternalProcessorClient(context.clusterManager().grpcAsyncClientManager(),
-                                                  dual_info.scope);
+            scope](Http::FilterChainFactoryCallbacks& callbacks) {
+      auto client =
+          createExternalProcessorClient(context.clusterManager().grpcAsyncClientManager(), *scope);
       callbacks.addStreamFilter(
           Http::StreamFilterSharedPtr{std::make_shared<Filter>(filter_config, std::move(client))});
     };
@@ -126,50 +126,6 @@ ExternalProcessingFilterConfig::createRouteSpecificFilterConfigTyped(
   return std::make_shared<FilterConfigPerRoute>(
       proto_config, Envoy::Extensions::Filters::Common::Expr::getBuilder(server_context),
       server_context);
-}
-
-// This method will only be called when the filter is in downstream.
-absl::StatusOr<Http::FilterFactoryCb>
-ExternalProcessingFilterConfig::createHttpFilterFactoryFromProtoTyped(
-    const envoy::extensions::filters::http::ext_proc::v3::ExternalProcessor& proto_config,
-    Server::Configuration::ServerFactoryContext& server_context,
-    Server::Configuration::ExtraFactoryContext& extra_context) {
-  // Verify configuration before creating FilterConfig
-  RETURN_IF_NOT_OK(verifyFilterConfig(proto_config));
-
-  const uint32_t message_timeout_ms =
-      PROTOBUF_GET_MS_OR_DEFAULT(proto_config, message_timeout, DefaultMessageTimeoutMs);
-  const uint32_t max_message_timeout_ms =
-      PROTOBUF_GET_MS_OR_DEFAULT(proto_config, max_message_timeout, DefaultMaxMessageTimeoutMs);
-  absl::Status config_creation_status = absl::OkStatus();
-  auto filter_config = std::make_shared<FilterConfig>(
-      proto_config, std::chrono::milliseconds(message_timeout_ms), max_message_timeout_ms,
-      server_context.scope(), extra_context.stats_prefix, false,
-      Envoy::Extensions::Filters::Common::Expr::getBuilder(server_context), server_context,
-      config_creation_status);
-  RETURN_IF_NOT_OK_REF(config_creation_status);
-
-  if (proto_config.has_grpc_service()) {
-    return [filter_config = std::move(filter_config),
-            &server_context](Http::FilterChainFactoryCallbacks& callbacks) {
-      auto client = createExternalProcessorClient(
-          server_context.clusterManager().grpcAsyncClientManager(), server_context.scope());
-      callbacks.addStreamFilter(
-          Http::StreamFilterSharedPtr{std::make_shared<Filter>(filter_config, std::move(client))});
-    };
-  } else {
-    auto headers_applicator = Http::HttpServiceHeadersApplicator::createOrThrow(
-        proto_config.http_service().http_service(), server_context);
-    return [proto_config = std::move(proto_config), filter_config = std::move(filter_config),
-            &server_context,
-            headers_applicator = std::shared_ptr<const Http::HttpServiceHeadersApplicator>(
-                std::move(headers_applicator))](Http::FilterChainFactoryCallbacks& callbacks) {
-      auto client =
-          std::make_unique<ExtProcHttpClient>(proto_config, server_context, headers_applicator);
-      callbacks.addStreamFilter(
-          Http::StreamFilterSharedPtr{std::make_shared<Filter>(filter_config, std::move(client))});
-    };
-  }
 }
 
 LEGACY_REGISTER_FACTORY(ExternalProcessingFilterConfig,

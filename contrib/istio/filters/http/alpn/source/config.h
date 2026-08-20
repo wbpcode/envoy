@@ -18,9 +18,10 @@ public:
   AlpnConfigFactory() : ExceptionFreeFactoryBase("istio.alpn") {}
 
 private:
-  absl::StatusOr<Http::FilterFactoryCb> createFilterFactoryFromProtoTyped(
+  absl::StatusOr<Http::FilterFactoryCb> createHttpFilterFactoryFromProtoTyped(
       const istio::envoy::config::filter::http::alpn::v2alpha1::FilterConfig& proto_config,
-      const std::string& stat_prefix, Server::Configuration::FactoryContext& context) override;
+      Server::Configuration::ServerFactoryContext& context,
+      Server::Configuration::ExtraFactoryContext& extra_context) override;
 
   Http::FilterFactoryCb createFilterFactory(
       const istio::envoy::config::filter::http::alpn::v2alpha1::FilterConfig& config_pb,

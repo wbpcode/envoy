@@ -20,19 +20,13 @@ public:
   AdaptiveConcurrencyFilterFactory()
       : ExceptionFreeFactoryBase("envoy.filters.http.adaptive_concurrency") {}
 
-  absl::StatusOr<Http::FilterFactoryCb> createFilterFactoryFromProtoTyped(
-      const envoy::extensions::filters::http::adaptive_concurrency::v3::AdaptiveConcurrency&
-          proto_config,
-      const std::string& stats_prefix, Server::Configuration::FactoryContext& context) override {
-    return createFilterFactory(proto_config, stats_prefix, context.serverFactoryContext(),
-                               context.scope());
-  }
   absl::StatusOr<Http::FilterFactoryCb> createHttpFilterFactoryFromProtoTyped(
       const envoy::extensions::filters::http::adaptive_concurrency::v3::AdaptiveConcurrency&
           proto_config,
       Server::Configuration::ServerFactoryContext& context,
       Server::Configuration::ExtraFactoryContext& extra_context) override {
-    return createFilterFactory(proto_config, extra_context.stats_prefix, context, context.scope());
+    return createFilterFactory(proto_config, extra_context.stats_prefix, context,
+                               extra_context.scopeOr(context));
   }
 
 private:

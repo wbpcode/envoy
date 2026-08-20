@@ -12,14 +12,11 @@ namespace Extensions {
 namespace HttpFilters {
 namespace UpstreamRBACFilter {
 
-absl::StatusOr<Http::FilterFactoryCb>
-UpstreamRoleBasedAccessControlFilterConfigFactory::createFilterFactoryFromProto(
-    const Protobuf::Message& proto_config, const std::string& stats_prefix,
-    Server::Configuration::UpstreamFactoryContext& context) {
-  auto& server_context = context.serverFactoryContext();
-  const auto& typed_config =
-      MessageUtil::downcastAndValidate<const envoy::extensions::filters::http::rbac::v3::RBAC&>(
-          proto_config, server_context.messageValidationVisitor());
+absl::StatusOr<Envoy::Http::FilterFactoryCb>
+UpstreamRoleBasedAccessControlFilterConfigFactory::createHttpFilterFactoryFromProtoTyped(
+    const envoy::extensions::filters::http::rbac::v3::RBAC& proto_config,
+    Server::Configuration::ServerFactoryContext& context,
+    Server::Configuration::ExtraFactoryContext& extra_context) {
 
   // stats_prefix carries the parent's namespace ("http.<stat_prefix>." from a router,
   // "cluster.<name>." from a cluster) so RBAC counters land in the right place. This is a behavior
@@ -28,11 +25,11 @@ UpstreamRoleBasedAccessControlFilterConfigFactory::createFilterFactoryFromProto(
   const std::string& rbac_stats_prefix =
       Runtime::runtimeFeatureEnabled(
           "envoy.reloadable_features.upstream_http_filters_correct_stats_prefix")
-          ? stats_prefix
+          ? extra_context.stats_prefix
           : EMPTY_STRING;
   auto config = std::make_shared<RBACFilter::RoleBasedAccessControlFilterConfig>(
-      typed_config, rbac_stats_prefix, context.scope(), server_context,
-      server_context.messageValidationVisitor());
+      proto_config, rbac_stats_prefix, extra_context.scopeOr(context), context,
+      context.messageValidationVisitor());
 
   return [config](Http::FilterChainFactoryCallbacks& callbacks) -> void {
     callbacks.addStreamDecoderFilter(

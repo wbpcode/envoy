@@ -18,9 +18,6 @@ class GcpAuthnFilterFactory
 public:
   GcpAuthnFilterFactory() : ExceptionFreeFactoryBase(std::string(FilterName)) {}
 
-  absl::StatusOr<Http::FilterFactoryCb> createFilterFactoryFromProtoTyped(
-      const envoy::extensions::filters::http::gcp_authn::v3::GcpAuthnFilterConfig& config,
-      const std::string& stats_prefix, Server::Configuration::FactoryContext& context) override;
   absl::StatusOr<Http::FilterFactoryCb> createHttpFilterFactoryFromProtoTyped(
       const envoy::extensions::filters::http::gcp_authn::v3::GcpAuthnFilterConfig& config,
       Server::Configuration::ServerFactoryContext& context,

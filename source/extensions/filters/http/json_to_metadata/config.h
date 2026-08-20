@@ -19,9 +19,6 @@ public:
   JsonToMetadataConfig() : ExceptionFreeFactoryBase("envoy.filters.http.json_to_metadata") {}
 
 private:
-  absl::StatusOr<Http::FilterFactoryCb> createFilterFactoryFromProtoTyped(
-      const envoy::extensions::filters::http::json_to_metadata::v3::JsonToMetadata&,
-      const std::string&, Server::Configuration::FactoryContext&) override;
   absl::StatusOr<Http::FilterFactoryCb> createHttpFilterFactoryFromProtoTyped(
       const envoy::extensions::filters::http::json_to_metadata::v3::JsonToMetadata&,
       Server::Configuration::ServerFactoryContext&,

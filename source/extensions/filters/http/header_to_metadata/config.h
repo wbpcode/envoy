@@ -20,9 +20,6 @@ public:
   HeaderToMetadataConfig() : ExceptionFreeFactoryBase("envoy.filters.http.header_to_metadata") {}
 
 private:
-  absl::StatusOr<Http::FilterFactoryCb> createFilterFactoryFromProtoTyped(
-      const envoy::extensions::filters::http::header_to_metadata::v3::Config& proto_config,
-      const std::string& stats_prefix, Server::Configuration::FactoryContext& context) override;
   absl::StatusOr<Http::FilterFactoryCb> createHttpFilterFactoryFromProtoTyped(
       const envoy::extensions::filters::http::header_to_metadata::v3::Config& proto_config,
       Server::Configuration::ServerFactoryContext& context,

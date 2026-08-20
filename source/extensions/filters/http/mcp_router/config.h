@@ -25,9 +25,6 @@ private:
                                Server::Configuration::ServerFactoryContext&) override {
     return true;
   }
-  absl::StatusOr<Http::FilterFactoryCb> createFilterFactoryFromProtoTyped(
-      const envoy::extensions::filters::http::mcp_router::v3::McpRouter& proto_config,
-      const std::string& stats_prefix, Server::Configuration::FactoryContext& context) override;
   absl::StatusOr<Http::FilterFactoryCb> createHttpFilterFactoryFromProtoTyped(
       const envoy::extensions::filters::http::mcp_router::v3::McpRouter& proto_config,
       Server::Configuration::ServerFactoryContext& context,

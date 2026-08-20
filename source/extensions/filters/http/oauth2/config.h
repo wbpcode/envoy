@@ -18,11 +18,6 @@ class OAuth2Config : public Extensions::HttpFilters::Common::ExceptionFreeFactor
 public:
   OAuth2Config() : ExceptionFreeFactoryBase("envoy.filters.http.oauth2") {}
 
-  absl::StatusOr<Http::FilterFactoryCb>
-  createFilterFactoryFromProtoTyped(const envoy::extensions::filters::http::oauth2::v3::OAuth2&,
-                                    const std::string&,
-                                    Server::Configuration::FactoryContext&) override;
-
   absl::StatusOr<Http::FilterFactoryCb> createHttpFilterFactoryFromProtoTyped(
       const envoy::extensions::filters::http::oauth2::v3::OAuth2&,
       Server::Configuration::ServerFactoryContext&,

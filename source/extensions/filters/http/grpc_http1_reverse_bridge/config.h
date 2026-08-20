@@ -18,11 +18,6 @@ class Config
 public:
   Config() : ExceptionFreeFactoryBase("envoy.filters.http.grpc_http1_reverse_bridge") {}
 
-  absl::StatusOr<Http::FilterFactoryCb> createFilterFactoryFromProtoTyped(
-      const envoy::extensions::filters::http::grpc_http1_reverse_bridge::v3::FilterConfig& config,
-      const std::string& stat_prefix,
-      Envoy::Server::Configuration::FactoryContext& context) override;
-
   absl::StatusOr<Http::FilterFactoryCb> createHttpFilterFactoryFromProtoTyped(
       const envoy::extensions::filters::http::grpc_http1_reverse_bridge::v3::FilterConfig& config,
       Envoy::Server::Configuration::ServerFactoryContext& context,

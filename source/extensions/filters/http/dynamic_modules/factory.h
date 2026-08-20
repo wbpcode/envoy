@@ -19,13 +19,6 @@ class DynamicModuleConfigFactory
     : public Extensions::HttpFilters::Common::DualFactoryBase<FilterConfig, RouteConfigProto> {
 public:
   DynamicModuleConfigFactory() : DualFactoryBase("envoy.extensions.filters.http.dynamic_modules") {}
-  absl::StatusOr<Http::FilterFactoryCb>
-  createFilterFactoryFromProtoTyped(const FilterConfig& proto_config,
-                                    const std::string& stat_prefix, DualInfo dual_info,
-                                    Server::Configuration::ServerFactoryContext& context) override {
-    return createFilterFactory(proto_config, stat_prefix, context, dual_info.scope,
-                               dual_info.init_manager);
-  }
   absl::StatusOr<Envoy::Http::FilterFactoryCb> createHttpFilterFactoryFromProtoTyped(
       const FilterConfig& proto_config, Server::Configuration::ServerFactoryContext& context,
       Server::Configuration::ExtraFactoryContext& extra_context) override;

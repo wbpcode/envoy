@@ -19,10 +19,6 @@ public:
   TransformFactoryConfig() : ExceptionFreeFactoryBase("envoy.filters.http.transform") {}
 
 private:
-  absl::StatusOr<Http::FilterFactoryCb>
-  createFilterFactoryFromProtoTyped(const ProtoConfig& proto_config,
-                                    const std::string& stats_prefix,
-                                    Server::Configuration::FactoryContext& context) override;
   absl::StatusOr<Http::FilterFactoryCb> createHttpFilterFactoryFromProtoTyped(
       const ProtoConfig& proto_config, Server::Configuration::ServerFactoryContext& context,
       Server::Configuration::ExtraFactoryContext& extra_context) override;

@@ -19,10 +19,6 @@ public:
   CsrfFilterFactory() : ExceptionFreeFactoryBase("envoy.filters.http.csrf") {}
 
 private:
-  absl::StatusOr<Http::FilterFactoryCb> createFilterFactoryFromProtoTyped(
-      const envoy::extensions::filters::http::csrf::v3::CsrfPolicy& policy,
-      const std::string& stats_prefix, Server::Configuration::FactoryContext& context) override;
-
   absl::StatusOr<Http::FilterFactoryCb> createHttpFilterFactoryFromProtoTyped(
       const envoy::extensions::filters::http::csrf::v3::CsrfPolicy& policy,
       Server::Configuration::ServerFactoryContext& context,

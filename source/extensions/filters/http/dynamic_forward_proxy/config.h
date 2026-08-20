@@ -22,9 +22,6 @@ public:
       : ExceptionFreeFactoryBase("envoy.filters.http.dynamic_forward_proxy") {}
 
 private:
-  absl::StatusOr<Http::FilterFactoryCb> createFilterFactoryFromProtoTyped(
-      const envoy::extensions::filters::http::dynamic_forward_proxy::v3::FilterConfig& proto_config,
-      const std::string& stats_prefix, Server::Configuration::FactoryContext& context) override;
   absl::StatusOr<Http::FilterFactoryCb> createHttpFilterFactoryFromProtoTyped(
       const envoy::extensions::filters::http::dynamic_forward_proxy::v3::FilterConfig& proto_config,
       Server::Configuration::ServerFactoryContext& context,

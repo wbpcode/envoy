@@ -17,9 +17,10 @@ public:
   PeakEwmaFilterConfigFactory() : ExceptionFreeFactoryBase("envoy.filters.http.peak_ewma") {}
 
 private:
-  absl::StatusOr<Http::FilterFactoryCb> createFilterFactoryFromProtoTyped(
+  absl::StatusOr<Http::FilterFactoryCb> createHttpFilterFactoryFromProtoTyped(
       const envoy::extensions::filters::http::peak_ewma::v3alpha::PeakEwmaConfig& proto_config,
-      const std::string& stats_prefix, Server::Configuration::FactoryContext& context) override;
+      Server::Configuration::ServerFactoryContext& context,
+      Server::Configuration::ExtraFactoryContext& extra_context) override;
 };
 
 } // namespace PeakEwma

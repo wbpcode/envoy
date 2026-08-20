@@ -34,10 +34,6 @@ public:
   SetFilterStateConfig() : ExceptionFreeFactoryBase("envoy.filters.http.set_filter_state") {}
 
 private:
-  absl::StatusOr<Http::FilterFactoryCb> createFilterFactoryFromProtoTyped(
-      const envoy::extensions::filters::http::set_filter_state::v3::Config& proto_config,
-      const std::string& stats_prefix, Server::Configuration::FactoryContext& context) override;
-
   absl::StatusOr<Router::RouteSpecificFilterConfigConstSharedPtr>
   createRouteSpecificFilterConfigTyped(
       const envoy::extensions::filters::http::set_filter_state::v3::Config& proto_config,

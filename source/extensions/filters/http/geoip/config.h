@@ -19,9 +19,6 @@ class GeoipFilterFactory
 public:
   GeoipFilterFactory() : ExceptionFreeFactoryBase("envoy.filters.http.geoip") {}
 
-  absl::StatusOr<Http::FilterFactoryCb> createFilterFactoryFromProtoTyped(
-      const envoy::extensions::filters::http::geoip::v3::Geoip& proto_config,
-      const std::string& stats_prefix, Server::Configuration::FactoryContext& context) override;
   absl::StatusOr<Http::FilterFactoryCb> createHttpFilterFactoryFromProtoTyped(
       const envoy::extensions::filters::http::geoip::v3::Geoip& proto_config,
       Server::Configuration::ServerFactoryContext& context,

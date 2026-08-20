@@ -19,9 +19,6 @@ public:
   TapFilterFactory() : ExceptionFreeFactoryBase("envoy.filters.http.tap") {}
 
 private:
-  absl::StatusOr<Http::FilterFactoryCb> createFilterFactoryFromProtoTyped(
-      const envoy::extensions::filters::http::tap::v3::Tap& proto_config,
-      const std::string& stats_prefix, Server::Configuration::FactoryContext& context) override;
   absl::StatusOr<Http::FilterFactoryCb> createHttpFilterFactoryFromProtoTyped(
       const envoy::extensions::filters::http::tap::v3::Tap& proto_config,
       Server::Configuration::ServerFactoryContext& context,

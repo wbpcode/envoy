@@ -23,15 +23,6 @@ public:
 
 private:
   static constexpr uint64_t DefaultTimeout = 200;
-  absl::StatusOr<Http::FilterFactoryCb> createFilterFactoryFromProtoTyped(
-      const envoy::extensions::filters::http::ext_authz::v3::ExtAuthz& proto_config,
-      const std::string& stats_prefix, Server::Configuration::FactoryContext& context) override {
-    Server::Configuration::ExtraFactoryContext extra_context{context.messageValidationVisitor(),
-                                                             stats_prefix};
-    return createHttpFilterFactoryFromProtoTyped(proto_config, context.serverFactoryContext(),
-                                                 extra_context);
-  }
-
   absl::StatusOr<Http::FilterFactoryCb> createHttpFilterFactoryFromProtoTyped(
       const envoy::extensions::filters::http::ext_authz::v3::ExtAuthz& proto_config,
       Server::Configuration::ServerFactoryContext& server_context,

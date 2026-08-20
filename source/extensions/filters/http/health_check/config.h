@@ -17,10 +17,6 @@ public:
   HealthCheckFilterConfig() : ExceptionFreeFactoryBase("envoy.filters.http.health_check") {}
 
 private:
-  absl::StatusOr<Http::FilterFactoryCb> createFilterFactoryFromProtoTyped(
-      const envoy::extensions::filters::http::health_check::v3::HealthCheck& proto_config,
-      const std::string& stats_prefix, Server::Configuration::FactoryContext& context) override;
-
   absl::StatusOr<Http::FilterFactoryCb> createHttpFilterFactoryFromProtoTyped(
       const envoy::extensions::filters::http::health_check::v3::HealthCheck& proto_config,
       Server::Configuration::ServerFactoryContext& context,

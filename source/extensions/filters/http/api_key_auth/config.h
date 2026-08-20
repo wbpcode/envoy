@@ -17,9 +17,6 @@ public:
   ApiKeyAuthFilterFactory() : ExceptionFreeFactoryBase("envoy.filters.http.api_key_auth") {}
 
 private:
-  absl::StatusOr<Http::FilterFactoryCb>
-  createFilterFactoryFromProtoTyped(const ApiKeyAuthProto& config, const std::string& stats_prefix,
-                                    Server::Configuration::FactoryContext& context) override;
   absl::StatusOr<Http::FilterFactoryCb> createHttpFilterFactoryFromProtoTyped(
       const ApiKeyAuthProto& config, Server::Configuration::ServerFactoryContext& context,
       Server::Configuration::ExtraFactoryContext& extra_context) override;

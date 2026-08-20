@@ -19,10 +19,6 @@ public:
   FaultFilterFactory() : ExceptionFreeFactoryBase("envoy.filters.http.fault") {}
 
 private:
-  absl::StatusOr<Http::FilterFactoryCb> createFilterFactoryFromProtoTyped(
-      const envoy::extensions::filters::http::fault::v3::HTTPFault& proto_config,
-      const std::string& stats_prefix, Server::Configuration::FactoryContext& context) override;
-
   absl::StatusOr<Http::FilterFactoryCb> createHttpFilterFactoryFromProtoTyped(
       const envoy::extensions::filters::http::fault::v3::HTTPFault& proto_config,
       Server::Configuration::ServerFactoryContext& server_context,

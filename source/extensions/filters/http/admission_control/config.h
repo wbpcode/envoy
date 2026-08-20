@@ -19,11 +19,6 @@ class AdmissionControlFilterFactory
 public:
   AdmissionControlFilterFactory() : DualFactoryBase("envoy.filters.http.admission_control") {}
 
-  absl::StatusOr<Http::FilterFactoryCb> createFilterFactoryFromProtoTyped(
-      const envoy::extensions::filters::http::admission_control::v3::AdmissionControl& proto_config,
-      const std::string& stats_prefix, DualInfo dual_info,
-      Server::Configuration::ServerFactoryContext& context) override;
-
   absl::StatusOr<Http::FilterFactoryCb> createHttpFilterFactoryFromProtoTyped(
       const envoy::extensions::filters::http::admission_control::v3::AdmissionControl& proto_config,
       Server::Configuration::ServerFactoryContext& context,

@@ -18,10 +18,6 @@ public:
   BasicAuthFilterFactory() : ExceptionFreeFactoryBase("envoy.filters.http.basic_auth") {}
 
 private:
-  absl::StatusOr<Http::FilterFactoryCb> createFilterFactoryFromProtoTyped(
-      const envoy::extensions::filters::http::basic_auth::v3::BasicAuth& config,
-      const std::string& stats_prefix, Server::Configuration::FactoryContext& context) override;
-
   absl::StatusOr<Http::FilterFactoryCb> createHttpFilterFactoryFromProtoTyped(
       const envoy::extensions::filters::http::basic_auth::v3::BasicAuth& config,
       Server::Configuration::ServerFactoryContext& context,

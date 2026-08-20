@@ -35,7 +35,8 @@ std::chrono::milliseconds getFailedRefetchDuration(const JwksAsyncFetch& async_f
 
 JwksAsyncFetcher::JwksAsyncFetcher(const RemoteJwks& remote_jwks,
                                    Router::RetryPolicyConstSharedPtr retry_policy,
-                                   Server::Configuration::FactoryContext& context,
+                                   Server::Configuration::ServerFactoryContext& context,
+                                   OptRef<Init::Manager> init_manager,
                                    CreateJwksFetcherCb create_fetcher_fn,
                                    Stats::Counter& fetch_success, Stats::Counter& fetch_failed,
                                    JwksDoneFetched done_fn)
@@ -60,18 +61,20 @@ JwksAsyncFetcher::JwksAsyncFetcher(const RemoteJwks& remote_jwks,
   }
   failed_refetch_duration_ = getFailedRefetchDuration(remote_jwks.async_fetch());
 
-  refetch_timer_ = context_.serverFactoryContext().mainThreadDispatcher().createTimer(
-      [this]() -> void { fetch(); });
+  refetch_timer_ = context_.mainThreadDispatcher().createTimer([this]() -> void { fetch(); });
 
-  // For fast_listener, just trigger a fetch, not register with init_manager.
-  if (remote_jwks_.async_fetch().fast_listener()) {
+  // For fast_listener, just trigger a fetch, not register with init_manager. The same applies when
+  // there is no init manager to register with (for example on the route or composite filter paths):
+  // there is nothing to block, but the fetch must still be kicked off, otherwise the JWKS would
+  // only ever be populated by the slower on-demand path from the worker threads.
+  if (remote_jwks_.async_fetch().fast_listener() || !init_manager.has_value()) {
     fetch();
     return;
   }
 
   // Register to init_manager, force the listener to wait for the fetching.
   init_target_ = std::make_unique<Init::TargetImpl>(debug_name_, [this]() -> void { fetch(); });
-  context_.initManager().add(*init_target_);
+  init_manager->add(*init_target_);
 }
 
 std::chrono::seconds JwksAsyncFetcher::getCacheDuration(const RemoteJwks& remote_jwks) {
@@ -87,8 +90,7 @@ void JwksAsyncFetcher::fetch() {
   }
 
   ENVOY_LOG(debug, "{}: started", debug_name_);
-  fetcher_ = create_fetcher_fn_(context_.serverFactoryContext().clusterManager(), retry_policy_,
-                                remote_jwks_);
+  fetcher_ = create_fetcher_fn_(context_.clusterManager(), retry_policy_, remote_jwks_);
   fetcher_->fetch(Tracing::NullSpan::instance(), *this);
 }
 

@@ -23,11 +23,6 @@ class FileSystemBufferFilterFactory
 public:
   FileSystemBufferFilterFactory();
 
-  absl::StatusOr<Http::FilterFactoryCb> createFilterFactoryFromProtoTyped(
-      const envoy::extensions::filters::http::file_system_buffer::v3::FileSystemBufferFilterConfig&
-          config,
-      const std::string& stats_prefix, Server::Configuration::FactoryContext& context) override;
-
   absl::StatusOr<Http::FilterFactoryCb> createHttpFilterFactoryFromProtoTyped(
       const envoy::extensions::filters::http::file_system_buffer::v3::FileSystemBufferFilterConfig&
           config,

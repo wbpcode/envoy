@@ -21,11 +21,6 @@ public:
   CompressorFilterFactory() : DualFactoryBase("envoy.filters.http.compressor") {}
 
 private:
-  absl::StatusOr<Http::FilterFactoryCb> createFilterFactoryFromProtoTyped(
-      const envoy::extensions::filters::http::compressor::v3::Compressor& proto_config,
-      const std::string& stats_prefix, DualInfo info,
-      Server::Configuration::ServerFactoryContext& context) override;
-
   absl::StatusOr<Http::FilterFactoryCb> createHttpFilterFactoryFromProtoTyped(
       const envoy::extensions::filters::http::compressor::v3::Compressor& proto_config,
       Server::Configuration::ServerFactoryContext& context,

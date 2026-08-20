@@ -22,11 +22,6 @@ public:
   FilterFactoryCreator();
 
 private:
-  absl::StatusOr<Envoy::Http::FilterFactoryCb> createFilterFactoryFromProtoTyped(
-      const envoy::extensions::filters::http::proto_api_scrubber::v3::ProtoApiScrubberConfig&
-          proto_config,
-      const std::string&, Envoy::Server::Configuration::FactoryContext&) override;
-
   absl::StatusOr<Envoy::Http::FilterFactoryCb> createHttpFilterFactoryFromProtoTyped(
       const envoy::extensions::filters::http::proto_api_scrubber::v3::ProtoApiScrubberConfig&
           proto_config,

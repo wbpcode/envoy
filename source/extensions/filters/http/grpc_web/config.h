@@ -16,11 +16,6 @@ public:
   GrpcWebFilterConfig() : ExceptionFreeFactoryBase("envoy.filters.http.grpc_web") {}
 
 private:
-  absl::StatusOr<Http::FilterFactoryCb> createFilterFactoryFromProtoTyped(
-      const envoy::extensions::filters::http::grpc_web::v3::GrpcWeb& proto_config,
-      const std::string& stats_prefix,
-      Server::Configuration::FactoryContext& factory_context) override;
-
   absl::StatusOr<Http::FilterFactoryCb> createHttpFilterFactoryFromProtoTyped(
       const envoy::extensions::filters::http::grpc_web::v3::GrpcWeb& proto_config,
       Server::Configuration::ServerFactoryContext& factory_context,
