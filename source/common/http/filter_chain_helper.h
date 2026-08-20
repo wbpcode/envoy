@@ -143,8 +143,10 @@ private:
     }
     ProtobufTypes::MessagePtr message = Config::Utility::translateToFactoryConfig(
         proto_config, server_context_.messageValidationVisitor(), *factory);
+    Server::Configuration::ExtraFactoryContext extra_context =
+        Server::Configuration::ExtraFactoryContext::create(factory_context_, stats_prefix_);
     absl::StatusOr<Http::FilterFactoryCb> callback_or_error =
-        factory->createFilterFactoryFromProto(*message, stats_prefix_, factory_context_);
+        factory->createHttpFilterFactoryFromProto(*message, server_context_, extra_context);
     if (!callback_or_error.status().ok()) {
       return callback_or_error.status();
     }

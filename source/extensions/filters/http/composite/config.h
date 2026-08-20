@@ -41,6 +41,21 @@ public:
                                const std::string& stats_prefix,
                                Server::Configuration::UpstreamFactoryContext& context) override;
 
+  absl::StatusOr<Envoy::Http::FilterFactoryCb> createHttpFilterFactoryFromProto(
+      const Protobuf::Message& config, Server::Configuration::ServerFactoryContext&,
+      Server::Configuration::ExtraFactoryContext& extra_context) override {
+    if (extra_context.compatible_downstream_context.has_value()) {
+      return createFilterFactoryFromProto(config, extra_context.stats_prefix,
+                                          extra_context.compatible_downstream_context.ref());
+    }
+    if (extra_context.compatible_upstream_context.has_value()) {
+      return createFilterFactoryFromProto(config, extra_context.stats_prefix,
+                                          extra_context.compatible_upstream_context.ref());
+    }
+    return absl::UnimplementedError(
+        "createHttpFilterFactoryFromProto is not implemented for the server factory context only");
+  }
+
   absl::StatusOr<Router::RouteSpecificFilterConfigConstSharedPtr>
   createRouteSpecificFilterConfigTyped(
       const envoy::extensions::filters::http::composite::v3::CompositePerRoute& config,

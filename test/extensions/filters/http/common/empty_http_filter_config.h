@@ -66,6 +66,21 @@ public:
                Server::Configuration::FactoryContext& context) override {
     return createDualFilter(stat_prefix, context.serverFactoryContext());
   }
+
+  absl::StatusOr<Http::FilterFactoryCb> createHttpFilterFactoryFromProto(
+      const Protobuf::Message& config, Server::Configuration::ServerFactoryContext&,
+      Server::Configuration::ExtraFactoryContext& extra_context) override {
+    if (extra_context.compatible_downstream_context.has_value()) {
+      return EmptyHttpFilterConfig::createFilterFactoryFromProto(
+          config, extra_context.stats_prefix, extra_context.compatible_downstream_context.ref());
+    }
+    if (extra_context.compatible_upstream_context.has_value()) {
+      return UpstreamFilterConfig::createFilterFactoryFromProto(
+          config, extra_context.stats_prefix, extra_context.compatible_upstream_context.ref());
+    }
+    return absl::UnimplementedError(
+        "createHttpFilterFactoryFromProto is not implemented for the server factory context only");
+  }
 };
 
 template <class ProtoType>
@@ -104,6 +119,23 @@ public:
   createFilter(const std::string& stat_prefix,
                Server::Configuration::FactoryContext& context) override {
     return createDualFilter(stat_prefix, context.serverFactoryContext());
+  }
+
+  // Both NamedHttpFilterConfigFactory and UpstreamHttpFilterConfigFactory override
+  // createHttpFilterFactoryFromProto, so the ambiguity must be resolved here.
+  absl::StatusOr<Http::FilterFactoryCb> createHttpFilterFactoryFromProto(
+      const Protobuf::Message& config, Server::Configuration::ServerFactoryContext&,
+      Server::Configuration::ExtraFactoryContext& extra_context) override {
+    if (extra_context.compatible_downstream_context.has_value()) {
+      return UniqueEmptyHttpFilterConfig<ProtoType>::createFilterFactoryFromProto(
+          config, extra_context.stats_prefix, extra_context.compatible_downstream_context.ref());
+    }
+    if (extra_context.compatible_upstream_context.has_value()) {
+      return UpstreamFilterConfig::createFilterFactoryFromProto(
+          config, extra_context.stats_prefix, extra_context.compatible_upstream_context.ref());
+    }
+    return absl::UnimplementedError(
+        "createHttpFilterFactoryFromProto is not implemented for the server factory context only");
   }
 };
 

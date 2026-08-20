@@ -181,6 +181,21 @@ public:
         stats_prefix, context);
   }
 
+  absl::StatusOr<Envoy::Http::FilterFactoryCb> createHttpFilterFactoryFromProto(
+      const Protobuf::Message& config, Server::Configuration::ServerFactoryContext&,
+      Server::Configuration::ExtraFactoryContext& extra_context) override {
+    if (extra_context.compatible_downstream_context.has_value()) {
+      return createFilterFactoryFromProto(config, extra_context.stats_prefix,
+                                          extra_context.compatible_downstream_context.ref());
+    }
+    if (extra_context.compatible_upstream_context.has_value()) {
+      return createFilterFactoryFromProto(config, extra_context.stats_prefix,
+                                          extra_context.compatible_upstream_context.ref());
+    }
+    return absl::UnimplementedError(
+        "createHttpFilterFactoryFromProto is not implemented for the server factory context only");
+  }
+
 private:
   absl::StatusOr<Envoy::Http::FilterFactoryCb> createFilterFactoryFromProtoTyped(
       const envoy::extensions::common::matching::v3::ExtensionWithMatcher& proto_config,

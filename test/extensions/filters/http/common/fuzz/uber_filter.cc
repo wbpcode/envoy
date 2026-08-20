@@ -82,7 +82,13 @@ void UberFilterFuzzer::fuzz(
         proto_config, factory_context_.messageValidationVisitor(), factory);
     // Clean-up config with filter-specific logic before it runs through validations.
     cleanFuzzedConfig(proto_config.name(), message.get());
-    auto cb_or = factory.createFilterFactoryFromProto(*message, "stats", factory_context_);
+    // NOTE: the extra factory context only holds a reference to the stat prefix, so the prefix must
+    // outlive it.
+    const std::string stats_prefix = "stats";
+    Server::Configuration::ExtraFactoryContext extra_context =
+        Server::Configuration::ExtraFactoryContext::create(factory_context_, stats_prefix);
+    auto cb_or = factory.createHttpFilterFactoryFromProto(
+        *message, factory_context_.serverFactoryContext(), extra_context);
     THROW_IF_NOT_OK_REF(cb_or.status());
     cb_ = cb_or.value();
     cb_(filter_callback_);

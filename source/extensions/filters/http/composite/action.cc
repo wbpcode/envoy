@@ -151,8 +151,11 @@ Matcher::ActionConstSharedPtr ExecuteFilterActionFactory::createStaticActionDown
 
   // First, try to create the filter factory creation function from factory context (if exists).
   if (context.factory_context_.has_value()) {
-    auto callback_or_status = factory.createFilterFactoryFromProto(
-        *message, context.stat_prefix_, context.factory_context_.value());
+    auto& factory_context = context.factory_context_.ref();
+    Server::Configuration::ExtraFactoryContext extra_context =
+        Server::Configuration::ExtraFactoryContext::create(factory_context, context.stat_prefix_);
+    auto callback_or_status = factory.createHttpFilterFactoryFromProto(
+        *message, factory_context.serverFactoryContext(), extra_context);
     THROW_IF_NOT_OK_REF(callback_or_status.status());
     callback = callback_or_status.value();
   }
@@ -186,8 +189,11 @@ Matcher::ActionConstSharedPtr ExecuteFilterActionFactory::createStaticActionUpst
   // First, try to create the filter factory creation function from upstream factory context (if
   // exists).
   if (context.upstream_factory_context_.has_value()) {
-    auto callback_or_status = factory.createFilterFactoryFromProto(
-        *message, context.stat_prefix_, context.upstream_factory_context_.value());
+    auto& upstream_context = context.upstream_factory_context_.ref();
+    Server::Configuration::ExtraFactoryContext extra_context =
+        Server::Configuration::ExtraFactoryContext::create(upstream_context, context.stat_prefix_);
+    auto callback_or_status = factory.createHttpFilterFactoryFromProto(
+        *message, upstream_context.serverFactoryContext(), extra_context);
     THROW_IF_NOT_OK_REF(callback_or_status.status());
     callback = callback_or_status.value();
   }
@@ -220,8 +226,12 @@ Matcher::ActionConstSharedPtr ExecuteFilterActionFactory::createFilterChainActio
 
       // First, try to create from factory context.
       if (context.factory_context_.has_value()) {
-        auto callback_or_status = factory.createFilterFactoryFromProto(
-            *message, context.stat_prefix_, context.factory_context_.value());
+        auto& factory_context = context.factory_context_.ref();
+        Server::Configuration::ExtraFactoryContext extra_context =
+            Server::Configuration::ExtraFactoryContext::create(factory_context,
+                                                               context.stat_prefix_);
+        auto callback_or_status = factory.createHttpFilterFactoryFromProto(
+            *message, factory_context.serverFactoryContext(), extra_context);
         THROW_IF_NOT_OK_REF(callback_or_status.status());
         callback = callback_or_status.value();
       }
@@ -248,8 +258,12 @@ Matcher::ActionConstSharedPtr ExecuteFilterActionFactory::createFilterChainActio
           filter_config.typed_config(), validation_visitor, factory);
 
       if (context.upstream_factory_context_.has_value()) {
-        auto callback_or_status = factory.createFilterFactoryFromProto(
-            *message, context.stat_prefix_, context.upstream_factory_context_.value());
+        auto& upstream_context = context.upstream_factory_context_.ref();
+        Server::Configuration::ExtraFactoryContext extra_context =
+            Server::Configuration::ExtraFactoryContext::create(upstream_context,
+                                                               context.stat_prefix_);
+        auto callback_or_status = factory.createHttpFilterFactoryFromProto(
+            *message, upstream_context.serverFactoryContext(), extra_context);
         THROW_IF_NOT_OK_REF(callback_or_status.status());
         callback = callback_or_status.value();
       }

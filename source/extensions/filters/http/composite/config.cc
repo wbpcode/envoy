@@ -62,8 +62,10 @@ CompositeFilterFactory::compileNamedFilterChains(
               filter_config);
       ProtobufTypes::MessagePtr message = Config::Utility::translateAnyToFactoryConfig(
           filter_config.typed_config(), context.messageValidationVisitor(), factory);
-      auto callback_or_status =
-          factory.createFilterFactoryFromProto(*message, stats_prefix, context);
+      Server::Configuration::ExtraFactoryContext extra_context =
+          Server::Configuration::ExtraFactoryContext::create(context, stats_prefix);
+      auto callback_or_status = factory.createHttpFilterFactoryFromProto(
+          *message, context.serverFactoryContext(), extra_context);
       if (!callback_or_status.status().ok()) {
         return absl::InvalidArgumentError(
             fmt::format("Failed to create filter factory for filter '{}' in named filter chain "

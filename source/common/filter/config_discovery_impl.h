@@ -217,7 +217,9 @@ private:
   instantiateFilterFactory(const Protobuf::Message& message) const override {
     auto* factory = Registry::FactoryRegistry<NeutralHttpFilterConfigFactory>::getFactoryByType(
         message.GetTypeName());
-    return factory->createFilterFactoryFromProto(message, getStatPrefix(), factory_context_);
+    Server::Configuration::ExtraFactoryContext extra_context =
+        Server::Configuration::ExtraFactoryContext::create(factory_context_, getStatPrefix());
+    return factory->createHttpFilterFactoryFromProto(message, server_context_, extra_context);
   }
 
   Server::Configuration::ServerFactoryContext& server_context_;
