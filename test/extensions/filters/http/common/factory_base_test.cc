@@ -48,6 +48,31 @@ public:
   }
 };
 
+// A concrete filter factory that only implements createHttpFilterFactoryFromProtoTyped and relies
+// on the ExceptionFreeFactoryBase default to bridge the FactoryContext based creation path to it.
+class TestHttpOnlyExceptionFreeFactoryBase : public ExceptionFreeFactoryBase<RouterProto> {
+public:
+  TestHttpOnlyExceptionFreeFactoryBase()
+      : ExceptionFreeFactoryBase("test.http_only_exception_free_factory_base") {}
+
+  absl::StatusOr<Envoy::Http::FilterFactoryCb> createHttpFilterFactoryFromProtoTyped(
+      const RouterProto&, Server::Configuration::ServerFactoryContext& context,
+      Server::Configuration::ExtraFactoryContext& extra_context) override {
+    seen_stats_prefix_ = extra_context.stats_prefix;
+    seen_init_manager_ = extra_context.init_manager.ptr();
+    seen_scope_ = extra_context.scope.ptr();
+    seen_scope_or_ = &extra_context.scopeOr(context);
+    seen_is_upstream_ = extra_context.is_upstream;
+    return [](Envoy::Http::FilterChainFactoryCallbacks&) {};
+  }
+
+  std::string seen_stats_prefix_;
+  Init::Manager* seen_init_manager_{nullptr};
+  Stats::Scope* seen_scope_{nullptr};
+  Stats::Scope* seen_scope_or_{nullptr};
+  bool seen_is_upstream_{false};
+};
+
 // A concrete filter factory used to test the default behavior of DualFactoryBase.
 class TestDualFactoryBase : public DualFactoryBase<RouterProto> {
 public:
@@ -58,6 +83,28 @@ public:
                                     Server::Configuration::ServerFactoryContext&) override {
     return [](Envoy::Http::FilterChainFactoryCallbacks&) {};
   }
+};
+
+// A concrete dual filter factory that only implements createHttpFilterFactoryFromProtoTyped and
+// relies on the DualFactoryBase default to bridge the DualInfo based creation paths to it.
+class TestHttpOnlyDualFactoryBase : public DualFactoryBase<RouterProto> {
+public:
+  TestHttpOnlyDualFactoryBase() : DualFactoryBase("test.http_only_dual_factory_base") {}
+
+  absl::StatusOr<Envoy::Http::FilterFactoryCb> createHttpFilterFactoryFromProtoTyped(
+      const RouterProto&, Server::Configuration::ServerFactoryContext&,
+      Server::Configuration::ExtraFactoryContext& extra_context) override {
+    seen_stats_prefix_ = extra_context.stats_prefix;
+    seen_init_manager_ = extra_context.init_manager.ptr();
+    seen_scope_ = extra_context.scope.ptr();
+    seen_is_upstream_ = extra_context.is_upstream;
+    return [](Envoy::Http::FilterChainFactoryCallbacks&) {};
+  }
+
+  std::string seen_stats_prefix_;
+  Init::Manager* seen_init_manager_{nullptr};
+  Stats::Scope* seen_scope_{nullptr};
+  bool seen_is_upstream_{false};
 };
 
 // Exercises the shared CommonFactoryBase helpers: proto factory methods, name and the default
@@ -178,6 +225,74 @@ TEST(FactoryBaseTest, DualServerContextNotSupported) {
           .IgnoreError(),
       EnvoyException,
       "DualFactoryBase: creating filter factory from server factory context is not supported");
+}
+
+// The DualFactoryBase default createFilterFactoryFromProtoTyped bridges both the downstream and
+// upstream DualInfo paths to createHttpFilterFactoryFromProtoTyped, forwarding the stats prefix,
+// init manager, scope and upstream-ness of the DualInfo via the ExtraFactoryContext.
+TEST(FactoryBaseTest, DualFactoryDelegatesToHttpFilterFactory) {
+  RouterProto proto_config;
+
+  {
+    TestHttpOnlyDualFactoryBase factory;
+    testing::NiceMock<Server::Configuration::MockFactoryContext> downstream_context;
+    auto cb =
+        factory.createFilterFactoryFromProto(proto_config, "downstream_stats", downstream_context);
+    ASSERT_THAT(cb, IsOkAndHolds(::testing::NotNull()));
+    EXPECT_EQ("downstream_stats", factory.seen_stats_prefix_);
+    EXPECT_EQ(&downstream_context.initManager(), factory.seen_init_manager_);
+    EXPECT_EQ(&downstream_context.scope(), factory.seen_scope_);
+    EXPECT_FALSE(factory.seen_is_upstream_);
+  }
+
+  {
+    TestHttpOnlyDualFactoryBase factory;
+    testing::NiceMock<Server::Configuration::MockUpstreamFactoryContext> upstream_context;
+    auto cb =
+        factory.createFilterFactoryFromProto(proto_config, "upstream_stats", upstream_context);
+    ASSERT_THAT(cb, IsOkAndHolds(::testing::NotNull()));
+    EXPECT_EQ("upstream_stats", factory.seen_stats_prefix_);
+    EXPECT_EQ(&upstream_context.initManager(), factory.seen_init_manager_);
+    EXPECT_EQ(&upstream_context.scope(), factory.seen_scope_);
+    EXPECT_TRUE(factory.seen_is_upstream_);
+  }
+}
+
+// The ExceptionFreeFactoryBase default createFilterFactoryFromProtoTyped bridges the
+// FactoryContext based path to createHttpFilterFactoryFromProtoTyped, forwarding the stats prefix,
+// init manager and scope of the FactoryContext via the ExtraFactoryContext. is_upstream is always
+// false on this path, since ExceptionFreeFactoryBase is downstream only.
+TEST(FactoryBaseTest, ExceptionFreeFactoryDelegatesToHttpFilterFactory) {
+  TestHttpOnlyExceptionFreeFactoryBase factory;
+  RouterProto proto_config;
+  testing::NiceMock<Server::Configuration::MockFactoryContext> context;
+
+  auto cb = factory.createFilterFactoryFromProto(proto_config, "listener_stats", context);
+  ASSERT_THAT(cb, IsOkAndHolds(::testing::NotNull()));
+  EXPECT_EQ("listener_stats", factory.seen_stats_prefix_);
+  EXPECT_EQ(&context.initManager(), factory.seen_init_manager_);
+  EXPECT_EQ(&context.scope(), factory.seen_scope_);
+  // With a scope present, scopeOr() returns it rather than the server scope.
+  EXPECT_EQ(&context.scope(), factory.seen_scope_or_);
+  EXPECT_FALSE(factory.seen_is_upstream_);
+}
+
+// On the route/embedded path the caller does not provide a scope, so ExtraFactoryContext::scopeOr
+// falls back to the scope of the ServerFactoryContext.
+TEST(FactoryBaseTest, ExtraFactoryContextScopeFallsBackToServerScope) {
+  TestHttpOnlyExceptionFreeFactoryBase factory;
+  RouterProto proto_config;
+  testing::NiceMock<Server::Configuration::MockServerFactoryContext> server_context;
+  Server::Configuration::ExtraFactoryContext extra_context{
+      server_context.messageValidationVisitor(), "route_stats"};
+
+  auto cb = factory.createHttpFilterFactoryFromProto(proto_config, server_context, extra_context);
+  ASSERT_THAT(cb, IsOkAndHolds(::testing::NotNull()));
+  EXPECT_EQ("route_stats", factory.seen_stats_prefix_);
+  EXPECT_EQ(nullptr, factory.seen_init_manager_);
+  EXPECT_EQ(nullptr, factory.seen_scope_);
+  EXPECT_EQ(&server_context.scope(), factory.seen_scope_or_);
+  EXPECT_FALSE(factory.seen_is_upstream_);
 }
 
 } // namespace
