@@ -137,6 +137,10 @@ struct ActiveStreamFilterBase : public virtual StreamFilterCallbacks,
   virtual Buffer::InstancePtr createBuffer() PURE;
   virtual Buffer::InstancePtr& bufferedData() PURE;
   virtual bool observedEndStream() PURE;
+  // Returns whether the end of stream has arrived at this filter's position in the filter chain.
+  // This is the `end_stream` value that should be used when the filter chain iteration is resumed
+  // from this filter. See the comment of `end_stream_arrived_` for more details.
+  bool endStreamArrivedAtFilter();
   virtual bool has1xxHeaders() PURE;
   virtual void do1xxHeaders() PURE;
   virtual void doHeaders(bool end_stream) PURE;
@@ -237,6 +241,23 @@ struct ActiveStreamFilterBase : public virtual StreamFilterCallbacks,
   bool continued_1xx_headers_{};
   // If true, end_stream is called for this filter.
   bool end_stream_{};
+  // If true, the end of stream has arrived at this filter's position in the filter chain. That is,
+  // either this filter has been called with end_stream, or, for a filter that has stopped
+  // iteration for all frame types, the data frame that ends the stream has been buffered on its
+  // behalf. A stream that is ended by trailers instead is handled by `hasTrailers()` on the resume
+  // path and does not rely on this flag.
+  //
+  // Unlike the stream level `State::observed_decode_end_stream_` (and its encoder counterpart),
+  // this is a property of a position in the filter chain rather than of the stream: a filter that
+  // stops iteration and then injects part of the data into the filter chain with `end_stream`
+  // false lowers this flag for the filters after it. This is the value that should be used when
+  // the filter chain iteration is resumed from this filter.
+  //
+  // NOTE: this is deliberately kept separate from `end_stream_` because `end_stream_` also marks a
+  // filter as done ('the data is not for this filter and filters after', see the comment in
+  // `FilterManager::decodeData()`). Setting `end_stream_` for a filter that has only buffered the
+  // end of stream would drop the buffered data when the iteration is resumed.
+  bool end_stream_arrived_{};
   // If true, the filter has processed headers.
   bool processed_headers_{};
 };
@@ -1122,9 +1143,10 @@ private:
   bool processNewlyAddedMetadata();
 
   // Returns true if filter has stopped iteration for all frame types. Otherwise, returns false.
+  // end_stream is whether the data frame buffered on the filter's behalf ends the stream.
   // filter_streaming is the variable to indicate if stream is streaming, and its value may be
   // changed by the function.
-  bool handleDataIfStopAll(ActiveStreamFilterBase& filter, Buffer::Instance& data,
+  bool handleDataIfStopAll(ActiveStreamFilterBase& filter, Buffer::Instance& data, bool end_stream,
                            bool& filter_streaming);
 
   MetadataMapVector* getRequestMetadataMapVector() {

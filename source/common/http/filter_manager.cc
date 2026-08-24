@@ -58,6 +58,14 @@ void finalizeHeaders(FilterManagerCallbacks& callbacks, StreamInfo::StreamInfo& 
 
 } // namespace
 
+bool ActiveStreamFilterBase::endStreamArrivedAtFilter() {
+  if (Runtime::runtimeFeatureEnabled(
+          "envoy.reloadable_features.resume_with_per_filter_end_stream")) {
+    return end_stream_arrived_;
+  }
+  return observedEndStream();
+}
+
 void ActiveStreamFilterBase::commonContinue() {
   if (!canContinue()) {
     ENVOY_STREAM_LOG(trace, "cannot continue filter chain: filter={}", *this,
@@ -106,7 +114,7 @@ void ActiveStreamFilterBase::commonContinue() {
   // future.
   if (!headers_continued_) {
     headers_continued_ = true;
-    doHeaders(observedEndStream() && !bufferedData() && !hasTrailers());
+    doHeaders(endStreamArrivedAtFilter() && !bufferedData() && !hasTrailers());
   }
 
   if (!canContinue()) {
@@ -129,7 +137,7 @@ void ActiveStreamFilterBase::commonContinue() {
   // on doData() to do so.
   const bool had_trailers_before_data = hasTrailers();
   if (bufferedData()) {
-    doData(observedEndStream() && !had_trailers_before_data);
+    doData(endStreamArrivedAtFilter() && !had_trailers_before_data);
   }
 
   if (!canContinue()) {
@@ -230,7 +238,7 @@ bool ActiveStreamFilterBase::commonHandleAfterDataCallback(FilterDataStatus stat
         status == FilterDataStatus::StopIterationAndWatermark) {
       buffer_was_streaming = status == FilterDataStatus::StopIterationAndWatermark;
       commonHandleBufferData(provided_data);
-    } else if (observedEndStream() && !hasTrailers() && !bufferedData() &&
+    } else if (endStreamArrivedAtFilter() && !hasTrailers() && !bufferedData() &&
                // If the stream is destroyed, no need to handle the data buffer or trailers.
                // This can occur if the filter calls sendLocalReply.
                !parent_.state_.destroyed_) {
@@ -479,7 +487,12 @@ void ActiveStreamDecoderFilter::injectDecodedDataToFilterChain(Buffer::Instance&
     headers_continued_ = true;
     doHeaders(false);
   }
-  if (Runtime::runtimeFeatureEnabled(
+  // The injected `end_stream` is propagated to the filters after this one by the `decodeData()`
+  // call below, which records it as their `end_stream_arrived_`. Updating the stream level state
+  // is only needed when the filter chain is resumed based on that stream level state.
+  if (!Runtime::runtimeFeatureEnabled(
+          "envoy.reloadable_features.resume_with_per_filter_end_stream") &&
+      Runtime::runtimeFeatureEnabled(
           "envoy.reloadable_features.ext_proc_inject_data_with_state_update")) {
     parent_.state().observed_decode_end_stream_ = end_stream;
     ENVOY_STREAM_LOG(trace, "injectDecodedDataToFilterChain with end_stream updated: {}", parent_,
@@ -609,6 +622,7 @@ void FilterManager::decodeHeaders(ActiveStreamDecoderFilter* filter, RequestHead
     ASSERT(!(state_.filter_call_state_ & FilterCallState::DecodeHeaders));
     state_.filter_call_state_ |= FilterCallState::DecodeHeaders;
     (*entry)->end_stream_ = (end_stream && continue_data_entry == decoder_filters_.end());
+    (*entry)->end_stream_arrived_ = (*entry)->end_stream_;
     if ((*entry)->end_stream_) {
       state_.filter_call_state_ |= FilterCallState::EndOfStream;
     }
@@ -718,7 +732,7 @@ void FilterManager::decodeData(ActiveStreamDecoderFilter* filter, Buffer::Instan
   for (; entry != decoder_filters_.end(); entry++) {
     ENVOY_EXECUTION_SCOPE(trackedStream(), &(*entry)->filter_context_);
     // If the filter pointed by entry has stopped for all frame types, return now.
-    if (handleDataIfStopAll(**entry, data, state_.decoder_filters_streaming_)) {
+    if (handleDataIfStopAll(**entry, data, end_stream, state_.decoder_filters_streaming_)) {
       return;
     }
     // If end_stream_ is marked for a filter, the data is not for this filter and filters after.
@@ -767,6 +781,7 @@ void FilterManager::decodeData(ActiveStreamDecoderFilter* filter, Buffer::Instan
 
     state_.filter_call_state_ |= FilterCallState::DecodeData;
     (*entry)->end_stream_ = end_stream && !filter_manager_callbacks_.requestTrailers();
+    (*entry)->end_stream_arrived_ = (*entry)->end_stream_;
     FilterDataStatus status = (*entry)->handle_->decodeData(data, (*entry)->end_stream_);
     if ((*entry)->end_stream_) {
       (*entry)->handle_->decodeComplete();
@@ -877,6 +892,7 @@ void FilterManager::decodeTrailers(ActiveStreamDecoderFilter* filter, RequestTra
     FilterTrailersStatus status = (*entry)->handle_->decodeTrailers(trailers);
     (*entry)->handle_->decodeComplete();
     (*entry)->end_stream_ = true;
+    (*entry)->end_stream_arrived_ = true;
     state_.filter_call_state_ &= ~FilterCallState::DecodeTrailers;
     ENVOY_STREAM_LOG(trace, "decode trailers called: filter={} status={}", *this,
                      (*entry)->filter_context_.config_name, static_cast<uint64_t>(status));
@@ -1329,6 +1345,7 @@ void FilterManager::encodeHeaders(ActiveStreamEncoderFilter* filter, ResponseHea
     ASSERT(!(state_.filter_call_state_ & FilterCallState::EncodeHeaders));
     state_.filter_call_state_ |= FilterCallState::EncodeHeaders;
     (*entry)->end_stream_ = (end_stream && continue_data_entry == encoder_filters_.end());
+    (*entry)->end_stream_arrived_ = (*entry)->end_stream_;
     if ((*entry)->end_stream_) {
       state_.filter_call_state_ |= FilterCallState::EndOfStream;
     }
@@ -1534,7 +1551,7 @@ void FilterManager::encodeData(ActiveStreamEncoderFilter* filter, Buffer::Instan
   for (; entry != encoder_filters_.end(); entry++) {
     ENVOY_EXECUTION_SCOPE(trackedStream(), &(*entry)->filter_context_);
     // If the filter pointed by entry has stopped for all frame type, return now.
-    if (handleDataIfStopAll(**entry, data, state_.encoder_filters_streaming_)) {
+    if (handleDataIfStopAll(**entry, data, end_stream, state_.encoder_filters_streaming_)) {
       return;
     }
     // If end_stream_ is marked for a filter, the data is not for this filter and filters after.
@@ -1555,6 +1572,7 @@ void FilterManager::encodeData(ActiveStreamEncoderFilter* filter, Buffer::Instan
     recordLatestDataFilter(entry, state_.latest_data_encoding_filter_, encoder_filters_);
 
     (*entry)->end_stream_ = end_stream && !filter_manager_callbacks_.responseTrailers();
+    (*entry)->end_stream_arrived_ = (*entry)->end_stream_;
     FilterDataStatus status = (*entry)->handle_->encodeData(data, (*entry)->end_stream_);
     if (state_.encoder_filter_chain_aborted_) {
       ENVOY_STREAM_LOG(trace, "encodeData filter iteration aborted due to local reply: filter={}",
@@ -1613,6 +1631,7 @@ void FilterManager::encodeTrailers(ActiveStreamEncoderFilter* filter,
     FilterTrailersStatus status = (*entry)->handle_->encodeTrailers(trailers);
     (*entry)->handle_->encodeComplete();
     (*entry)->end_stream_ = true;
+    (*entry)->end_stream_arrived_ = true;
     state_.filter_call_state_ &= ~FilterCallState::EncodeTrailers;
     ENVOY_STREAM_LOG(trace, "encode trailers called: filter={} status={}", *this,
                      (*entry)->filter_context_.config_name, static_cast<uint64_t>(status));
@@ -1710,11 +1729,16 @@ bool FilterManager::processNewlyAddedMetadata() {
 }
 
 bool FilterManager::handleDataIfStopAll(ActiveStreamFilterBase& filter, Buffer::Instance& data,
-                                        bool& filter_streaming) {
+                                        bool end_stream, bool& filter_streaming) {
   if (filter.stoppedAll()) {
     ASSERT(!filter.canIterate());
     filter_streaming =
         filter.iteration_state_ == ActiveStreamFilterBase::IterationState::StopAllWatermark;
+    // The filter is not called for this data frame, but the end of stream has still arrived at
+    // this filter's position in the chain and the frame is buffered on the filter's behalf. Record
+    // it so that the iteration is resumed with the correct end_stream value. Note `end_stream_` is
+    // deliberately left untouched, see the comment of `end_stream_arrived_`.
+    filter.end_stream_arrived_ = end_stream;
     filter.commonHandleBufferData(data);
     return true;
   }
@@ -2012,7 +2036,10 @@ void ActiveStreamEncoderFilter::injectEncodedDataToFilterChain(Buffer::Instance&
     headers_continued_ = true;
     doHeaders(false);
   }
-  if (Runtime::runtimeFeatureEnabled(
+  // See the comment in injectDecodedDataToFilterChain().
+  if (!Runtime::runtimeFeatureEnabled(
+          "envoy.reloadable_features.resume_with_per_filter_end_stream") &&
+      Runtime::runtimeFeatureEnabled(
           "envoy.reloadable_features.ext_proc_inject_data_with_state_update")) {
     parent_.state_.observed_encode_end_stream_ = end_stream;
     ENVOY_STREAM_LOG(trace, "injectEncodedDataToFilterChain with end_stream updated: {}", parent_,

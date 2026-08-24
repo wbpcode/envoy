@@ -1074,6 +1074,165 @@ TEST_F(FilterManagerTest, AllDecodeOperationsBlockedAfterDownstreamReset) {
   filter_manager_->destroyFilters();
 }
 
+// Test the `end_stream` value used when the filter chain iteration is resumed. The behavior should
+// be the same whether the resume is based on the per filter end stream flag or on the stream level
+// observed end stream flag.
+class FilterManagerResumeEndStreamTest : public FilterManagerTest,
+                                         public testing::WithParamInterface<bool> {
+public:
+  FilterManagerResumeEndStreamTest() {
+    scoped_runtime_.mergeValues({{"envoy.reloadable_features.resume_with_per_filter_end_stream",
+                                  GetParam() ? "true" : "false"}});
+  }
+
+  // Creates a decoder filter chain of `size` filters and returns the filters.
+  std::vector<std::shared_ptr<MockStreamDecoderFilter>> setUpDecoderFilters(size_t size) {
+    static constexpr absl::string_view filter_names[] = {"filter_0", "filter_1", "filter_2"};
+    std::vector<std::shared_ptr<MockStreamDecoderFilter>> filters;
+    for (size_t i = 0; i < size; i++) {
+      filters.push_back(std::make_shared<NiceMock<MockStreamDecoderFilter>>());
+    }
+    EXPECT_CALL(filter_factory_, createFilterChain(_))
+        .WillOnce(Invoke([&](FilterChainFactoryCallbacks& callbacks) -> bool {
+          for (size_t i = 0; i < filters.size(); i++) {
+            auto factory = createDecoderFilterFactoryCb(filters[i]);
+            callbacks.setFilterConfigName(filter_names[i]);
+            factory(callbacks);
+          }
+          return true;
+        }));
+    filter_manager_->createDownstreamFilterChain();
+    return filters;
+  }
+
+  TestScopedRuntime scoped_runtime_;
+};
+
+INSTANTIATE_TEST_SUITE_P(PerFilterEndStream, FilterManagerResumeEndStreamTest, testing::Bool());
+
+// A filter that stopped iteration for all frame types buffers the frame that ends the stream
+// without being called for it. Verify the filter chain is still resumed with end_stream true when
+// the stream is ended by a data frame.
+TEST_P(FilterManagerResumeEndStreamTest, ResumeAfterStopAllIterationEndedByData) {
+  initialize();
+  auto filters = setUpDecoderFilters(2);
+
+  RequestHeaderMapPtr headers{
+      new TestRequestHeaderMapImpl{{":authority", "host"}, {":path", "/"}, {":method", "POST"}}};
+  ON_CALL(filter_manager_callbacks_, requestHeaders()).WillByDefault(Return(makeOptRef(*headers)));
+
+  EXPECT_CALL(*filters[0], decodeHeaders(_, false))
+      .WillOnce(Return(FilterHeadersStatus::StopAllIterationAndBuffer));
+  EXPECT_CALL(*filters[1], decodeHeaders(_, _)).Times(0);
+  filter_manager_->requestHeadersInitialized();
+  filter_manager_->decodeHeaders(*headers, false);
+
+  // The data frame that ends the stream is buffered on behalf of filters[0] and neither filter is
+  // called for it.
+  EXPECT_CALL(*filters[0], decodeData(_, _)).Times(0);
+  EXPECT_CALL(*filters[1], decodeData(_, _)).Times(0);
+  Buffer::OwnedImpl data("hello");
+  filter_manager_->decodeData(data, true);
+
+  // On resume the iteration starts with the current filter and both filters must see the end of
+  // stream on the buffered data.
+  {
+    InSequence s;
+    EXPECT_CALL(*filters[1], decodeHeaders(_, false))
+        .WillOnce(Return(FilterHeadersStatus::Continue));
+    EXPECT_CALL(*filters[0], decodeData(_, true)).WillOnce(Return(FilterDataStatus::Continue));
+    EXPECT_CALL(*filters[1], decodeData(_, true)).WillOnce(Return(FilterDataStatus::Continue));
+  }
+  filters[0]->callbacks_->continueDecoding();
+
+  filter_manager_->destroyFilters();
+}
+
+// A filter that has observed the end of stream may inject only a part of the data into the filter
+// chain. Verify a later filter that buffers the injected data is not resumed with end_stream true.
+TEST_P(FilterManagerResumeEndStreamTest, ResumeAfterPartialDataInjection) {
+  initialize();
+  auto filters = setUpDecoderFilters(3);
+
+  RequestHeaderMapPtr headers{
+      new TestRequestHeaderMapImpl{{":authority", "host"}, {":path", "/"}, {":method", "POST"}}};
+  ON_CALL(filter_manager_callbacks_, requestHeaders()).WillByDefault(Return(makeOptRef(*headers)));
+
+  // filters[0] swallows the whole request and will inject it back in chunks.
+  EXPECT_CALL(*filters[0], decodeHeaders(_, false))
+      .WillOnce(Return(FilterHeadersStatus::StopIteration));
+  filter_manager_->requestHeadersInitialized();
+  filter_manager_->decodeHeaders(*headers, false);
+
+  EXPECT_CALL(*filters[0], decodeData(_, true))
+      .WillOnce(Return(FilterDataStatus::StopIterationNoBuffer));
+  Buffer::OwnedImpl data("hello world");
+  filter_manager_->decodeData(data, true);
+
+  // The first chunk is injected without the end of stream. filters[1] buffers it.
+  {
+    InSequence s;
+    EXPECT_CALL(*filters[1], decodeHeaders(_, false))
+        .WillOnce(Return(FilterHeadersStatus::Continue));
+    EXPECT_CALL(*filters[2], decodeHeaders(_, false))
+        .WillOnce(Return(FilterHeadersStatus::Continue));
+    EXPECT_CALL(*filters[1], decodeData(_, false))
+        .WillOnce(Return(FilterDataStatus::StopIterationAndBuffer));
+  }
+  EXPECT_CALL(*filters[2], decodeData(_, _)).Times(0);
+  Buffer::OwnedImpl chunk_1("hello");
+  filters[0]->callbacks_->injectDecodedDataToFilterChain(chunk_1, false);
+
+  // filters[1] resumes before the rest of the request is injected. The end of stream has not
+  // arrived at its position in the filter chain yet, so the buffered data must not be flushed to
+  // filters[2] with end_stream true.
+  EXPECT_CALL(*filters[2], decodeData(_, false)).WillOnce(Return(FilterDataStatus::Continue));
+  filters[1]->callbacks_->continueDecoding();
+
+  // The rest of the request ends the stream for all the filters after filters[0].
+  {
+    InSequence s;
+    EXPECT_CALL(*filters[1], decodeData(_, true)).WillOnce(Return(FilterDataStatus::Continue));
+    EXPECT_CALL(*filters[2], decodeData(_, true)).WillOnce(Return(FilterDataStatus::Continue));
+  }
+  Buffer::OwnedImpl chunk_2(" world");
+  filters[0]->callbacks_->injectDecodedDataToFilterChain(chunk_2, true);
+
+  filter_manager_->destroyFilters();
+}
+
+// Injecting a part of the data into the filter chain must not change the stream level view of
+// whether the downstream has completed the request, which is what gates internal redirects.
+TEST_P(FilterManagerResumeEndStreamTest, RecreateStreamAfterPartialDataInjection) {
+  initialize();
+  auto filters = setUpDecoderFilters(1);
+
+  RequestHeaderMapPtr headers{
+      new TestRequestHeaderMapImpl{{":authority", "host"}, {":path", "/"}, {":method", "POST"}}};
+  ON_CALL(filter_manager_callbacks_, requestHeaders()).WillByDefault(Return(makeOptRef(*headers)));
+
+  EXPECT_CALL(*filters[0], decodeHeaders(_, false))
+      .WillOnce(Return(FilterHeadersStatus::StopIteration));
+  filter_manager_->requestHeadersInitialized();
+  filter_manager_->decodeHeaders(*headers, false);
+
+  EXPECT_CALL(*filters[0], decodeData(_, true))
+      .WillOnce(Return(FilterDataStatus::StopIterationNoBuffer));
+  Buffer::OwnedImpl data("hello world");
+  filter_manager_->decodeData(data, true);
+
+  Buffer::OwnedImpl chunk("hello");
+  filters[0]->callbacks_->injectDecodedDataToFilterChain(chunk, false);
+
+  // The downstream request is complete, so the stream can be recreated. Injecting a part of the
+  // data must not hide that.
+  const bool expect_recreate = GetParam();
+  EXPECT_CALL(filter_manager_callbacks_, recreateStream(_)).Times(expect_recreate ? 1 : 0);
+  EXPECT_EQ(expect_recreate, filters[0]->callbacks_->recreateStream(nullptr));
+
+  filter_manager_->destroyFilters();
+}
+
 } // namespace
 } // namespace Http
 } // namespace Envoy
