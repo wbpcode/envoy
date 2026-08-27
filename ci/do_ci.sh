@@ -900,6 +900,7 @@ case $CI_TARGET in
             echo "  release options:  ${BAZEL_RELEASE_OPTIONS[*]}"
             bazel_with_collection \
                 test "${BAZEL_BUILD_OPTIONS[@]}" \
+                --//bazel:http3=False \
                 --remote_download_minimal \
                 "${BAZEL_RELEASE_OPTIONS[@]}" \
                 "${TEST_TARGETS[@]}"
