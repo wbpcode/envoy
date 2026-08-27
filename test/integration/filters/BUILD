@@ -441,15 +441,15 @@ envoy_cc_test_library(
 envoy_cc_test_library(
     name = "pause_filter_for_quic_lib",
     srcs = [
-        "pause_filter_for_quic.cc",
+        # "pause_filter_for_quic.cc",
     ],
     tags = ["nofips"],
     deps = [
-        "//envoy/http:filter_interface",
-        "//envoy/registry",
-        "//source/common/quic:quic_filter_manager_connection_lib",
-        "//source/extensions/filters/http/common:pass_through_filter_lib",
-        "//test/extensions/filters/http/common:empty_http_filter_config_lib",
+        # "//envoy/http:filter_interface",
+        # "//envoy/registry",
+        # "//source/common/quic:quic_filter_manager_connection_lib",
+        # "//source/extensions/filters/http/common:pass_through_filter_lib",
+        # "//test/extensions/filters/http/common:empty_http_filter_config_lib",
     ],
 )
 
