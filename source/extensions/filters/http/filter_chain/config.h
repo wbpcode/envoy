@@ -15,17 +15,18 @@ namespace FilterChain {
  * Config registration for the filter chain filter. @see NamedHttpFilterConfigFactory.
  */
 class FilterChainFilterFactory
-    : public Common::ExceptionFreeFactoryBase<
+    : public Common::UnifiedFactoryBase<
           envoy::extensions::filters::http::filter_chain::v3::FilterChainConfig,
           envoy::extensions::filters::http::filter_chain::v3::FilterChainConfigPerRoute>,
       public Logger::Loggable<Logger::Id::filter> {
 public:
-  FilterChainFilterFactory() : ExceptionFreeFactoryBase("envoy.filters.http.filter_chain") {}
+  FilterChainFilterFactory() : UnifiedFactoryBase("envoy.filters.http.filter_chain") {}
 
 private:
-  absl::StatusOr<Http::FilterFactoryCb> createFilterFactoryFromProtoTyped(
+  absl::StatusOr<Http::FilterFactoryCb> createHttpFilterFactoryFromProtoTyped(
       const envoy::extensions::filters::http::filter_chain::v3::FilterChainConfig& proto_config,
-      const std::string& stats_prefix, Server::Configuration::FactoryContext& context) override;
+      Server::Configuration::ServerFactoryContext& context,
+      Server::Configuration::ExtraFactoryContext& extra_context) override;
 
   absl::StatusOr<Router::RouteSpecificFilterConfigConstSharedPtr> createHttpFilterRouteConfigTyped(
       const envoy::extensions::filters::http::filter_chain::v3::FilterChainConfigPerRoute&

@@ -241,53 +241,43 @@ void DelegatingStreamFilter::setEncoderFilterCallbacks(
   encoder_filter_->setEncoderFilterCallbacks(callbacks);
 }
 
-absl::StatusOr<Envoy::Http::FilterFactoryCb> MatchDelegateConfig::createFilterFactoryFromProtoTyped(
+absl::StatusOr<Envoy::Http::FilterFactoryCb>
+MatchDelegateConfig::createHttpFilterFactoryFromProtoTyped(
     const envoy::extensions::common::matching::v3::ExtensionWithMatcher& proto_config,
-    const std::string& prefix, Server::Configuration::FactoryContext& context) {
+    Server::Configuration::ServerFactoryContext& context,
+    Server::Configuration::ExtraFactoryContext& extra_context) {
   ASSERT(proto_config.has_extension_config());
+
+  Envoy::Http::Matching::HttpFilterActionContext action_context{
+      .is_downstream_ = !extra_context.is_upstream,
+      .stat_prefix_ = extra_context.stats_prefix,
+      .factory_context_ = extra_context.factory_context,
+      .upstream_factory_context_ = extra_context.upstream_context,
+      .server_factory_context_ = context};
+
+  if (extra_context.is_upstream) {
+    auto& factory =
+        Config::Utility::getAndCheckFactory<Server::Configuration::UpstreamHttpFilterConfigFactory>(
+            proto_config.extension_config());
+    return createFilterFactory(proto_config, context, extra_context, action_context, factory);
+  }
+
   auto& factory =
       Config::Utility::getAndCheckFactory<Server::Configuration::NamedHttpFilterConfigFactory>(
           proto_config.extension_config());
-
-  Envoy::Http::Matching::HttpFilterActionContext action_context{
-      .is_downstream_ = true,
-      .stat_prefix_ = prefix,
-      .factory_context_ = context,
-      .upstream_factory_context_ = std::nullopt,
-      .server_factory_context_ = context.serverFactoryContext()};
-  return createFilterFactory(proto_config, prefix, context.messageValidationVisitor(),
-                             action_context, context, factory);
+  return createFilterFactory(proto_config, context, extra_context, action_context, factory);
 }
 
-absl::StatusOr<Envoy::Http::FilterFactoryCb> MatchDelegateConfig::createFilterFactoryFromProtoTyped(
-    const envoy::extensions::common::matching::v3::ExtensionWithMatcher& proto_config,
-    const std::string& prefix, Server::Configuration::UpstreamFactoryContext& context) {
-  ASSERT(proto_config.has_extension_config());
-  auto& factory =
-      Config::Utility::getAndCheckFactory<Server::Configuration::UpstreamHttpFilterConfigFactory>(
-          proto_config.extension_config());
-
-  Envoy::Http::Matching::HttpFilterActionContext action_context{
-      .is_downstream_ = false,
-      .stat_prefix_ = prefix,
-      .factory_context_ = std::nullopt,
-      .upstream_factory_context_ = context,
-      .server_factory_context_ = context.serverFactoryContext()};
-  return createFilterFactory(proto_config, prefix,
-                             context.serverFactoryContext().messageValidationVisitor(),
-                             action_context, context, factory);
-}
-
-template <class FactoryCtx, class FilterCfgFactory>
+template <class FilterCfgFactory>
 absl::StatusOr<Envoy::Http::FilterFactoryCb> MatchDelegateConfig::createFilterFactory(
     const envoy::extensions::common::matching::v3::ExtensionWithMatcher& proto_config,
-    const std::string& prefix, ProtobufMessage::ValidationVisitor& validation,
-    Envoy::Http::Matching::HttpFilterActionContext& action_context, FactoryCtx& context,
-    FilterCfgFactory& factory) {
+    Server::Configuration::ServerFactoryContext& context,
+    Server::Configuration::ExtraFactoryContext& extra_context,
+    Envoy::Http::Matching::HttpFilterActionContext& action_context, FilterCfgFactory& factory) {
   auto message = Config::Utility::translateAnyToFactoryConfig(
-      proto_config.extension_config().typed_config(), validation, factory);
-  auto filter_factory_or_error =
-      Extensions::HttpFilters::Common::createHttpFilterFactory(factory, *message, context, prefix);
+      proto_config.extension_config().typed_config(), extra_context.visitor, factory);
+  auto filter_factory_or_error = Extensions::HttpFilters::Common::createHttpFilterFactory(
+      factory, *message, context, extra_context);
   RETURN_IF_NOT_OK_REF(filter_factory_or_error.status());
   auto filter_factory = filter_factory_or_error.value();
 
@@ -295,7 +285,7 @@ absl::StatusOr<Envoy::Http::FilterFactoryCb> MatchDelegateConfig::createFilterFa
 
   Matcher::MatchTreeFactory<Envoy::Http::HttpMatchingData,
                             Envoy::Http::Matching::HttpFilterActionContext>
-      matcher_factory(action_context, context.serverFactoryContext(), validation_visitor);
+      matcher_factory(action_context, context, validation_visitor);
   std::optional<Matcher::MatchTreeFactoryCb<Envoy::Http::HttpMatchingData>> factory_cb =
       std::nullopt;
   if (proto_config.has_xds_matcher()) {

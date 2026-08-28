@@ -148,53 +148,29 @@ struct DelegatingFactoryCallbacks : public Envoy::Http::FilterChainFactoryCallba
 };
 
 class MatchDelegateConfig
-    : public Extensions::HttpFilters::Common::CommonFactoryBase<
+    : public Extensions::HttpFilters::Common::UnifiedFactoryBase<
           envoy::extensions::common::matching::v3::ExtensionWithMatcher,
-          envoy::extensions::common::matching::v3::ExtensionWithMatcherPerRoute>,
-      public Server::Configuration::NamedHttpFilterConfigFactory,
-      public Server::Configuration::UpstreamHttpFilterConfigFactory {
+          envoy::extensions::common::matching::v3::ExtensionWithMatcherPerRoute> {
 public:
   MatchDelegateConfig()
-      : CommonFactoryBase<envoy::extensions::common::matching::v3::ExtensionWithMatcher,
-                          envoy::extensions::common::matching::v3::ExtensionWithMatcherPerRoute>(
+      : UnifiedFactoryBase<envoy::extensions::common::matching::v3::ExtensionWithMatcher,
+                           envoy::extensions::common::matching::v3::ExtensionWithMatcherPerRoute>(
             "envoy.filters.http.match_delegate") {}
 
-  absl::StatusOr<Envoy::Http::FilterFactoryCb>
-  createFilterFactoryFromProto(const Protobuf::Message& proto_config,
-                               const std::string& stats_prefix,
-                               Server::Configuration::FactoryContext& context) override {
-    return createFilterFactoryFromProtoTyped(
-        MessageUtil::downcastAndValidate<
-            const envoy::extensions::common::matching::v3::ExtensionWithMatcher&>(
-            proto_config, context.messageValidationVisitor()),
-        stats_prefix, context);
-  }
-
-  absl::StatusOr<Envoy::Http::FilterFactoryCb>
-  createFilterFactoryFromProto(const Protobuf::Message& proto_config,
-                               const std::string& stats_prefix,
-                               Server::Configuration::UpstreamFactoryContext& context) override {
-    return createFilterFactoryFromProtoTyped(
-        MessageUtil::downcastAndValidate<
-            const envoy::extensions::common::matching::v3::ExtensionWithMatcher&&>(
-            proto_config, context.serverFactoryContext().messageValidationVisitor()),
-        stats_prefix, context);
-  }
-
 private:
-  absl::StatusOr<Envoy::Http::FilterFactoryCb> createFilterFactoryFromProtoTyped(
+  absl::StatusOr<Envoy::Http::FilterFactoryCb> createHttpFilterFactoryFromProtoTyped(
       const envoy::extensions::common::matching::v3::ExtensionWithMatcher& proto_config,
-      const std::string& prefix, Server::Configuration::FactoryContext& context);
-  absl::StatusOr<Envoy::Http::FilterFactoryCb> createFilterFactoryFromProtoTyped(
-      const envoy::extensions::common::matching::v3::ExtensionWithMatcher& proto_config,
-      const std::string& prefix, Server::Configuration::UpstreamFactoryContext& context);
+      Server::Configuration::ServerFactoryContext& context,
+      Server::Configuration::ExtraFactoryContext& extra_context) override;
 
-  template <class FactoryCtx, class FilterCfgFactory>
+  // The delegated filter is created by createHttpFilterFactory(), so that filters that have not
+  // been migrated to the unified factory interface keep working behind the match delegate.
+  template <class FilterCfgFactory>
   absl::StatusOr<Envoy::Http::FilterFactoryCb> createFilterFactory(
       const envoy::extensions::common::matching::v3::ExtensionWithMatcher& proto_config,
-      const std::string& prefix, ProtobufMessage::ValidationVisitor& validation,
-      Envoy::Http::Matching::HttpFilterActionContext& action_context, FactoryCtx& context,
-      FilterCfgFactory& factory);
+      Server::Configuration::ServerFactoryContext& context,
+      Server::Configuration::ExtraFactoryContext& extra_context,
+      Envoy::Http::Matching::HttpFilterActionContext& action_context, FilterCfgFactory& factory);
 
   absl::StatusOr<Router::RouteSpecificFilterConfigConstSharedPtr>
   createRouteSpecificFilterConfigTyped(

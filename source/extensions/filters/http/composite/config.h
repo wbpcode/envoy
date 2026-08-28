@@ -23,23 +23,16 @@ namespace Composite {
  * Config registration for the composite filter. @see NamedHttpFilterConfigFactory.
  */
 class CompositeFilterFactory
-    : public HttpFilters::Common::CommonFactoryBase<
+    : public HttpFilters::Common::UnifiedFactoryBase<
           envoy::extensions::filters::http::composite::v3::Composite,
-          envoy::extensions::filters::http::composite::v3::CompositePerRoute>,
-      public Server::Configuration::NamedHttpFilterConfigFactory,
-      public Server::Configuration::UpstreamHttpFilterConfigFactory {
+          envoy::extensions::filters::http::composite::v3::CompositePerRoute> {
 public:
-  CompositeFilterFactory() : CommonFactoryBase("envoy.filters.http.composite") {}
+  CompositeFilterFactory() : UnifiedFactoryBase("envoy.filters.http.composite") {}
 
-  // Override to compile named filter chains with FactoryContext access.
-  absl::StatusOr<Http::FilterFactoryCb>
-  createFilterFactoryFromProto(const Protobuf::Message& config, const std::string& stats_prefix,
-                               Server::Configuration::FactoryContext& context) override;
-
-  absl::StatusOr<Envoy::Http::FilterFactoryCb>
-  createFilterFactoryFromProto(const Protobuf::Message& proto_config,
-                               const std::string& stats_prefix,
-                               Server::Configuration::UpstreamFactoryContext& context) override;
+  absl::StatusOr<Http::FilterFactoryCb> createHttpFilterFactoryFromProtoTyped(
+      const envoy::extensions::filters::http::composite::v3::Composite& proto_config,
+      Server::Configuration::ServerFactoryContext& context,
+      Server::Configuration::ExtraFactoryContext& extra_context) override;
 
   absl::StatusOr<Router::RouteSpecificFilterConfigConstSharedPtr>
   createRouteSpecificFilterConfigTyped(
@@ -50,8 +43,8 @@ public:
   // Compiles named filter chains from the config.
   static absl::StatusOr<NamedFilterChainFactoryMapSharedPtr>
   compileNamedFilterChains(const envoy::extensions::filters::http::composite::v3::Composite& config,
-                           const std::string& stats_prefix,
-                           Server::Configuration::FactoryContext& context);
+                           Server::Configuration::ServerFactoryContext& context,
+                           Server::Configuration::ExtraFactoryContext& extra_context);
 };
 
 using UpstreamCompositeFilterFactory = CompositeFilterFactory;

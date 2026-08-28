@@ -263,6 +263,21 @@ struct ExtraFactoryContext {
   // upstream filter chains, need to care about this. It is always false for contexts that can only
   // ever be downstream, such as route specific filter configurations.
   bool is_upstream = false;
+  // Optional downstream factory context of the filter chain that the filter is created for. It is
+  // only available when the filter is created for a downstream filter chain that provides a full
+  // factory context, such as the HCM filter chain. It is nullopt for upstream filter chains and
+  // for embedded filter configurations that only have a server factory context, such as route
+  // specific filter configurations.
+  //
+  // This is only exposed so that filters that embed other HTTP filters (the composite, match
+  // delegate and filter chain filters) can keep creating legacy embedded filters by
+  // createFilterFactoryFromProto(). Regular filters must never use it: everything they need is
+  // available on the ServerFactoryContext or on this struct.
+  OptRef<FactoryContext> factory_context = std::nullopt;
+  // Optional upstream factory context of the filter chain that the filter is created for. Same as
+  // factory_context above, but for upstream filter chains. It is nullopt whenever is_upstream is
+  // false.
+  OptRef<UpstreamFactoryContext> upstream_context = std::nullopt;
 
   /**
    * @return the scope to use for stats: this context's own scope if it has one, otherwise the scope
@@ -287,6 +302,7 @@ struct ExtraFactoryContext {
     ExtraFactoryContext extra_context{context.messageValidationVisitor(), stats_prefix};
     extra_context.init_manager = context.initManager();
     extra_context.scope = context.scope();
+    extra_context.factory_context = context;
     return extra_context;
   }
 
@@ -307,6 +323,7 @@ struct ExtraFactoryContext {
     extra_context.init_manager = context.initManager();
     extra_context.scope = context.scope();
     extra_context.is_upstream = true;
+    extra_context.upstream_context = context;
     return extra_context;
   }
 };

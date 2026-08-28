@@ -1733,8 +1733,11 @@ TEST(ConfigTest, CompileNamedFilterChainsFailsOnEmptyChain) {
 
   testing::NiceMock<Server::Configuration::MockFactoryContext> factory_context;
   CompositeFilterFactory factory;
-  auto status_or_named =
-      CompositeFilterFactory::compileNamedFilterChains(composite_config, "test.", factory_context);
+  const std::string stats_prefix = "test.";
+  auto extra_context =
+      Server::Configuration::ExtraFactoryContext::create(factory_context, stats_prefix);
+  auto status_or_named = CompositeFilterFactory::compileNamedFilterChains(
+      composite_config, factory_context.serverFactoryContext(), extra_context);
   EXPECT_THAT(status_or_named,
               HasStatusMessage(testing::HasSubstr("must contain at least one filter")));
 }
@@ -1752,8 +1755,11 @@ TEST(ConfigTest, CompileNamedFilterChainsFailsOnFactoryError) {
   FailingNamedFilterFactory failing_factory;
   Registry::InjectFactory<Server::Configuration::NamedHttpFilterConfigFactory> registration(
       failing_factory);
-  auto status_or_named =
-      CompositeFilterFactory::compileNamedFilterChains(composite_config, "test.", factory_context);
+  const std::string stats_prefix = "test.";
+  auto extra_context =
+      Server::Configuration::ExtraFactoryContext::create(factory_context, stats_prefix);
+  auto status_or_named = CompositeFilterFactory::compileNamedFilterChains(
+      composite_config, factory_context.serverFactoryContext(), extra_context);
   EXPECT_THAT(status_or_named,
               HasStatusMessage(testing::HasSubstr("Failed to create filter factory")));
 }

@@ -325,6 +325,51 @@ createHttpFilterFactory(FactoryType& factory, const Protobuf::Message& config, C
   return factory.createFilterFactoryFromProto(config, stat_prefix, context);
 }
 
+/**
+ * Create an HTTP filter factory for a filter that is embedded in another filter (the composite,
+ * match delegate or filter chain filters).
+ *
+ * Unified embedded filters are created by createHttpFilterFactoryFromProto() with the extra
+ * context of the embedding filter propagated as is. Legacy embedded filters are created by
+ * createFilterFactoryFromProto() with the concrete factory context that the extra context carries.
+ * If the extra context carries no concrete factory context, which is the case for embedded filter
+ * configurations such as route specific filter configurations, then legacy filters are also
+ * created by createHttpFilterFactoryFromProto() and it is up to the filter to reject the call.
+ *
+ * @param factory the filter config factory of the embedded filter.
+ * @param config the protobuf configuration of the embedded filter.
+ * @param context the server factory context.
+ * @param extra_context the extra factory context of the embedding filter.
+ * @return absl::StatusOr<Envoy::Http::FilterFactoryCb> the factory creation function or an error if
+ * creation fails.
+ */
+inline absl::StatusOr<Envoy::Http::FilterFactoryCb>
+createHttpFilterFactory(Server::Configuration::NamedHttpFilterConfigFactory& factory,
+                        const Protobuf::Message& config,
+                        Server::Configuration::ServerFactoryContext& context,
+                        Server::Configuration::ExtraFactoryContext& extra_context) {
+  if (!factory.isUnifiedFilter() && extra_context.factory_context.has_value()) {
+    return factory.createFilterFactoryFromProto(config, extra_context.stats_prefix,
+                                                extra_context.factory_context.ref());
+  }
+  return factory.createHttpFilterFactoryFromProto(config, context, extra_context);
+}
+
+/**
+ * Same as above, but for embedded upstream HTTP filters.
+ */
+inline absl::StatusOr<Envoy::Http::FilterFactoryCb>
+createHttpFilterFactory(Server::Configuration::UpstreamHttpFilterConfigFactory& factory,
+                        const Protobuf::Message& config,
+                        Server::Configuration::ServerFactoryContext& context,
+                        Server::Configuration::ExtraFactoryContext& extra_context) {
+  if (!factory.isUnifiedFilter() && extra_context.upstream_context.has_value()) {
+    return factory.createFilterFactoryFromProto(config, extra_context.stats_prefix,
+                                                extra_context.upstream_context.ref());
+  }
+  return factory.createHttpFilterFactoryFromProto(config, context, extra_context);
+}
+
 } // namespace Common
 } // namespace HttpFilters
 } // namespace Extensions
