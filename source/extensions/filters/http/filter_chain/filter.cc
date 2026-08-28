@@ -5,6 +5,7 @@
 
 #include "source/common/config/utility.h"
 #include "source/common/http/utility.h"
+#include "source/extensions/filters/http/common/factory_base.h"
 
 namespace Envoy {
 namespace Extensions {
@@ -65,7 +66,7 @@ absl::StatusOr<FilterFactoriesVector> createFilterFactoriesFromConfig(
     ProtobufTypes::MessagePtr message = Config::Utility::translateToFactoryConfig(
         filter_config, context.messageValidationVisitor(), factory);
     auto callback_or_error =
-        Server::Configuration::createHttpFilterFactory(factory, *message, stats_prefix, context);
+        Common::createHttpFilterFactory(factory, *message, context, stats_prefix);
     RETURN_IF_NOT_OK_REF(callback_or_error.status());
 
     auto filter_config_provider =

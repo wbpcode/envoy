@@ -11,6 +11,7 @@
 #include "source/common/common/logger.h"
 #include "source/common/filter/config_discovery_impl.h"
 #include "source/common/http/dependency_manager.h"
+#include "source/extensions/filters/http/common/factory_base.h"
 #include "source/extensions/filters/http/common/pass_through_filter.h"
 
 namespace Envoy {
@@ -145,8 +146,8 @@ private:
     ProtobufTypes::MessagePtr message = Config::Utility::translateToFactoryConfig(
         proto_config, server_context_.messageValidationVisitor(), *factory);
     absl::StatusOr<Http::FilterFactoryCb> callback_or_error =
-        Server::Configuration::createHttpFilterFactory(*factory, *message, stats_prefix_,
-                                                       factory_context_);
+        Extensions::HttpFilters::Common::createHttpFilterFactory(*factory, *message,
+                                                                 factory_context_, stats_prefix_);
     if (!callback_or_error.status().ok()) {
       return callback_or_error.status();
     }

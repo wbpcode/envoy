@@ -20,6 +20,7 @@
 #include "source/common/config/utility.h"
 #include "source/common/init/manager_impl.h"
 #include "source/common/init/target_impl.h"
+#include "source/extensions/filters/http/common/factory_base.h"
 
 #include "absl/container/flat_hash_map.h"
 #include "absl/container/flat_hash_set.h"
@@ -218,8 +219,8 @@ private:
   instantiateFilterFactory(const Protobuf::Message& message) const override {
     auto* factory = Registry::FactoryRegistry<NeutralHttpFilterConfigFactory>::getFactoryByType(
         message.GetTypeName());
-    return Server::Configuration::createHttpFilterFactory(*factory, message, getStatPrefix(),
-                                                          factory_context_);
+    return Extensions::HttpFilters::Common::createHttpFilterFactory(
+        *factory, message, factory_context_, getStatPrefix());
   }
 
   Server::Configuration::ServerFactoryContext& server_context_;

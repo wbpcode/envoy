@@ -2,6 +2,8 @@
 
 #include "envoy/server/filter_config.h"
 
+#include "source/extensions/filters/http/common/factory_base.h"
+
 namespace Envoy {
 namespace Extensions {
 namespace HttpFilters {
@@ -153,8 +155,8 @@ Matcher::ActionConstSharedPtr ExecuteFilterActionFactory::createStaticActionDown
 
   // First, try to create the filter factory creation function from factory context (if exists).
   if (context.factory_context_.has_value()) {
-    auto callback_or_status = Server::Configuration::createHttpFilterFactory(
-        factory, *message, context.stat_prefix_, context.factory_context_.ref());
+    auto callback_or_status = Common::createHttpFilterFactory(
+        factory, *message, context.factory_context_.ref(), context.stat_prefix_);
     THROW_IF_NOT_OK_REF(callback_or_status.status());
     callback = callback_or_status.value();
   }
@@ -188,8 +190,8 @@ Matcher::ActionConstSharedPtr ExecuteFilterActionFactory::createStaticActionUpst
   // First, try to create the filter factory creation function from upstream factory context (if
   // exists).
   if (context.upstream_factory_context_.has_value()) {
-    auto callback_or_status = Server::Configuration::createHttpFilterFactory(
-        factory, *message, context.stat_prefix_, context.upstream_factory_context_.ref());
+    auto callback_or_status = Common::createHttpFilterFactory(
+        factory, *message, context.upstream_factory_context_.ref(), context.stat_prefix_);
     THROW_IF_NOT_OK_REF(callback_or_status.status());
     callback = callback_or_status.value();
   }
@@ -222,8 +224,8 @@ Matcher::ActionConstSharedPtr ExecuteFilterActionFactory::createFilterChainActio
 
       // First, try to create from factory context.
       if (context.factory_context_.has_value()) {
-        auto callback_or_status = Server::Configuration::createHttpFilterFactory(
-            factory, *message, context.stat_prefix_, context.factory_context_.ref());
+        auto callback_or_status = Common::createHttpFilterFactory(
+            factory, *message, context.factory_context_.ref(), context.stat_prefix_);
         THROW_IF_NOT_OK_REF(callback_or_status.status());
         callback = callback_or_status.value();
       }
@@ -250,8 +252,8 @@ Matcher::ActionConstSharedPtr ExecuteFilterActionFactory::createFilterChainActio
           filter_config.typed_config(), validation_visitor, factory);
 
       if (context.upstream_factory_context_.has_value()) {
-        auto callback_or_status = Server::Configuration::createHttpFilterFactory(
-            factory, *message, context.stat_prefix_, context.upstream_factory_context_.ref());
+        auto callback_or_status = Common::createHttpFilterFactory(
+            factory, *message, context.upstream_factory_context_.ref(), context.stat_prefix_);
         THROW_IF_NOT_OK_REF(callback_or_status.status());
         callback = callback_or_status.value();
       }

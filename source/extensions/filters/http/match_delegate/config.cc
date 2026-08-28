@@ -10,6 +10,7 @@
 
 #include "source/common/config/utility.h"
 #include "source/common/http/utility.h"
+#include "source/extensions/filters/http/common/factory_base.h"
 
 #include "absl/status/status.h"
 #include "xds/type/matcher/v3/http_inputs.pb.h"
@@ -286,7 +287,7 @@ absl::StatusOr<Envoy::Http::FilterFactoryCb> MatchDelegateConfig::createFilterFa
   auto message = Config::Utility::translateAnyToFactoryConfig(
       proto_config.extension_config().typed_config(), validation, factory);
   auto filter_factory_or_error =
-      Server::Configuration::createHttpFilterFactory(factory, *message, prefix, context);
+      Extensions::HttpFilters::Common::createHttpFilterFactory(factory, *message, context, prefix);
   RETURN_IF_NOT_OK_REF(filter_factory_or_error.status());
   auto filter_factory = filter_factory_or_error.value();
 

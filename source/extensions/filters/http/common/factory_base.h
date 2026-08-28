@@ -297,6 +297,34 @@ public:
       Server::Configuration::ExtraFactoryContext& extra_context) PURE;
 };
 
+/**
+ * Create an HTTP filter factory from the given filter config factory. Unified filters are created
+ * by the new createHttpFilterFactoryFromProto entry point while legacy filters keep using
+ * createFilterFactoryFromProto. This should be used by all the callers that create HTTP filters
+ * from the registered factories.
+ *
+ * @param factory the HTTP filter config factory. Either NamedHttpFilterConfigFactory or
+ * UpstreamHttpFilterConfigFactory.
+ * @param config supplies the general Protobuf message to be marshaled into a filter-specific
+ * configuration.
+ * @param context supplies the filter's context. Either FactoryContext or UpstreamFactoryContext
+ * based on the factory type.
+ * @param stat_prefix prefix for stat logging.
+ * @return absl::StatusOr<Envoy::Http::FilterFactoryCb> the factory creation function or an error if
+ * creation fails.
+ */
+template <class FactoryType, class ContextType>
+absl::StatusOr<Envoy::Http::FilterFactoryCb>
+createHttpFilterFactory(FactoryType& factory, const Protobuf::Message& config, ContextType& context,
+                        const std::string& stat_prefix) {
+  if (factory.isUnifiedFilter()) {
+    auto extra_context = Server::Configuration::ExtraFactoryContext::create(context, stat_prefix);
+    return factory.createHttpFilterFactoryFromProto(config, context.serverFactoryContext(),
+                                                    extra_context);
+  }
+  return factory.createFilterFactoryFromProto(config, stat_prefix, context);
+}
+
 } // namespace Common
 } // namespace HttpFilters
 } // namespace Extensions
