@@ -63,7 +63,7 @@ CompositeFilterFactory::compileNamedFilterChains(
       ProtobufTypes::MessagePtr message = Config::Utility::translateAnyToFactoryConfig(
           filter_config.typed_config(), context.messageValidationVisitor(), factory);
       auto callback_or_status =
-          factory.createFilterFactoryFromProto(*message, stats_prefix, context);
+          Server::Configuration::createHttpFilterFactory(factory, *message, stats_prefix, context);
       if (!callback_or_status.status().ok()) {
         return absl::InvalidArgumentError(
             fmt::format("Failed to create filter factory for filter '{}' in named filter chain "
@@ -78,73 +78,50 @@ CompositeFilterFactory::compileNamedFilterChains(
   return named_chains;
 }
 
-absl::StatusOr<Http::FilterFactoryCb> CompositeFilterFactory::createFilterFactoryFromProto(
-    const Protobuf::Message& config, const std::string& stats_prefix,
-    Server::Configuration::FactoryContext& context) {
-  const auto& proto_config = MessageUtil::downcastAndValidate<
-      const envoy::extensions::filters::http::composite::v3::Composite&>(
-      config, context.messageValidationVisitor());
-
-  // Compile named filter chains with FactoryContext access.
-  auto named_chains_or_error = compileNamedFilterChains(proto_config, stats_prefix, context);
-  RETURN_IF_NOT_OK(named_chains_or_error.status());
-  auto named_chains = std::move(named_chains_or_error.value());
-
-  Matcher::MatchTreeSharedPtr<Envoy::Http::HttpMatchingData> match_tree = nullptr;
-  if (proto_config.has_matcher()) {
-    Envoy::Http::Matching::HttpFilterActionContext action_context{
-        .is_downstream_ = true,
-        .stat_prefix_ = stats_prefix,
-        .factory_context_ = context,
-        .upstream_factory_context_ = std::nullopt,
-        .server_factory_context_ = context.serverFactoryContext()};
-    auto match_tree_or_error = createMatcherTree(proto_config.matcher(), action_context);
-    RETURN_IF_NOT_OK(match_tree_or_error.status());
-    match_tree = std::move(match_tree_or_error.value());
+absl::StatusOr<Http::FilterFactoryCb> CompositeFilterFactory::createHttpFilterFactoryFromProtoTyped(
+    const envoy::extensions::filters::http::composite::v3::Composite& proto_config,
+    Server::Configuration::ServerFactoryContext& context,
+    Server::Configuration::ExtraFactoryContext& extra_context) {
+  // The composite filter self cannot be configured at the route configuration, like in a
+  // route level match delegate filter or route level filter chain filter.
+  if (extra_context.factory_context.has_value() == extra_context.upstream_context.has_value()) {
+    return absl::InvalidArgumentError("Composite filter requires either one of factory context or "
+                                      "upstream context to create filters.");
   }
 
-  const auto& prefix = stats_prefix + "composite.";
-  auto stats = std::make_shared<FilterStats>(
-      FilterStats{ALL_COMPOSITE_FILTER_STATS(POOL_COUNTER_PREFIX(context.scope(), prefix))});
-
-  return [stats, named_chains, match_tree](Http::FilterChainFactoryCallbacks& callbacks) -> void {
-    auto filter = std::make_shared<Filter>(*stats, callbacks.dispatcher(), false /* is_upstream */,
-                                           match_tree, named_chains);
-    callbacks.addStreamFilter(filter);
-    callbacks.addAccessLogHandler(filter);
-  };
-}
-
-absl::StatusOr<Envoy::Http::FilterFactoryCb> CompositeFilterFactory::createFilterFactoryFromProto(
-    const Protobuf::Message& config, const std::string& stats_prefix,
-    Server::Configuration::UpstreamFactoryContext& context) {
-  const auto& proto_config = MessageUtil::downcastAndValidate<
-      const envoy::extensions::filters::http::composite::v3::Composite&>(
-      config, context.serverFactoryContext().messageValidationVisitor());
+  // Named filter chains are only supported for downstream filter chains.
+  NamedFilterChainFactoryMapSharedPtr named_chains;
+  if (extra_context.factory_context.has_value()) {
+    auto named_chains_or_error = compileNamedFilterChains(proto_config, extra_context.stats_prefix,
+                                                          extra_context.factory_context.ref());
+    RETURN_IF_NOT_OK(named_chains_or_error.status());
+    named_chains = std::move(named_chains_or_error.value());
+  }
+  const bool is_upstream = extra_context.is_upstream;
+  ASSERT(is_upstream == extra_context.upstream_context.has_value());
 
   Matcher::MatchTreeSharedPtr<Envoy::Http::HttpMatchingData> match_tree = nullptr;
   if (proto_config.has_matcher()) {
     Envoy::Http::Matching::HttpFilterActionContext action_context{
-        .is_downstream_ = false,
-        .stat_prefix_ = stats_prefix,
-        .factory_context_ = std::nullopt,
-        .upstream_factory_context_ = context,
-        .server_factory_context_ = context.serverFactoryContext()};
+        .is_downstream_ = !is_upstream,
+        .stat_prefix_ = extra_context.stats_prefix,
+        .factory_context_ = extra_context.factory_context,
+        .upstream_factory_context_ = extra_context.upstream_context,
+        .server_factory_context_ = context};
 
     auto match_tree_or_error = createMatcherTree(proto_config.matcher(), action_context);
     RETURN_IF_NOT_OK(match_tree_or_error.status());
     match_tree = std::move(match_tree_or_error.value());
   }
 
-  // This method is called for upstream filters.
-  // Named filter chains are not supported for upstream filters.
-  const auto& prefix = stats_prefix + "composite.";
-  auto stats = std::make_shared<FilterStats>(
-      FilterStats{ALL_COMPOSITE_FILTER_STATS(POOL_COUNTER_PREFIX(context.scope(), prefix))});
+  const std::string prefix = extra_context.stats_prefix + "composite.";
+  auto stats = std::make_shared<FilterStats>(FilterStats{
+      ALL_COMPOSITE_FILTER_STATS(POOL_COUNTER_PREFIX(extra_context.scopeOr(context), prefix))});
 
-  return [stats, match_tree](Http::FilterChainFactoryCallbacks& callbacks) -> void {
-    auto filter = std::make_shared<Filter>(*stats, callbacks.dispatcher(), true /* is_upstream */,
-                                           match_tree, nullptr);
+  return [stats, named_chains, match_tree,
+          is_upstream](Http::FilterChainFactoryCallbacks& callbacks) -> void {
+    auto filter = std::make_shared<Filter>(*stats, callbacks.dispatcher(), is_upstream, match_tree,
+                                           named_chains);
     callbacks.addStreamFilter(filter);
     callbacks.addAccessLogHandler(filter);
   };

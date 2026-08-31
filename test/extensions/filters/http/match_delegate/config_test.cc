@@ -49,6 +49,28 @@ struct TestFactory : public Envoy::Server::Configuration::NamedHttpFilterConfigF
   }
 };
 
+// Upstream counterpart of TestFactory. It only implements the legacy factory interface so that
+// the upstream dispatch of createHttpFilterFactory() is exercised.
+struct TestUpstreamFactory : public Envoy::Server::Configuration::UpstreamHttpFilterConfigFactory {
+  std::string name() const override { return "test"; }
+  ProtobufTypes::MessagePtr createEmptyConfigProto() override {
+    return std::make_unique<Protobuf::StringValue>();
+  }
+  absl::StatusOr<Envoy::Http::FilterFactoryCb>
+  createFilterFactoryFromProto(const Protobuf::Message&, const std::string&,
+                               Server::Configuration::UpstreamFactoryContext&) override {
+    return [](auto& callbacks) { callbacks.addStreamFilter(nullptr); };
+  }
+
+  Server::Configuration::MatchingRequirementsPtr matchingRequirements() override {
+    auto requirements = std::make_unique<
+        envoy::extensions::filters::common::dependency::v3::MatchingRequirements>();
+    requirements->mutable_data_input_allow_list()->add_type_url(
+        "type.googleapis.com/envoy.type.matcher.v3.HttpRequestHeaderMatchInput");
+    return requirements;
+  }
+};
+
 TEST(MatchWrapper, WithMatcher) {
   TestFactory test_factory;
   Envoy::Registry::InjectFactory<Envoy::Server::Configuration::NamedHttpFilterConfigFactory>
@@ -98,6 +120,49 @@ xds_matcher:
         EXPECT_NE(nullptr, dynamic_cast<DelegatingStreamFilter*>(filter.get()));
       }));
   EXPECT_CALL(factory_callbacks, addAccessLogHandler(testing::IsNull()));
+  cb(factory_callbacks);
+}
+
+TEST(MatchWrapper, WithMatcherUpstream) {
+  TestUpstreamFactory test_factory;
+  Envoy::Registry::InjectFactory<Envoy::Server::Configuration::UpstreamHttpFilterConfigFactory>
+      inject_factory(test_factory);
+
+  NiceMock<Envoy::Server::Configuration::MockUpstreamFactoryContext> factory_context;
+
+  const auto config =
+      TestUtility::parseYaml<envoy::extensions::common::matching::v3::ExtensionWithMatcher>(R"EOF(
+extension_config:
+  name: test
+  typed_config:
+    "@type": type.googleapis.com/google.protobuf.StringValue
+xds_matcher:
+  matcher_tree:
+    input:
+      name: request-headers
+      typed_config:
+        "@type": type.googleapis.com/envoy.type.matcher.v3.HttpRequestHeaderMatchInput
+        header_name: default-matcher-header
+    exact_match_map:
+        map:
+            match:
+                action:
+                    name: skip
+                    typed_config:
+                        "@type": type.googleapis.com/envoy.extensions.filters.common.matcher.action.v3.SkipFilter
+)EOF");
+
+  MatchDelegateConfig match_delegate_config;
+  const std::string stats_prefix = "upstream.";
+  auto cb =
+      match_delegate_config.createFilterFactoryFromProto(config, stats_prefix, factory_context)
+          .value();
+
+  Envoy::Http::MockFilterChainFactoryCallbacks factory_callbacks;
+  EXPECT_CALL(factory_callbacks, addStreamFilter(_))
+      .WillOnce(Invoke([](Envoy::Http::StreamFilterSharedPtr filter) {
+        EXPECT_NE(nullptr, dynamic_cast<DelegatingStreamFilter*>(filter.get()));
+      }));
   cb(factory_callbacks);
 }
 

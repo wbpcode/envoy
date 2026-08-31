@@ -21,6 +21,7 @@ envoy_cc_library(
         "//envoy/init:manager_interface",
         "//envoy/registry",
         "//envoy/server:filter_config_interface",
+        "//source/common/common:macros",
         "//source/common/config:utility_lib",
         "//source/common/http:filter_chain_helper_lib",
         "//source/common/http:utility_lib",

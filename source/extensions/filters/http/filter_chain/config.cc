@@ -72,12 +72,19 @@ void createFilterChain(Http::FilterChainFactoryCallbacks& callbacks,
 
 } // namespace
 
-absl::StatusOr<Http::FilterFactoryCb> FilterChainFilterFactory::createFilterFactoryFromProtoTyped(
-    const FilterChainConfigProto& proto_config, const std::string& stats_prefix,
-    Server::Configuration::FactoryContext& context) {
+absl::StatusOr<Http::FilterFactoryCb>
+FilterChainFilterFactory::createHttpFilterFactoryFromProtoTyped(
+    const FilterChainConfigProto& proto_config,
+    Server::Configuration::ServerFactoryContext& context,
+    Server::Configuration::ExtraFactoryContext& extra_context) {
+  if (extra_context.factory_context.has_value() == extra_context.upstream_context.has_value()) {
+    return absl::InvalidArgumentError("Filter Chain filter requires either one of factory "
+                                      "context or upstream context to create filters.");
+  }
+
   absl::Status creation_status = absl::OkStatus();
   auto filter_config =
-      std::make_shared<FilterChainConfig>(proto_config, context, stats_prefix, creation_status);
+      std::make_shared<FilterChainConfig>(proto_config, context, extra_context, creation_status);
   RETURN_IF_NOT_OK_REF(creation_status);
 
   return [filter_config](Http::FilterChainFactoryCallbacks& callbacks) -> void {
@@ -102,11 +109,8 @@ FilterChainFilterFactory::createHttpFilterRouteConfigTyped(
     Server::Configuration::ServerFactoryContext& context,
     Server::Configuration::ExtraFactoryContext& extra_context) {
   absl::Status creation_status = absl::OkStatus();
-  // TODO(wbpcode): use the route name or vhost name as stats prefix?
-  // The init manager of the enclosing route configuration, if any, is handed to the filters of the
-  // embedded filter chain so that they can warm up their own resources.
-  auto filter_config = std::make_shared<FilterChainPerRouteConfig>(
-      proto_config, context, "filter_chain.", extra_context.init_manager, creation_status);
+  auto filter_config = std::make_shared<FilterChainPerRouteConfig>(proto_config, context,
+                                                                   extra_context, creation_status);
   RETURN_IF_NOT_OK(creation_status);
   return filter_config;
 }

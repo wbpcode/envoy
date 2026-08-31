@@ -1,9 +1,54 @@
 #include "source/extensions/filters/http/composite/action.h"
 
+#include "source/extensions/filters/http/common/factory_base.h"
+
 namespace Envoy {
 namespace Extensions {
 namespace HttpFilters {
 namespace Composite {
+namespace {
+
+Server::Configuration::ExtraFactoryContext
+createExtraFactoryContext(Http::Matching::HttpFilterActionContext& context,
+                          ProtobufMessage::ValidationVisitor& visitor) {
+  ASSERT(context.server_factory_context_.has_value());
+  Server::Configuration::ExtraFactoryContext extra_context{
+      .visitor = visitor,
+      .stats_prefix = context.stat_prefix_,
+      .is_upstream = !context.is_downstream_,
+      .factory_context = context.factory_context_,
+      .upstream_context = context.upstream_factory_context_,
+  };
+
+  if (context.factory_context_.has_value()) {
+    extra_context.scope = context.factory_context_->scope();
+    extra_context.init_manager = context.factory_context_->initManager();
+  } else if (context.upstream_factory_context_.has_value()) {
+    extra_context.scope = context.upstream_factory_context_->scope();
+    extra_context.init_manager = context.upstream_factory_context_->initManager();
+  } else {
+    extra_context.scope = context.server_factory_context_->scope();
+    extra_context.init_manager = context.server_factory_context_->initManager();
+  }
+
+  return extra_context;
+}
+
+template <class Factory>
+Envoy::Http::FilterFactoryCb createUnifiedFactory(Factory& factory, Protobuf::Message& message,
+                                                  Http::Matching::HttpFilterActionContext& context,
+                                                  ProtobufMessage::ValidationVisitor& visitor) {
+  if (context.server_factory_context_.has_value()) {
+    auto extra_context = createExtraFactoryContext(context, visitor);
+    auto callback_or_status = factory.createHttpFilterFactoryFromProto(
+        message, context.server_factory_context_.value(), extra_context);
+    THROW_IF_NOT_OK_REF(callback_or_status.status());
+    return callback_or_status.value();
+  }
+  return nullptr;
+}
+
+} // namespace
 
 void ExecuteFilterAction::createFilters(Http::FilterChainFactoryCallbacks& callbacks) const {
   if (actionSkip()) {
@@ -147,6 +192,11 @@ Matcher::ActionConstSharedPtr ExecuteFilterActionFactory::createStaticActionDown
   ProtobufTypes::MessagePtr message = Config::Utility::translateAnyToFactoryConfig(
       composite_action.typed_config().typed_config(), validation_visitor, factory);
 
+  if (factory.isUnifiedFilter()) {
+    auto callback = createUnifiedFactory(factory, *message, context, validation_visitor);
+    return createActionCommon(composite_action, context, callback, true);
+  }
+
   Envoy::Http::FilterFactoryCb callback = nullptr;
 
   // First, try to create the filter factory creation function from factory context (if exists).
@@ -180,6 +230,11 @@ Matcher::ActionConstSharedPtr ExecuteFilterActionFactory::createStaticActionUpst
           composite_action.typed_config());
   ProtobufTypes::MessagePtr message = Config::Utility::translateAnyToFactoryConfig(
       composite_action.typed_config().typed_config(), validation_visitor, factory);
+
+  if (factory.isUnifiedFilter()) {
+    auto callback = createUnifiedFactory(factory, *message, context, validation_visitor);
+    return createActionCommon(composite_action, context, callback, false);
+  }
 
   Envoy::Http::FilterFactoryCb callback = nullptr;
 
@@ -218,22 +273,26 @@ Matcher::ActionConstSharedPtr ExecuteFilterActionFactory::createFilterChainActio
       ProtobufTypes::MessagePtr message = Config::Utility::translateAnyToFactoryConfig(
           filter_config.typed_config(), validation_visitor, factory);
 
-      // First, try to create from factory context.
-      if (context.factory_context_.has_value()) {
-        auto callback_or_status = factory.createFilterFactoryFromProto(
-            *message, context.stat_prefix_, context.factory_context_.value());
-        THROW_IF_NOT_OK_REF(callback_or_status.status());
-        callback = callback_or_status.value();
-      }
+      if (factory.isUnifiedFilter()) {
+        callback = createUnifiedFactory(factory, *message, context, validation_visitor);
+      } else {
+        // First, try to create from factory context.
+        if (context.factory_context_.has_value()) {
+          auto callback_or_status = factory.createFilterFactoryFromProto(
+              *message, context.stat_prefix_, context.factory_context_.value());
+          THROW_IF_NOT_OK_REF(callback_or_status.status());
+          callback = callback_or_status.value();
+        }
 
-      // If above failed, try server factory context.
-      if (callback == nullptr && context.server_factory_context_.has_value()) {
-        Server::Configuration::ExtraFactoryContext extra_context{validation_visitor,
-                                                                 context.stat_prefix_};
-        auto callback_or_status = factory.createHttpFilterFactoryFromProto(
-            *message, context.server_factory_context_.value(), extra_context);
-        THROW_IF_NOT_OK_REF(callback_or_status.status());
-        callback = callback_or_status.value();
+        // If above failed, try server factory context.
+        if (callback == nullptr && context.server_factory_context_.has_value()) {
+          Server::Configuration::ExtraFactoryContext extra_context{validation_visitor,
+                                                                   context.stat_prefix_};
+          auto callback_or_status = factory.createHttpFilterFactoryFromProto(
+              *message, context.server_factory_context_.value(), extra_context);
+          THROW_IF_NOT_OK_REF(callback_or_status.status());
+          callback = callback_or_status.value();
+        }
       }
 
       if (callback == nullptr) {
@@ -247,7 +306,9 @@ Matcher::ActionConstSharedPtr ExecuteFilterActionFactory::createFilterChainActio
       ProtobufTypes::MessagePtr message = Config::Utility::translateAnyToFactoryConfig(
           filter_config.typed_config(), validation_visitor, factory);
 
-      if (context.upstream_factory_context_.has_value()) {
+      if (factory.isUnifiedFilter()) {
+        callback = createUnifiedFactory(factory, *message, context, validation_visitor);
+      } else if (context.upstream_factory_context_.has_value()) {
         auto callback_or_status = factory.createFilterFactoryFromProto(
             *message, context.stat_prefix_, context.upstream_factory_context_.value());
         THROW_IF_NOT_OK_REF(callback_or_status.status());
