@@ -32,6 +32,20 @@ public:
       : HttpIntegrationTest(Http::CodecType::HTTP2, Network::Address::IpVersion::v4) {
     enableHalfClose(true);
   }
+
+  // The stat names asserted below must be the same whether or not the HTTP filters are created
+  // with the connection manager's prefixed scope. Exercise both modes of the runtime guard without
+  // doubling the test matrix: the two IP versions of the parameter run the server with the guard on
+  // and off. Note this server always listens on IPv4, so the parameter only selects the mode here.
+  bool prefixedScope() const { return ipVersion() != Network::Address::IpVersion::v6; }
+
+  void initialize() override {
+    config_helper_.addRuntimeOverride(
+        "envoy.reloadable_features.use_prefixed_scope_for_http_filter",
+        prefixedScope() ? "true" : "false");
+    HttpIntegrationTest::initialize();
+  }
+
   void initializeFilter(const std::string& filter_config) {
     TestEnvironment::writeStringToFileForTest("initial_secret.yaml", R"EOF(
 resources:

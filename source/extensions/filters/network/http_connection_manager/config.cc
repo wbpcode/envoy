@@ -21,6 +21,7 @@
 #include "envoy/type/v3/percent.pb.h"
 
 #include "source/common/access_log/access_log_impl.h"
+#include "source/common/common/empty_string.h"
 #include "source/common/common/fmt.h"
 #include "source/common/config/utility.h"
 #include "source/common/config/xds_resource.h"
@@ -41,6 +42,7 @@
 #include "source/common/quic/server_connection_factory.h"
 #endif
 #include "source/common/router/route_provider_manager.h"
+#include "source/common/runtime/runtime_features.h"
 #include "source/common/runtime/runtime_impl.h"
 #include "source/common/tracing/custom_tag_impl.h"
 #include "source/common/tracing/tracer_config_impl.h"
@@ -369,6 +371,13 @@ HttpConnectionManagerConfig::HttpConnectionManagerConfig(
       // http.(<stat_prefix>.)*
       http_scope_(
           Http::ConnectionManagerImpl::createStatsScope(context.scope(), config.stat_prefix())),
+      // The HTTP filters only get the prefixed scope when the runtime feature is enabled. Note the
+      // scope itself is always created because this connection manager's own stats live in it.
+      http_filter_factory_context_(
+          context, Runtime::runtimeFeatureEnabled(
+                       "envoy.reloadable_features.use_prefixed_scope_for_http_filter")
+                       ? http_scope_
+                       : nullptr),
       stats_(Http::ConnectionManagerImpl::generateStats(*http_scope_)),
       tracing_stats_(Http::ConnectionManagerImpl::generateTracingStats(*http_scope_)),
       use_remote_address_(PROTOBUF_GET_WRAPPED_OR_DEFAULT(config, use_remote_address, false)),
@@ -738,10 +747,16 @@ HttpConnectionManagerConfig::HttpConnectionManagerConfig(
     return;
   }
 
+  // When the filter factory context provides the 'http.<stat_prefix>.' prefixed scope, the stats
+  // prefix that is propagated to the filters must be empty, otherwise the prefix would be
+  // repeated in the stat names.
+  const std::string& filter_stats_prefix =
+      http_filter_factory_context_.hasOwnScope() ? EMPTY_STRING : stats_prefix_;
   Http::FilterChainHelper<Server::Configuration::FactoryContext,
                           Server::Configuration::NamedHttpFilterConfigFactory>
       helper(filter_config_provider_manager_, context_.serverFactoryContext(),
-             context_.serverFactoryContext().clusterManager(), context_, stats_prefix_);
+             context_.serverFactoryContext().clusterManager(), http_filter_factory_context_,
+             filter_stats_prefix);
 
   SET_AND_RETURN_IF_NOT_OK(
       helper.processFilters(config.http_filters(), "http", "http", filter_factories_),

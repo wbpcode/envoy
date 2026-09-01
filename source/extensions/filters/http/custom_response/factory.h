@@ -29,13 +29,6 @@ public:
       const envoy::extensions::filters::http::custom_response::v3::CustomResponse& proto_config,
       Server::Configuration::ServerFactoryContext& context,
       ProtobufMessage::ValidationVisitor& validator) override;
-
-private:
-  // Shared factory creation used by both the downstream (FactoryContext) and route/vhost-level
-  // (ServerFactoryContext) paths.
-  static absl::StatusOr<::Envoy::Http::FilterFactoryCb> createFilterFactory(
-      const envoy::extensions::filters::http::custom_response::v3::CustomResponse& config,
-      const std::string& stats_prefix, Server::Configuration::ServerFactoryContext& context);
 };
 
 } // namespace CustomResponse

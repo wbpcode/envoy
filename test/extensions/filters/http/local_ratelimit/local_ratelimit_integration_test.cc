@@ -538,10 +538,12 @@ TEST_P(LocalRateLimitFilterIntegrationTest, ShadowModeTest) {
   sendAndVerifyRequest("foo", "200", 0);
   cleanupUpstreamAndDownstream();
 
-  test_server_->waitForCounter("http_local_rate_limiter.http_local_rate_limit.shadow_mode", Eq(1));
+  test_server_->waitForCounter(
+      "http.config_test.http_local_rate_limiter.http_local_rate_limit.shadow_mode", Eq(1));
   EXPECT_EQ(
-      1,
-      test_server_->counter("http_local_rate_limiter.http_local_rate_limit.shadow_mode")->value());
+      1, test_server_
+             ->counter("http.config_test.http_local_rate_limiter.http_local_rate_limit.shadow_mode")
+             ->value());
 
   // The next request with a different cluster, 'bar', should be allowed.
   codec_client_ = makeHttpConnection(lookupPort("http"));
@@ -553,10 +555,12 @@ TEST_P(LocalRateLimitFilterIntegrationTest, ShadowModeTest) {
   sendAndVerifyRequest("bar", "200", 0);
   cleanupUpstreamAndDownstream();
 
-  test_server_->waitForCounter("http_local_rate_limiter.http_local_rate_limit.shadow_mode", Eq(2));
+  test_server_->waitForCounter(
+      "http.config_test.http_local_rate_limiter.http_local_rate_limit.shadow_mode", Eq(2));
   EXPECT_EQ(
-      2,
-      test_server_->counter("http_local_rate_limiter.http_local_rate_limit.shadow_mode")->value());
+      2, test_server_
+             ->counter("http.config_test.http_local_rate_limiter.http_local_rate_limit.shadow_mode")
+             ->value());
 }
 
 TEST_P(LocalRateLimitFilterIntegrationTest, DesciptorsBasicTestWithMinimumMaxDynamicDescriptors) {

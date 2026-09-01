@@ -397,6 +397,10 @@ public:
         {"listener.admin.http.admin.downstream_rq_2xx",
          "listener.admin.http.downstream_rq_xx",
          {{hcm_prefix, "admin"}, {response_code_class, "2"}}},
+        // The router filter, `source/extensions/filters/http/router/config.cc`. The HTTP filters of
+        // a connection manager create their stats in its scope, so they carry its tag too.
+        {"http.config_test.no_route", "http.no_route", {{hcm_prefix, "config_test"}}},
+        {"http.config_test.rq_total", "http.rq_total", {{hcm_prefix, "config_test"}}},
         // The admin listener runs a connection manager too, with 'admin' as its stat prefix. As
         // with the listener address, the admin listener scope itself is not tagged.
         {"http.admin.downstream_rq_total", "http.downstream_rq_total", {{hcm_prefix, "admin"}}},

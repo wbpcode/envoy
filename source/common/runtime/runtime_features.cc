@@ -169,6 +169,10 @@ RUNTIME_GUARD(envoy_reloadable_features_use_canonical_suffix_for_quic_brokenness
 // polling the listener DrainDecision. Latched per connection when the network filter is created.
 RUNTIME_GUARD(envoy_reloadable_features_use_connection_event_drain);
 RUNTIME_GUARD(envoy_reloadable_features_use_migration_in_quiche);
+// Give the HTTP filters of the HTTP connection manager a stats scope that is already prefixed by
+// 'http.<stat_prefix>.' and pass an empty stats prefix to the filter factories, instead of passing
+// the 'http.<stat_prefix>.' prefix as a string and relying on every filter to prepend it itself.
+RUNTIME_GUARD(envoy_reloadable_features_use_prefixed_scope_for_http_filter);
 RUNTIME_GUARD(envoy_reloadable_features_use_response_decoder_handle);
 RUNTIME_GUARD(envoy_reloadable_features_validate_upstream_headers);
 RUNTIME_GUARD(envoy_reloadable_features_websocket_allow_4xx_5xx_through_filter_chain);

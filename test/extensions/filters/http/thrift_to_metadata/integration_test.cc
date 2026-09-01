@@ -223,15 +223,25 @@ TEST_P(ThriftToMetadataIntegrationTest, Basic) {
   writeMessage(resp_buffer_, MessageType::Reply, ReplyType::Success);
   runTest(rq_headers_, rq_buffer_.toString(), resp_headers_, resp_buffer_.toString());
 
-  EXPECT_EQ(1UL, test_server_->counter("thrift_to_metadata.rq.success")->value());
-  EXPECT_EQ(0UL, test_server_->counter("thrift_to_metadata.rq.mismatched_content_type")->value());
-  EXPECT_EQ(0UL, test_server_->counter("thrift_to_metadata.rq.no_body")->value());
-  EXPECT_EQ(0UL, test_server_->counter("thrift_to_metadata.rq.invalid_thrift_body")->value());
+  EXPECT_EQ(1UL, test_server_->counter("http.config_test.thrift_to_metadata.rq.success")->value());
+  EXPECT_EQ(0UL,
+            test_server_->counter("http.config_test.thrift_to_metadata.rq.mismatched_content_type")
+                ->value());
+  EXPECT_EQ(0UL, test_server_->counter("http.config_test.thrift_to_metadata.rq.no_body")->value());
+  EXPECT_EQ(
+      0UL,
+      test_server_->counter("http.config_test.thrift_to_metadata.rq.invalid_thrift_body")->value());
 
-  EXPECT_EQ(1UL, test_server_->counter("thrift_to_metadata.resp.success")->value());
-  EXPECT_EQ(0UL, test_server_->counter("thrift_to_metadata.resp.mismatched_content_type")->value());
-  EXPECT_EQ(0UL, test_server_->counter("thrift_to_metadata.resp.no_body")->value());
-  EXPECT_EQ(0UL, test_server_->counter("thrift_to_metadata.resp.invalid_thrift_body")->value());
+  EXPECT_EQ(1UL,
+            test_server_->counter("http.config_test.thrift_to_metadata.resp.success")->value());
+  EXPECT_EQ(
+      0UL, test_server_->counter("http.config_test.thrift_to_metadata.resp.mismatched_content_type")
+               ->value());
+  EXPECT_EQ(0UL,
+            test_server_->counter("http.config_test.thrift_to_metadata.resp.no_body")->value());
+  EXPECT_EQ(0UL,
+            test_server_->counter("http.config_test.thrift_to_metadata.resp.invalid_thrift_body")
+                ->value());
 }
 
 TEST_P(ThriftToMetadataIntegrationTest, BasicOneChunk) {
@@ -241,15 +251,25 @@ TEST_P(ThriftToMetadataIntegrationTest, BasicOneChunk) {
   writeMessage(resp_buffer_, MessageType::Reply, ReplyType::Success);
   runTest(rq_headers_, rq_buffer_.toString(), resp_headers_, resp_buffer_.toString(), 1);
 
-  EXPECT_EQ(1UL, test_server_->counter("thrift_to_metadata.rq.success")->value());
-  EXPECT_EQ(0UL, test_server_->counter("thrift_to_metadata.rq.mismatched_content_type")->value());
-  EXPECT_EQ(0UL, test_server_->counter("thrift_to_metadata.rq.no_body")->value());
-  EXPECT_EQ(0UL, test_server_->counter("thrift_to_metadata.rq.invalid_thrift_body")->value());
+  EXPECT_EQ(1UL, test_server_->counter("http.config_test.thrift_to_metadata.rq.success")->value());
+  EXPECT_EQ(0UL,
+            test_server_->counter("http.config_test.thrift_to_metadata.rq.mismatched_content_type")
+                ->value());
+  EXPECT_EQ(0UL, test_server_->counter("http.config_test.thrift_to_metadata.rq.no_body")->value());
+  EXPECT_EQ(
+      0UL,
+      test_server_->counter("http.config_test.thrift_to_metadata.rq.invalid_thrift_body")->value());
 
-  EXPECT_EQ(1UL, test_server_->counter("thrift_to_metadata.resp.success")->value());
-  EXPECT_EQ(0UL, test_server_->counter("thrift_to_metadata.resp.mismatched_content_type")->value());
-  EXPECT_EQ(0UL, test_server_->counter("thrift_to_metadata.resp.no_body")->value());
-  EXPECT_EQ(0UL, test_server_->counter("thrift_to_metadata.resp.invalid_thrift_body")->value());
+  EXPECT_EQ(1UL,
+            test_server_->counter("http.config_test.thrift_to_metadata.resp.success")->value());
+  EXPECT_EQ(
+      0UL, test_server_->counter("http.config_test.thrift_to_metadata.resp.mismatched_content_type")
+               ->value());
+  EXPECT_EQ(0UL,
+            test_server_->counter("http.config_test.thrift_to_metadata.resp.no_body")->value());
+  EXPECT_EQ(0UL,
+            test_server_->counter("http.config_test.thrift_to_metadata.resp.invalid_thrift_body")
+                ->value());
 }
 
 TEST_P(ThriftToMetadataIntegrationTest, Trailer) {
@@ -259,15 +279,25 @@ TEST_P(ThriftToMetadataIntegrationTest, Trailer) {
   writeMessage(resp_buffer_, MessageType::Reply, ReplyType::Success);
   runTest(rq_headers_, rq_buffer_.toString(), resp_headers_, resp_buffer_.toString(), 5, true);
 
-  EXPECT_EQ(1UL, test_server_->counter("thrift_to_metadata.rq.success")->value());
-  EXPECT_EQ(0UL, test_server_->counter("thrift_to_metadata.rq.mismatched_content_type")->value());
-  EXPECT_EQ(0UL, test_server_->counter("thrift_to_metadata.rq.no_body")->value());
-  EXPECT_EQ(0UL, test_server_->counter("thrift_to_metadata.rq.invalid_thrift_body")->value());
+  EXPECT_EQ(1UL, test_server_->counter("http.config_test.thrift_to_metadata.rq.success")->value());
+  EXPECT_EQ(0UL,
+            test_server_->counter("http.config_test.thrift_to_metadata.rq.mismatched_content_type")
+                ->value());
+  EXPECT_EQ(0UL, test_server_->counter("http.config_test.thrift_to_metadata.rq.no_body")->value());
+  EXPECT_EQ(
+      0UL,
+      test_server_->counter("http.config_test.thrift_to_metadata.rq.invalid_thrift_body")->value());
 
-  EXPECT_EQ(1UL, test_server_->counter("thrift_to_metadata.resp.success")->value());
-  EXPECT_EQ(0UL, test_server_->counter("thrift_to_metadata.resp.mismatched_content_type")->value());
-  EXPECT_EQ(0UL, test_server_->counter("thrift_to_metadata.resp.no_body")->value());
-  EXPECT_EQ(0UL, test_server_->counter("thrift_to_metadata.resp.invalid_thrift_body")->value());
+  EXPECT_EQ(1UL,
+            test_server_->counter("http.config_test.thrift_to_metadata.resp.success")->value());
+  EXPECT_EQ(
+      0UL, test_server_->counter("http.config_test.thrift_to_metadata.resp.mismatched_content_type")
+               ->value());
+  EXPECT_EQ(0UL,
+            test_server_->counter("http.config_test.thrift_to_metadata.resp.no_body")->value());
+  EXPECT_EQ(0UL,
+            test_server_->counter("http.config_test.thrift_to_metadata.resp.invalid_thrift_body")
+                ->value());
 }
 
 TEST_P(ThriftToMetadataIntegrationTest, MismatchedContentType) {
@@ -285,15 +315,25 @@ TEST_P(ThriftToMetadataIntegrationTest, MismatchedContentType) {
   writeMessage(resp_buffer_, MessageType::Reply, ReplyType::Success);
   runTest(rq_headers, rq_buffer_.toString(), resp_headers, resp_buffer_.toString());
 
-  EXPECT_EQ(0UL, test_server_->counter("thrift_to_metadata.rq.success")->value());
-  EXPECT_EQ(1UL, test_server_->counter("thrift_to_metadata.rq.mismatched_content_type")->value());
-  EXPECT_EQ(0UL, test_server_->counter("thrift_to_metadata.rq.no_body")->value());
-  EXPECT_EQ(0UL, test_server_->counter("thrift_to_metadata.rq.invalid_thrift_body")->value());
+  EXPECT_EQ(0UL, test_server_->counter("http.config_test.thrift_to_metadata.rq.success")->value());
+  EXPECT_EQ(1UL,
+            test_server_->counter("http.config_test.thrift_to_metadata.rq.mismatched_content_type")
+                ->value());
+  EXPECT_EQ(0UL, test_server_->counter("http.config_test.thrift_to_metadata.rq.no_body")->value());
+  EXPECT_EQ(
+      0UL,
+      test_server_->counter("http.config_test.thrift_to_metadata.rq.invalid_thrift_body")->value());
 
-  EXPECT_EQ(0UL, test_server_->counter("thrift_to_metadata.resp.success")->value());
-  EXPECT_EQ(1UL, test_server_->counter("thrift_to_metadata.resp.mismatched_content_type")->value());
-  EXPECT_EQ(0UL, test_server_->counter("thrift_to_metadata.resp.no_body")->value());
-  EXPECT_EQ(0UL, test_server_->counter("thrift_to_metadata.resp.invalid_thrift_body")->value());
+  EXPECT_EQ(0UL,
+            test_server_->counter("http.config_test.thrift_to_metadata.resp.success")->value());
+  EXPECT_EQ(
+      1UL, test_server_->counter("http.config_test.thrift_to_metadata.resp.mismatched_content_type")
+               ->value());
+  EXPECT_EQ(0UL,
+            test_server_->counter("http.config_test.thrift_to_metadata.resp.no_body")->value());
+  EXPECT_EQ(0UL,
+            test_server_->counter("http.config_test.thrift_to_metadata.resp.invalid_thrift_body")
+                ->value());
 }
 
 TEST_P(ThriftToMetadataIntegrationTest, NoBody) {
@@ -306,15 +346,25 @@ TEST_P(ThriftToMetadataIntegrationTest, NoBody) {
                                                   {"Content-Type", "application/x-thrift"}};
   runTest(rq_headers, "", resp_headers_, "");
 
-  EXPECT_EQ(0UL, test_server_->counter("thrift_to_metadata.rq.success")->value());
-  EXPECT_EQ(0UL, test_server_->counter("thrift_to_metadata.rq.mismatched_content_type")->value());
-  EXPECT_EQ(1UL, test_server_->counter("thrift_to_metadata.rq.no_body")->value());
-  EXPECT_EQ(0UL, test_server_->counter("thrift_to_metadata.rq.invalid_thrift_body")->value());
+  EXPECT_EQ(0UL, test_server_->counter("http.config_test.thrift_to_metadata.rq.success")->value());
+  EXPECT_EQ(0UL,
+            test_server_->counter("http.config_test.thrift_to_metadata.rq.mismatched_content_type")
+                ->value());
+  EXPECT_EQ(1UL, test_server_->counter("http.config_test.thrift_to_metadata.rq.no_body")->value());
+  EXPECT_EQ(
+      0UL,
+      test_server_->counter("http.config_test.thrift_to_metadata.rq.invalid_thrift_body")->value());
 
-  EXPECT_EQ(0UL, test_server_->counter("thrift_to_metadata.resp.success")->value());
-  EXPECT_EQ(0UL, test_server_->counter("thrift_to_metadata.resp.mismatched_content_type")->value());
-  EXPECT_EQ(1UL, test_server_->counter("thrift_to_metadata.resp.no_body")->value());
-  EXPECT_EQ(0UL, test_server_->counter("thrift_to_metadata.resp.invalid_thrift_body")->value());
+  EXPECT_EQ(0UL,
+            test_server_->counter("http.config_test.thrift_to_metadata.resp.success")->value());
+  EXPECT_EQ(
+      0UL, test_server_->counter("http.config_test.thrift_to_metadata.resp.mismatched_content_type")
+               ->value());
+  EXPECT_EQ(1UL,
+            test_server_->counter("http.config_test.thrift_to_metadata.resp.no_body")->value());
+  EXPECT_EQ(0UL,
+            test_server_->counter("http.config_test.thrift_to_metadata.resp.invalid_thrift_body")
+                ->value());
 }
 
 TEST_P(ThriftToMetadataIntegrationTest, InvalidThrift) {
@@ -322,15 +372,25 @@ TEST_P(ThriftToMetadataIntegrationTest, InvalidThrift) {
 
   runTest(rq_headers_, "it's not a thrift body", resp_headers_, "it's not a thrift body");
 
-  EXPECT_EQ(0UL, test_server_->counter("thrift_to_metadata.rq.success")->value());
-  EXPECT_EQ(0UL, test_server_->counter("thrift_to_metadata.rq.mismatched_content_type")->value());
-  EXPECT_EQ(0UL, test_server_->counter("thrift_to_metadata.rq.no_body")->value());
-  EXPECT_EQ(1UL, test_server_->counter("thrift_to_metadata.rq.invalid_thrift_body")->value());
+  EXPECT_EQ(0UL, test_server_->counter("http.config_test.thrift_to_metadata.rq.success")->value());
+  EXPECT_EQ(0UL,
+            test_server_->counter("http.config_test.thrift_to_metadata.rq.mismatched_content_type")
+                ->value());
+  EXPECT_EQ(0UL, test_server_->counter("http.config_test.thrift_to_metadata.rq.no_body")->value());
+  EXPECT_EQ(
+      1UL,
+      test_server_->counter("http.config_test.thrift_to_metadata.rq.invalid_thrift_body")->value());
 
-  EXPECT_EQ(0UL, test_server_->counter("thrift_to_metadata.resp.success")->value());
-  EXPECT_EQ(0UL, test_server_->counter("thrift_to_metadata.resp.mismatched_content_type")->value());
-  EXPECT_EQ(0UL, test_server_->counter("thrift_to_metadata.resp.no_body")->value());
-  EXPECT_EQ(1UL, test_server_->counter("thrift_to_metadata.resp.invalid_thrift_body")->value());
+  EXPECT_EQ(0UL,
+            test_server_->counter("http.config_test.thrift_to_metadata.resp.success")->value());
+  EXPECT_EQ(
+      0UL, test_server_->counter("http.config_test.thrift_to_metadata.resp.mismatched_content_type")
+               ->value());
+  EXPECT_EQ(0UL,
+            test_server_->counter("http.config_test.thrift_to_metadata.resp.no_body")->value());
+  EXPECT_EQ(1UL,
+            test_server_->counter("http.config_test.thrift_to_metadata.resp.invalid_thrift_body")
+                ->value());
 }
 
 } // namespace

@@ -11,14 +11,11 @@ namespace {
 
 Stats::Scope& statsScope(Server::Configuration::ServerFactoryContext& context,
                          Server::Configuration::ExtraFactoryContext& extra_context) {
-  // Server scope for filters without a specified scope.
-  if (!extra_context.scope.has_value()) {
-    return context.scope();
-  }
-
   // Downstream filters.
   if (!extra_context.is_upstream) {
-    return *extra_context.scope;
+    // The downstream WASM always use a scope with empty prefix. And this scope will
+    // be used to create a new scope with WASM specific prefix.
+    return context.scope();
   }
 
   // Upstream filters.

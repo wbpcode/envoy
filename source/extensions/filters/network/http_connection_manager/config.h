@@ -123,6 +123,55 @@ private:
 };
 
 /**
+ * Factory context used to create the HTTP filters of the HTTP connection manager. All the methods
+ * are delegated to the factory context of the network filter chain by default.
+ *
+ * An optional scope may be provided, in which case scope() returns that scope instead of the one
+ * of the delegate. The HTTP connection manager uses this to hand the filters a scope that is
+ * already prefixed by 'http.<stat_prefix>.', so that they no longer need to prepend that prefix to
+ * their stat names themselves.
+ *
+ * NOTE: statsScope() is intentionally not overridden: the default implementation of
+ * GenericFactoryContext delegates to scope() and picks up the optional scope as well.
+ */
+class HttpFilterFactoryContextImpl : public Server::Configuration::FactoryContext {
+public:
+  HttpFilterFactoryContextImpl(Server::Configuration::FactoryContext& context,
+                               Stats::ScopeSharedPtr scope)
+      : context_(context), scope_(std::move(scope)) {}
+
+  // Whether this context provides its own scope rather than delegating to the actual factory
+  // context. If it does, the stats prefix that is propagated to the HTTP filters should be empty,
+  // otherwise the prefix of the scope would be repeated in the stat names.
+  bool hasOwnScope() const { return scope_ != nullptr; }
+
+  // Server::Configuration::GenericFactoryContext
+  Server::Configuration::ServerFactoryContext& serverFactoryContext() override {
+    return context_.serverFactoryContext();
+  }
+  ProtobufMessage::ValidationVisitor& messageValidationVisitor() override {
+    return context_.messageValidationVisitor();
+  }
+  Init::Manager& initManager() override { return context_.initManager(); }
+  Stats::Scope& scope() override { return scope_ != nullptr ? *scope_ : context_.scope(); }
+
+  // Server::Configuration::FactoryContext
+  const Network::DrainDecision& drainDecision() override { return context_.drainDecision(); }
+  envoy::config::core::v3::TrafficDirection direction() const override {
+    return context_.direction();
+  }
+  bool isQuic() const override { return context_.isQuic(); }
+  bool shouldBypassOverloadManager() const override {
+    return context_.shouldBypassOverloadManager();
+  }
+  Stats::Scope& prefixedScope() override { return context_.prefixedScope(); }
+
+private:
+  Server::Configuration::FactoryContext& context_;
+  const Stats::ScopeSharedPtr scope_;
+};
+
+/**
  * Maps proto config to runtime config for an HTTP connection manager network filter.
  */
 class HttpConnectionManagerConfig : Logger::Loggable<Logger::Id::config>,
@@ -303,6 +352,9 @@ private:
   // The 'http.<stat_prefix>.' scope in which this connection manager and its HTTP filters create
   // their stats.
   const Stats::ScopeSharedPtr http_scope_;
+  // Declared before the filter factories because the filter config providers keep a reference to
+  // it and it must outlive them.
+  HttpFilterFactoryContextImpl http_filter_factory_context_;
   FilterFactoriesList filter_factories_;
   std::map<std::string, FilterConfig> upgrade_filter_factories_;
   AccessLog::InstanceSharedPtrVector access_logs_;

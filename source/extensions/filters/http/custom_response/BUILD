@@ -79,6 +79,7 @@ envoy_cc_extension(
         ":custom_response_filter",
         "//envoy/server:factory_context_interface",
         "//source/extensions/filters/http/common:factory_base_lib",
+        "@abseil-cpp//absl/strings",
         "@envoy_api//envoy/extensions/filters/http/custom_response/v3:pkg_cc_proto",
     ],
 )

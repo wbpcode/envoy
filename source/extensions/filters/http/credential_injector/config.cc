@@ -4,6 +4,8 @@
 #include "source/extensions/filters/http/credential_injector/credential_injector_filter.h"
 #include "source/extensions/http/injected_credentials/common/factory.h"
 
+#include "absl/strings/str_cat.h"
+
 namespace Envoy {
 namespace Extensions {
 namespace HttpFilters {
@@ -32,9 +34,16 @@ CredentialInjectorFilterFactory::createFilterFactoryFromProtoHelper(
   ProtobufTypes::MessagePtr message = Config::Utility::translateAnyToFactoryConfig(
       proto_config.credential().typed_config(), context.messageValidationVisitor(),
       *config_factory);
+  // The filter's own stats below live in the given scope, so stats_prefix is relative to that
+  // scope. The configured credential extension creates its stats in the server's scope instead, so
+  // it has to be given stats_prefix joined with the prefix of the scope to keep the same stat
+  // names.
+  const std::string scope_prefix = scope.constSymbolTable().toString(scope.prefix());
+  const std::string credential_stats_prefix =
+      scope_prefix.empty() ? stats_prefix : absl::StrCat(scope_prefix, ".", stats_prefix);
   CredentialInjectorSharedPtr credential_injector =
       config_factory->createCredentialInjectorFromProto(
-          *message, stats_prefix + "credential_injector.", context, init_manager);
+          *message, credential_stats_prefix + "credential_injector.", context, init_manager);
 
   FilterConfigSharedPtr config =
       std::make_shared<FilterConfig>(std::move(credential_injector), proto_config.overwrite(),
