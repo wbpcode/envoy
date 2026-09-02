@@ -40,6 +40,13 @@ protected:
 
   StatName makeStat(absl::string_view name) { return pool_.add(name); }
 
+  // Whether the storage's bytes sit in its own footprint rather than in a heap spill.
+  static bool bytesAreInline(const SymbolTable::InlineStorage& storage) {
+    const uint8_t* bytes = storage.statName().dataIncludingSize();
+    const uint8_t* object = reinterpret_cast<const uint8_t*>(&storage);
+    return bytes >= object && bytes < object + sizeof(storage);
+  }
+
   std::vector<uint8_t> serializeDeserialize(uint64_t number) {
     return TestUtil::serializeDeserializeNumber(number);
   }
@@ -690,6 +697,69 @@ TEST_F(StatNameTest, JoinerMoveElided) {
   StatNameJoiner moved(std::move(joiner));
   EXPECT_EQ(name.dataIncludingSize(), moved.statName().dataIncludingSize());
   EXPECT_EQ("a.b", table_.toString(moved.statName()));
+}
+
+// inlineJoin() must produce exactly the bytes join() produces.
+TEST_F(StatNameTest, InlineJoinMatchesJoin) {
+  const std::vector<StatNameVec> cases = {
+      {makeStat("a.b"), makeStat("c.d")},
+      {makeStat(""), makeStat("c.d")},
+      {makeStat("a.b"), makeStat("")},
+      {makeStat(""), makeStat("")},
+      {makeStat("a.b"), makeStat("c.d"), makeStat("e.f")},
+      {makeStat(""), makeStat("c.d"), makeStat("")},
+      {makeStat(""), makeStat(""), makeStat("")},
+  };
+  for (const StatNameVec& names : cases) {
+    SymbolTable::StoragePtr joined = table_.join(names);
+    const SymbolTable::InlineStorage inline_joined = table_.inlineJoin(names);
+    EXPECT_EQ(table_.toString(StatName(joined.get())), table_.toString(inline_joined.statName()));
+    EXPECT_EQ(StatName(joined.get()), inline_joined.statName());
+  }
+}
+
+// Storage that has not been joined into holds an empty name rather than uninitialized bytes.
+TEST_F(StatNameTest, InlineJoinDefaultIsEmpty) {
+  const SymbolTable::InlineStorage storage{};
+  EXPECT_TRUE(storage.statName().empty());
+  EXPECT_EQ("", table_.toString(storage.statName()));
+}
+
+// The point of inlineJoin() is that a short join needs no heap allocation, so the joined bytes
+// must live within the object's own footprint. The storage keeps its bytes to itself, so this
+// is the only way to tell inline storage from a spill.
+TEST_F(StatNameTest, InlineJoinStaysInline) {
+  const SymbolTable::InlineStorage joined = table_.inlineJoin({makeStat("a.b"), makeStat("c.d")});
+  EXPECT_EQ("a.b.c.d", table_.toString(joined.statName()));
+  EXPECT_TRUE(bytesAreInline(joined));
+}
+
+// Names too long for the inline buffer spill onto the heap, which must not change the result.
+TEST_F(StatNameTest, InlineJoinSpillsToHeap) {
+  std::vector<std::string> tokens;
+  for (uint32_t i = 0; i < 64; ++i) {
+    tokens.push_back(absl::StrCat("token", i));
+  }
+  const std::string long_string = absl::StrJoin(tokens, ".");
+  StatName long_name = makeStat(long_string);
+  // One byte per token at minimum, so this name cannot fit in any inline buffer the storage
+  // could hold, whatever its capacity.
+  ASSERT_GT(long_name.dataSize(), sizeof(SymbolTable::InlineStorage));
+
+  const SymbolTable::InlineStorage joined = table_.inlineJoin({long_name, makeStat("a.b")});
+  EXPECT_FALSE(bytesAreInline(joined));
+  EXPECT_EQ(absl::StrCat(long_string, ".a.b"), table_.toString(joined.statName()));
+
+  SymbolTable::StoragePtr heap_joined = table_.join({long_name, makeStat("a.b")});
+  EXPECT_EQ(StatName(heap_joined.get()), joined.statName());
+}
+
+// The bytes live inside the storage, so statName() must be re-fetched from the moved-to object
+// rather than carried across a move.
+TEST_F(StatNameTest, InlineJoinMove) {
+  SymbolTable::InlineStorage joined = table_.inlineJoin({makeStat("a.b"), makeStat("c.d")});
+  const SymbolTable::InlineStorage moved(std::move(joined));
+  EXPECT_EQ("a.b.c.d", table_.toString(moved.statName()));
 }
 
 // TagStatNameJoiner is stored in containers by callers, so it must remain movable.
