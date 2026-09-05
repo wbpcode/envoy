@@ -2,6 +2,7 @@
 
 #include <memory>
 #include <string>
+#include <type_traits>
 #include <vector>
 
 #include "envoy/common/exception.h"
@@ -12,6 +13,9 @@
 #include "source/common/common/logger.h"
 
 #include "absl/status/status.h"
+#include "absl/status/statusor.h"
+#include "absl/strings/str_cat.h"
+#include "absl/strings/string_view.h"
 #include "lua.hpp"
 
 namespace Envoy {
@@ -34,23 +38,79 @@ namespace Lua {
  */
 
 /**
+ * A fixed-size, trivially destructible holder for a Lua error message.
+ *
+ * Raising a Lua error (luaL_error()/lua_error()) does not return: LuaJIT unwinds the C++ stack
+ * back to the enclosing lua_resume()/lua_pcall(). Whether the destructors of the C++ objects that
+ * are live in the frames being unwound get run depends on the toolchain emitting exception
+ * cleanups, so error paths must not rely on it. Copying the message into one of these lets the
+ * caller destroy every non-trivial object it owns before it raises. Messages longer than
+ * MaxLength are truncated.
+ */
+class LuaErrorMessage {
+public:
+  static constexpr size_t MaxLength = 512;
+
+  // The buffer is deliberately left uninitialized apart from the terminator: the thunk generated
+  // by DECLARE_LUA_FUNCTION_EX() declares one of these on every Lua call, and clearing the whole
+  // buffer on the success path would be pure overhead.
+  LuaErrorMessage() { buffer_[0] = '\0'; }
+
+  void set(const absl::Status& status) { set(status.message()); }
+
+  void set(absl::string_view message) {
+    const size_t length = message.copy(buffer_, MaxLength - 1);
+    buffer_[length] = '\0';
+  }
+
+  const char* c_str() const { return buffer_; }
+
+private:
+  char buffer_[MaxLength];
+};
+
+static_assert(std::is_trivially_destructible<LuaErrorMessage>::value,
+              "LuaErrorMessage must be trivially destructible so that it can be held live across "
+              "the call that raises the Lua error");
+
+/**
  * Base macro for declaring a Lua/C function. Any function declared will need to be exported via
  * the exportedFunctions() function in BaseLuaObject. See BaseLuaObject below for more
  * information. This macro declares a static "thunk" which checks the user data, optionally checks
  * for object death (again see BaseLuaObject below for more info), and then invokes a normal
  * object method. The actual object method needs to be implemented by the class.
+ *
+ * The object method returns absl::StatusOr<int> rather than raising the Lua error itself: on
+ * success the int is the number of values the method pushed onto the Lua stack, and on failure
+ * the status message becomes the Lua error. Raising a Lua error unwinds the C++ stack (see
+ * LuaErrorMessage above), so the thunk copies the message into a plain buffer and lets every C++
+ * object in scope be destroyed *before* it calls luaL_error(). That way the error paths do not
+ * depend on the unwinder running destructors for us.
  * @param Class supplies the owning class name.
  * @param Name supplies the function name.
  * @param Index supplies the stack index where "this" (Lua/C userdata) is found.
  */
 #define DECLARE_LUA_FUNCTION_EX(Class, Name, Index)                                                \
   static int static_##Name(lua_State* state) {                                                     \
-    Class* object = ::Envoy::Extensions::Filters::Common::Lua::alignAndCast<Class>(                \
-        luaL_checkudata(state, Index, typeid(Class).name()));                                      \
-    object->checkDead(state);                                                                      \
-    return object->Name(state);                                                                    \
+    ::Envoy::Extensions::Filters::Common::Lua::LuaErrorMessage error_message;                      \
+    {                                                                                              \
+      Class* object = ::Envoy::Extensions::Filters::Common::Lua::alignAndCast<Class>(              \
+          luaL_checkudata(state, Index, typeid(Class).name()));                                    \
+      const absl::Status dead_status = object->checkDead();                                        \
+      if (dead_status.ok()) {                                                                      \
+        const absl::StatusOr<int> result = object->Name(state);                                    \
+        if (result.ok()) {                                                                         \
+          return *result;                                                                          \
+        }                                                                                          \
+        error_message.set(result.status());                                                        \
+      } else {                                                                                     \
+        error_message.set(dead_status);                                                            \
+      }                                                                                            \
+    }                                                                                              \
+    /* Nothing with a destructor is live here, so it is safe for luaL_error() to unwind. */        \
+    return luaL_error(state, "%s", error_message.c_str());                                         \
   }                                                                                                \
-  int Name(lua_State* state);
+  absl::StatusOr<int> Name(lua_State* state);
 
 /**
  * Declare a Lua function in which userdata is in stack slot 1. See DECLARE_LUA_FUNCTION_EX()
@@ -87,6 +147,66 @@ inline absl::string_view getStringViewFromLuaString(lua_State* state, int index)
   // (https://www.lua.org/manual/5.1/manual.html#2.2.1).
   const char* input = luaL_checklstring(state, index, &input_size);
   return {input, input_size};
+}
+
+/**
+ * Non-raising counterparts of the luaL_check*() family.
+ *
+ * luaL_check*() raises the Lua error itself, which unwinds the C++ stack (see LuaErrorMessage), so
+ * it may only be used while the calling frame owns nothing that needs destroying. These return a
+ * status instead, for the reads that cannot be hoisted above every such object -- typically
+ * arguments read inside a loop that is filling one.
+ * @param state the current Lua state.
+ * @param index the stack index to read.
+ * @param what names the value in the error message, e.g. "header key".
+ */
+
+/**
+ * Read a Lua string, rejecting a number rather than coercing it. Unlike coercibleStringOrError()
+ * this never modifies the slot, so it is the one to use on a key inside a lua_next() traversal:
+ * converting a key in place confuses the following lua_next() call.
+ * @return a view of the string, valid while the value remains on the Lua stack.
+ */
+inline absl::StatusOr<absl::string_view> stringOrError(lua_State* state, int index,
+                                                       absl::string_view what) {
+  const int type = lua_type(state, index);
+  if (type != LUA_TSTRING) {
+    return absl::InvalidArgumentError(
+        absl::StrCat(what, " must be a string, got ", lua_typename(state, type)));
+  }
+  size_t length = 0;
+  const char* value = lua_tolstring(state, index, &length);
+  return absl::string_view(value, length);
+}
+
+/**
+ * Read a Lua string, applying Lua's implicit number-to-string coercion the way luaL_checkstring()
+ * does. Coercion rewrites the slot, so do not call this on a key inside a lua_next() traversal;
+ * use stringOrError() there.
+ * @return a view of the string, valid while the value remains on the Lua stack.
+ */
+inline absl::StatusOr<absl::string_view> coercibleStringOrError(lua_State* state, int index,
+                                                                absl::string_view what) {
+  if (!lua_isstring(state, index)) {
+    return absl::InvalidArgumentError(
+        absl::StrCat(what, " must be a string, got ", lua_typename(state, lua_type(state, index))));
+  }
+  size_t length = 0;
+  const char* value = lua_tolstring(state, index, &length);
+  return absl::string_view(value, length);
+}
+
+/**
+ * Read a Lua integer, applying the same coercion luaL_checkinteger() does. This never modifies the
+ * slot.
+ */
+inline absl::StatusOr<lua_Integer> integerOrError(lua_State* state, int index,
+                                                  absl::string_view what) {
+  if (!lua_isnumber(state, index)) {
+    return absl::InvalidArgumentError(
+        absl::StrCat(what, " must be a number, got ", lua_typename(state, lua_type(state, index))));
+  }
+  return lua_tointeger(state, index);
 }
 
 /**
@@ -214,14 +334,15 @@ public:
    * This function is called as part of the DECLARE_LUA_FUNCTION* macros. The idea here is that
    * we cannot control when Lua destroys things. However, we may expose wrappers to a script that
    * should not be used after some event. This allows us to mark objects as dead so that if they
-   * are used again they will throw a Lua error and not reach our code.
-   * @param state supplies the calling LuaState.
+   * are used again the caller will raise a Lua error and not reach our code.
+   * @return a failed status if the object is dead. The thunk generated by DECLARE_LUA_FUNCTION*
+   *         turns it into a Lua error once it has no live C++ objects of its own.
    */
-  int checkDead(lua_State* state) {
+  absl::Status checkDead() const {
     if (dead_) {
-      return luaL_error(state, "object used outside of proper scope");
+      return absl::FailedPreconditionError("object used outside of proper scope");
     }
-    return 0;
+    return absl::OkStatus();
   }
 
   /**
@@ -272,37 +393,37 @@ private:
   bool dead_{};
 };
 
-template <class T> int BaseLuaObject<T>::luaLogTrace(lua_State* state) {
+template <class T> absl::StatusOr<int> BaseLuaObject<T>::luaLogTrace(lua_State* state) {
   absl::string_view message = Filters::Common::Lua::getStringViewFromLuaString(state, 2);
   scriptLog(spdlog::level::trace, message);
   return 0;
 }
 
-template <class T> int BaseLuaObject<T>::luaLogDebug(lua_State* state) {
+template <class T> absl::StatusOr<int> BaseLuaObject<T>::luaLogDebug(lua_State* state) {
   absl::string_view message = Filters::Common::Lua::getStringViewFromLuaString(state, 2);
   scriptLog(spdlog::level::debug, message);
   return 0;
 }
 
-template <class T> int BaseLuaObject<T>::luaLogInfo(lua_State* state) {
+template <class T> absl::StatusOr<int> BaseLuaObject<T>::luaLogInfo(lua_State* state) {
   absl::string_view message = Filters::Common::Lua::getStringViewFromLuaString(state, 2);
   scriptLog(spdlog::level::info, message);
   return 0;
 }
 
-template <class T> int BaseLuaObject<T>::luaLogWarn(lua_State* state) {
+template <class T> absl::StatusOr<int> BaseLuaObject<T>::luaLogWarn(lua_State* state) {
   absl::string_view message = Filters::Common::Lua::getStringViewFromLuaString(state, 2);
   scriptLog(spdlog::level::warn, message);
   return 0;
 }
 
-template <class T> int BaseLuaObject<T>::luaLogErr(lua_State* state) {
+template <class T> absl::StatusOr<int> BaseLuaObject<T>::luaLogErr(lua_State* state) {
   absl::string_view message = Filters::Common::Lua::getStringViewFromLuaString(state, 2);
   scriptLog(spdlog::level::err, message);
   return 0;
 }
 
-template <class T> int BaseLuaObject<T>::luaLogCritical(lua_State* state) {
+template <class T> absl::StatusOr<int> BaseLuaObject<T>::luaLogCritical(lua_State* state) {
   absl::string_view message = Filters::Common::Lua::getStringViewFromLuaString(state, 2);
   scriptLog(spdlog::level::critical, message);
   return 0;

@@ -27,7 +27,7 @@ PerLuaCodeSetup::PerLuaCodeSetup(const std::string& lua_code, ThreadLocal::SlotA
   }
 }
 
-int HeaderMapWrapper::luaGet(lua_State* state) {
+absl::StatusOr<int> HeaderMapWrapper::luaGet(lua_State* state) {
   absl::string_view key = Filters::Common::Lua::getStringViewFromLuaString(state, 2);
   const Envoy::Http::HeaderUtility::GetAllOfHeaderAsStringResult value =
       Envoy::Http::HeaderUtility::getAllOfHeaderAsString(headers_,
@@ -40,7 +40,7 @@ int HeaderMapWrapper::luaGet(lua_State* state) {
   }
 }
 
-int ClusterWrapper::luaNumConnections(lua_State* state) {
+absl::StatusOr<int> ClusterWrapper::luaNumConnections(lua_State* state) {
   uint64_t count =
       cluster_->resourceManager(Upstream::ResourcePriority::Default).connections().count() +
       cluster_->resourceManager(Upstream::ResourcePriority::High).connections().count();
@@ -48,7 +48,7 @@ int ClusterWrapper::luaNumConnections(lua_State* state) {
   return 1;
 }
 
-int ClusterWrapper::luaNumRequests(lua_State* state) {
+absl::StatusOr<int> ClusterWrapper::luaNumRequests(lua_State* state) {
   uint64_t count =
       cluster_->resourceManager(Upstream::ResourcePriority::Default).requests().count() +
       cluster_->resourceManager(Upstream::ResourcePriority::High).requests().count();
@@ -56,7 +56,7 @@ int ClusterWrapper::luaNumRequests(lua_State* state) {
   return 1;
 }
 
-int ClusterWrapper::luaNumPendingRequests(lua_State* state) {
+absl::StatusOr<int> ClusterWrapper::luaNumPendingRequests(lua_State* state) {
   uint64_t count =
       cluster_->resourceManager(Upstream::ResourcePriority::Default).pendingRequests().count() +
       cluster_->resourceManager(Upstream::ResourcePriority::High).pendingRequests().count();
@@ -64,7 +64,7 @@ int ClusterWrapper::luaNumPendingRequests(lua_State* state) {
   return 1;
 }
 
-int RouteHandleWrapper::luaHeaders(lua_State* state) {
+absl::StatusOr<int> RouteHandleWrapper::luaHeaders(lua_State* state) {
   if (headers_wrapper_.get() != nullptr) {
     headers_wrapper_.pushStack();
   } else {
@@ -73,7 +73,7 @@ int RouteHandleWrapper::luaHeaders(lua_State* state) {
   return 1;
 }
 
-int RouteHandleWrapper::luaGetCluster(lua_State* state) {
+absl::StatusOr<int> RouteHandleWrapper::luaGetCluster(lua_State* state) {
   size_t cluster_name_len = 0;
   const char* cluster_name = luaL_checklstring(state, 2, &cluster_name_len);
   Upstream::ThreadLocalCluster* cluster =

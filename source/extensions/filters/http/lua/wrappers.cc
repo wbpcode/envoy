@@ -12,6 +12,8 @@
 #include "source/extensions/filters/common/lua/wrappers.h"
 #include "source/extensions/http/header_formatters/preserve_case/preserve_case_formatter.h"
 
+#include "absl/strings/str_cat.h"
+
 namespace Envoy {
 namespace Extensions {
 namespace HttpFilters {
@@ -26,7 +28,7 @@ HeaderMapIterator::HeaderMapIterator(HeaderMapWrapper& parent) : parent_(parent)
       });
 }
 
-int HeaderMapIterator::luaPairsIterator(lua_State* state) {
+absl::StatusOr<int> HeaderMapIterator::luaPairsIterator(lua_State* state) {
   if (current_ == entries_.size()) {
     parent_.iterator_.reset();
     return 0;
@@ -40,8 +42,8 @@ int HeaderMapIterator::luaPairsIterator(lua_State* state) {
   }
 }
 
-int HeaderMapWrapper::luaAdd(lua_State* state) {
-  checkModifiable(state);
+absl::StatusOr<int> HeaderMapWrapper::luaAdd(lua_State* state) {
+  RETURN_IF_NOT_OK(checkModifiable());
 
   const char* key = luaL_checkstring(state, 2);
   const char* value = luaL_checkstring(state, 3);
@@ -49,7 +51,7 @@ int HeaderMapWrapper::luaAdd(lua_State* state) {
   return 0;
 }
 
-int HeaderMapWrapper::luaGet(lua_State* state) {
+absl::StatusOr<int> HeaderMapWrapper::luaGet(lua_State* state) {
   absl::string_view key = Filters::Common::Lua::getStringViewFromLuaString(state, 2);
   const Envoy::Http::HeaderUtility::GetAllOfHeaderAsStringResult value =
       Envoy::Http::HeaderUtility::getAllOfHeaderAsString(headers_,
@@ -62,7 +64,7 @@ int HeaderMapWrapper::luaGet(lua_State* state) {
   }
 }
 
-int HeaderMapWrapper::luaGetAtIndex(lua_State* state) {
+absl::StatusOr<int> HeaderMapWrapper::luaGetAtIndex(lua_State* state) {
   absl::string_view key = Filters::Common::Lua::getStringViewFromLuaString(state, 2);
   const int index = luaL_checknumber(state, 3);
   const Envoy::Http::HeaderMap::GetResult header_value =
@@ -75,7 +77,7 @@ int HeaderMapWrapper::luaGetAtIndex(lua_State* state) {
   return 0;
 }
 
-int HeaderMapWrapper::luaGetNumValues(lua_State* state) {
+absl::StatusOr<int> HeaderMapWrapper::luaGetNumValues(lua_State* state) {
   absl::string_view key = Filters::Common::Lua::getStringViewFromLuaString(state, 2);
   const Envoy::Http::HeaderMap::GetResult header_value =
       headers_.get(Envoy::Http::LowerCaseString(key));
@@ -83,9 +85,10 @@ int HeaderMapWrapper::luaGetNumValues(lua_State* state) {
   return 1;
 }
 
-int HeaderMapWrapper::luaPairs(lua_State* state) {
+absl::StatusOr<int> HeaderMapWrapper::luaPairs(lua_State* state) {
   if (iterator_.get() != nullptr) {
-    luaL_error(state, "cannot create a second iterator before completing the first");
+    return absl::FailedPreconditionError(
+        "cannot create a second iterator before completing the first");
   }
 
   // The way iteration works is we create an iteration wrapper that snaps pointers to all of
@@ -100,8 +103,8 @@ int HeaderMapWrapper::luaPairs(lua_State* state) {
   return 1;
 }
 
-int HeaderMapWrapper::luaReplace(lua_State* state) {
-  checkModifiable(state);
+absl::StatusOr<int> HeaderMapWrapper::luaReplace(lua_State* state) {
+  RETURN_IF_NOT_OK(checkModifiable());
 
   const char* key = luaL_checkstring(state, 2);
   const char* value = luaL_checkstring(state, 3);
@@ -112,26 +115,28 @@ int HeaderMapWrapper::luaReplace(lua_State* state) {
   return 0;
 }
 
-int HeaderMapWrapper::luaRemove(lua_State* state) {
-  checkModifiable(state);
+absl::StatusOr<int> HeaderMapWrapper::luaRemove(lua_State* state) {
+  RETURN_IF_NOT_OK(checkModifiable());
 
   const char* key = luaL_checkstring(state, 2);
   headers_.remove(Envoy::Http::LowerCaseString(key));
   return 0;
 }
 
-void HeaderMapWrapper::checkModifiable(lua_State* state) {
+absl::Status HeaderMapWrapper::checkModifiable() {
   if (iterator_.get() != nullptr) {
-    luaL_error(state, "header map cannot be modified while iterating");
+    return absl::FailedPreconditionError("header map cannot be modified while iterating");
   }
 
   if (!cb_()) {
-    luaL_error(state, "header map can no longer be modified");
+    return absl::FailedPreconditionError("header map can no longer be modified");
   }
+
+  return absl::OkStatus();
 }
 
-int HeaderMapWrapper::luaSetHttp1ReasonPhrase(lua_State* state) {
-  checkModifiable(state);
+absl::StatusOr<int> HeaderMapWrapper::luaSetHttp1ReasonPhrase(lua_State* state) {
+  RETURN_IF_NOT_OK(checkModifiable());
 
   size_t input_size = 0;
   const char* phrase = luaL_checklstring(state, 2, &input_size);
@@ -160,14 +165,14 @@ int HeaderMapWrapper::luaSetHttp1ReasonPhrase(lua_State* state) {
   return 0;
 }
 
-int StreamInfoWrapper::luaProtocol(lua_State* state) {
+absl::StatusOr<int> StreamInfoWrapper::luaProtocol(lua_State* state) {
   const std::string& protocol =
       Envoy::Http::Utility::getProtocolString(stream_info_.protocol().value());
   lua_pushlstring(state, protocol.data(), protocol.size());
   return 1;
 }
 
-int StreamInfoWrapper::luaDynamicMetadata(lua_State* state) {
+absl::StatusOr<int> StreamInfoWrapper::luaDynamicMetadata(lua_State* state) {
   if (dynamic_metadata_wrapper_.get() != nullptr) {
     dynamic_metadata_wrapper_.pushStack();
   } else {
@@ -176,14 +181,14 @@ int StreamInfoWrapper::luaDynamicMetadata(lua_State* state) {
   return 1;
 }
 
-int StreamInfoWrapper::luaDynamicTypedMetadata(lua_State* state) {
+absl::StatusOr<int> StreamInfoWrapper::luaDynamicTypedMetadata(lua_State* state) {
   // Get the typed metadata from the stream's metadata
   const auto& typed_metadata = stream_info_.dynamicMetadata().typed_filter_metadata();
   return Filters::Common::Lua::ProtobufConverterUtils::processDynamicTypedMetadataFromLuaCall(
       state, typed_metadata);
 }
 
-int StreamInfoWrapper::luaFilterState(lua_State* state) {
+absl::StatusOr<int> StreamInfoWrapper::luaFilterState(lua_State* state) {
   if (filter_state_wrapper_.get() != nullptr) {
     filter_state_wrapper_.pushStack();
   } else {
@@ -192,7 +197,7 @@ int StreamInfoWrapper::luaFilterState(lua_State* state) {
   return 1;
 }
 
-int ConnectionStreamInfoWrapper::luaConnectionDynamicMetadata(lua_State* state) {
+absl::StatusOr<int> ConnectionStreamInfoWrapper::luaConnectionDynamicMetadata(lua_State* state) {
   if (connection_dynamic_metadata_wrapper_.get() != nullptr) {
     connection_dynamic_metadata_wrapper_.pushStack();
   } else {
@@ -202,7 +207,7 @@ int ConnectionStreamInfoWrapper::luaConnectionDynamicMetadata(lua_State* state) 
   return 1;
 }
 
-int StreamInfoWrapper::luaDownstreamSslConnection(lua_State* state) {
+absl::StatusOr<int> StreamInfoWrapper::luaDownstreamSslConnection(lua_State* state) {
   const auto& ssl = stream_info_.downstreamAddressProvider().sslConnection();
   if (ssl != nullptr) {
     if (downstream_ssl_connection_.get() != nullptr) {
@@ -217,55 +222,56 @@ int StreamInfoWrapper::luaDownstreamSslConnection(lua_State* state) {
   return 1;
 }
 
-int ConnectionStreamInfoWrapper::luaConnectionDynamicTypedMetadata(lua_State* state) {
+absl::StatusOr<int>
+ConnectionStreamInfoWrapper::luaConnectionDynamicTypedMetadata(lua_State* state) {
   // Get the typed metadata from the connection's metadata
   const auto& typed_metadata = connection_stream_info_.dynamicMetadata().typed_filter_metadata();
   return Filters::Common::Lua::ProtobufConverterUtils::processDynamicTypedMetadataFromLuaCall(
       state, typed_metadata);
 }
 
-int StreamInfoWrapper::luaDownstreamLocalAddress(lua_State* state) {
+absl::StatusOr<int> StreamInfoWrapper::luaDownstreamLocalAddress(lua_State* state) {
   const std::string& local_address =
       stream_info_.downstreamAddressProvider().localAddress()->asString();
   lua_pushlstring(state, local_address.data(), local_address.size());
   return 1;
 }
 
-int StreamInfoWrapper::luaDownstreamDirectLocalAddress(lua_State* state) {
+absl::StatusOr<int> StreamInfoWrapper::luaDownstreamDirectLocalAddress(lua_State* state) {
   const std::string& local_address =
       stream_info_.downstreamAddressProvider().directLocalAddress()->asString();
   lua_pushlstring(state, local_address.data(), local_address.size());
   return 1;
 }
 
-int StreamInfoWrapper::luaDownstreamDirectRemoteAddress(lua_State* state) {
+absl::StatusOr<int> StreamInfoWrapper::luaDownstreamDirectRemoteAddress(lua_State* state) {
   const std::string& direct_remote_address =
       stream_info_.downstreamAddressProvider().directRemoteAddress()->asString();
   lua_pushlstring(state, direct_remote_address.data(), direct_remote_address.size());
   return 1;
 }
 
-int StreamInfoWrapper::luaDownstreamRemoteAddress(lua_State* state) {
+absl::StatusOr<int> StreamInfoWrapper::luaDownstreamRemoteAddress(lua_State* state) {
   const std::string& remote_address =
       stream_info_.downstreamAddressProvider().remoteAddress()->asString();
   lua_pushlstring(state, remote_address.data(), remote_address.size());
   return 1;
 }
 
-int StreamInfoWrapper::luaRequestedServerName(lua_State* state) {
+absl::StatusOr<int> StreamInfoWrapper::luaRequestedServerName(lua_State* state) {
   absl::string_view requested_serve_name =
       stream_info_.downstreamAddressProvider().requestedServerName();
   lua_pushlstring(state, requested_serve_name.data(), requested_serve_name.size());
   return 1;
 }
 
-int StreamInfoWrapper::luaRouteName(lua_State* state) {
+absl::StatusOr<int> StreamInfoWrapper::luaRouteName(lua_State* state) {
   const std::string& route_name = stream_info_.getRouteName();
   lua_pushlstring(state, route_name.data(), route_name.length());
   return 1;
 }
 
-int StreamInfoWrapper::luaVirtualClusterName(lua_State* state) {
+absl::StatusOr<int> StreamInfoWrapper::luaVirtualClusterName(lua_State* state) {
   const std::optional<std::string>& name = stream_info_.virtualClusterName();
   if (name.has_value()) {
     const std::string& virtual_cluster_name = name.value();
@@ -276,7 +282,7 @@ int StreamInfoWrapper::luaVirtualClusterName(lua_State* state) {
   return 1;
 }
 
-int StreamInfoWrapper::luaDrainConnectionUponCompletion(lua_State* state) {
+absl::StatusOr<int> StreamInfoWrapper::luaDrainConnectionUponCompletion(lua_State* state) {
   UNREFERENCED_PARAMETER(state);
   stream_info_.setShouldDrainConnectionUponCompletion(true);
   return 0;
@@ -295,7 +301,7 @@ const StreamInfo::StreamInfo& ConnectionDynamicMetadataMapWrapper::streamInfo() 
   return parent_.connection_stream_info_;
 }
 
-int DynamicMetadataMapIterator::luaPairsIterator(lua_State* state) {
+absl::StatusOr<int> DynamicMetadataMapIterator::luaPairsIterator(lua_State* state) {
   if (current_ == parent_.streamInfo().dynamicMetadata().filter_metadata().end()) {
     parent_.iterator_.reset();
     return 0;
@@ -308,8 +314,8 @@ int DynamicMetadataMapIterator::luaPairsIterator(lua_State* state) {
   return 2;
 }
 
-int ConnectionDynamicMetadataMapIterator::luaConnectionDynamicMetadataPairsIterator(
-    lua_State* state) {
+absl::StatusOr<int>
+ConnectionDynamicMetadataMapIterator::luaConnectionDynamicMetadataPairsIterator(lua_State* state) {
   if (current_ == parent_.streamInfo().dynamicMetadata().filter_metadata().end()) {
     parent_.iterator_.reset();
     return 0;
@@ -322,7 +328,7 @@ int ConnectionDynamicMetadataMapIterator::luaConnectionDynamicMetadataPairsItera
   return 2;
 }
 
-int DynamicMetadataMapWrapper::luaGet(lua_State* state) {
+absl::StatusOr<int> DynamicMetadataMapWrapper::luaGet(lua_State* state) {
   const char* filter_name = luaL_checkstring(state, 2);
   const auto& metadata = streamInfo().dynamicMetadata().filter_metadata();
   const auto filter_it = metadata.find(filter_name);
@@ -334,9 +340,9 @@ int DynamicMetadataMapWrapper::luaGet(lua_State* state) {
   return 1;
 }
 
-int DynamicMetadataMapWrapper::luaSet(lua_State* state) {
+absl::StatusOr<int> DynamicMetadataMapWrapper::luaSet(lua_State* state) {
   if (iterator_.get() != nullptr) {
-    luaL_error(state, "dynamic metadata map cannot be modified while iterating");
+    return absl::FailedPreconditionError("dynamic metadata map cannot be modified while iterating");
   }
 
   const char* filter_name = luaL_checkstring(state, 2);
@@ -346,8 +352,11 @@ int DynamicMetadataMapWrapper::luaSet(lua_State* state) {
   // so push a copy of the 3rd arg ("value") to the top.
   lua_pushvalue(state, 4);
 
+  auto loaded = Filters::Common::Lua::MetadataMapHelper::loadValue(state);
+  RETURN_IF_NOT_OK_REF(loaded.status());
+
   Protobuf::Struct value;
-  (*value.mutable_fields())[key] = Filters::Common::Lua::MetadataMapHelper::loadValue(state);
+  (*value.mutable_fields())[key] = std::move(*loaded);
   streamInfo().setDynamicMetadata(filter_name, value);
 
   // Pop the copy of the metadata value from the stack.
@@ -355,9 +364,10 @@ int DynamicMetadataMapWrapper::luaSet(lua_State* state) {
   return 0;
 }
 
-int DynamicMetadataMapWrapper::luaPairs(lua_State* state) {
+absl::StatusOr<int> DynamicMetadataMapWrapper::luaPairs(lua_State* state) {
   if (iterator_.get() != nullptr) {
-    luaL_error(state, "cannot create a second iterator before completing the first");
+    return absl::FailedPreconditionError(
+        "cannot create a second iterator before completing the first");
   }
 
   iterator_.reset(DynamicMetadataMapIterator::create(state, *this), true);
@@ -365,7 +375,8 @@ int DynamicMetadataMapWrapper::luaPairs(lua_State* state) {
   return 1;
 }
 
-int ConnectionDynamicMetadataMapWrapper::luaConnectionDynamicMetadataGet(lua_State* state) {
+absl::StatusOr<int>
+ConnectionDynamicMetadataMapWrapper::luaConnectionDynamicMetadataGet(lua_State* state) {
   const char* filter_name = luaL_checkstring(state, 2);
   const auto& metadata = streamInfo().dynamicMetadata().filter_metadata();
   const auto filter_it = metadata.find(filter_name);
@@ -377,9 +388,11 @@ int ConnectionDynamicMetadataMapWrapper::luaConnectionDynamicMetadataGet(lua_Sta
   return 1;
 }
 
-int ConnectionDynamicMetadataMapWrapper::luaConnectionDynamicMetadataPairs(lua_State* state) {
+absl::StatusOr<int>
+ConnectionDynamicMetadataMapWrapper::luaConnectionDynamicMetadataPairs(lua_State* state) {
   if (iterator_.get() != nullptr) {
-    luaL_error(state, "cannot create a second iterator before completing the first");
+    return absl::FailedPreconditionError(
+        "cannot create a second iterator before completing the first");
   }
 
   iterator_.reset(ConnectionDynamicMetadataMapIterator::create(state, *this), true);
@@ -389,7 +402,7 @@ int ConnectionDynamicMetadataMapWrapper::luaConnectionDynamicMetadataPairs(lua_S
   return 1;
 }
 
-int PublicKeyWrapper::luaGet(lua_State* state) {
+absl::StatusOr<int> PublicKeyWrapper::luaGet(lua_State* state) {
   if (public_key_.empty()) {
     lua_pushnil(state);
   } else {
@@ -400,8 +413,17 @@ int PublicKeyWrapper::luaGet(lua_State* state) {
 
 StreamInfo::StreamInfo& FilterStateWrapper::streamInfo() { return parent_.stream_info_; }
 
-int FilterStateWrapper::luaGet(lua_State* state) {
+absl::StatusOr<int> FilterStateWrapper::luaGet(lua_State* state) {
   const char* object_name = luaL_checkstring(state, 2);
+
+  // Read the optional field argument before taking a reference to the filter state:
+  // luaL_checkstring() raises a Lua error for a bad argument, which unwinds the C++ stack, so
+  // nothing with a destructor may be live yet. See DECLARE_LUA_FUNCTION_EX().
+  const char* field_name = nullptr;
+  if (lua_gettop(state) >= 3 && !lua_isnil(state, 3)) {
+    field_name = luaL_checkstring(state, 3);
+  }
+
   const StreamInfo::FilterStateSharedPtr filter_state = streamInfo().filterState();
 
   // Check if filter state exists.
@@ -415,9 +437,8 @@ int FilterStateWrapper::luaGet(lua_State* state) {
     return 0; // Return nil if object not found.
   }
 
-  // Check if there's an optional third parameter for field access.
-  if (lua_gettop(state) >= 3 && !lua_isnil(state, 3)) {
-    const char* field_name = luaL_checkstring(state, 3);
+  // Handle the optional third parameter for field access.
+  if (field_name != nullptr) {
     if (object->hasFieldSupport()) {
       auto field_value = object->getField(field_name);
 
@@ -454,7 +475,7 @@ int FilterStateWrapper::luaGet(lua_State* state) {
   return 0;
 }
 
-int FilterStateWrapper::luaSet(lua_State* state) {
+absl::StatusOr<int> FilterStateWrapper::luaSet(lua_State* state) {
   const char* object_key = luaL_checkstring(state, 2);
   const char* factory_key = luaL_checkstring(state, 3);
   const char* payload = luaL_checkstring(state, 4);
@@ -462,14 +483,14 @@ int FilterStateWrapper::luaSet(lua_State* state) {
   const auto* factory =
       Registry::FactoryRegistry<StreamInfo::FilterState::ObjectFactory>::getFactory(factory_key);
   if (factory == nullptr) {
-    luaL_error(state, "'%s' does not have an object factory", factory_key);
-    return 0;
+    return absl::InvalidArgumentError(
+        absl::StrCat("'", factory_key, "' does not have an object factory"));
   }
 
   auto object = factory->createFromBytes(payload);
   if (object == nullptr) {
-    luaL_error(state, "failed to create an object '%s' from value '%s'", object_key, payload);
-    return 0;
+    return absl::InvalidArgumentError(
+        absl::StrCat("failed to create an object '", object_key, "' from value '", payload, "'"));
   }
 
   streamInfo().filterState()->setData(object_key, std::move(object),
@@ -494,7 +515,7 @@ const Protobuf::Struct& VirtualHostWrapper::getMetadata() const {
   return Protobuf::Struct::default_instance();
 }
 
-int VirtualHostWrapper::luaMetadata(lua_State* state) {
+absl::StatusOr<int> VirtualHostWrapper::luaMetadata(lua_State* state) {
   if (metadata_wrapper_.get() != nullptr) {
     metadata_wrapper_.pushStack();
   } else {
@@ -520,7 +541,7 @@ const Protobuf::Struct& RouteWrapper::getMetadata() const {
   return Protobuf::Struct::default_instance();
 }
 
-int RouteWrapper::luaMetadata(lua_State* state) {
+absl::StatusOr<int> RouteWrapper::luaMetadata(lua_State* state) {
   if (metadata_wrapper_.get() != nullptr) {
     metadata_wrapper_.pushStack();
   } else {
@@ -530,89 +551,89 @@ int RouteWrapper::luaMetadata(lua_State* state) {
   return 1;
 }
 
-int CounterWrapper::luaInc(lua_State*) {
+absl::StatusOr<int> CounterWrapper::luaInc(lua_State*) {
   counter().inc();
   return 0;
 }
 
-int CounterWrapper::luaAdd(lua_State* state) {
+absl::StatusOr<int> CounterWrapper::luaAdd(lua_State* state) {
   const lua_Integer amount = luaL_checkinteger(state, 2);
   if (amount < 0) {
-    luaL_error(state, "counter add amount must be non-negative");
+    return absl::InvalidArgumentError("counter add amount must be non-negative");
   }
   counter().add(static_cast<uint64_t>(amount));
   return 0;
 }
 
-int CounterWrapper::luaValue(lua_State* state) {
+absl::StatusOr<int> CounterWrapper::luaValue(lua_State* state) {
   lua_pushnumber(state, static_cast<lua_Number>(counter().value()));
   return 1;
 }
 
-int GaugeWrapper::luaInc(lua_State*) {
+absl::StatusOr<int> GaugeWrapper::luaInc(lua_State*) {
   gauge().inc();
   return 0;
 }
 
-int GaugeWrapper::luaDec(lua_State*) {
+absl::StatusOr<int> GaugeWrapper::luaDec(lua_State*) {
   gauge().dec();
   return 0;
 }
 
-int GaugeWrapper::luaAdd(lua_State* state) {
+absl::StatusOr<int> GaugeWrapper::luaAdd(lua_State* state) {
   const lua_Integer amount = luaL_checkinteger(state, 2);
   if (amount < 0) {
-    luaL_error(state, "gauge add amount must be non-negative");
+    return absl::InvalidArgumentError("gauge add amount must be non-negative");
   }
   gauge().add(static_cast<uint64_t>(amount));
   return 0;
 }
 
-int GaugeWrapper::luaSub(lua_State* state) {
+absl::StatusOr<int> GaugeWrapper::luaSub(lua_State* state) {
   const lua_Integer amount = luaL_checkinteger(state, 2);
   if (amount < 0) {
-    luaL_error(state, "gauge sub amount must be non-negative");
+    return absl::InvalidArgumentError("gauge sub amount must be non-negative");
   }
   gauge().sub(static_cast<uint64_t>(amount));
   return 0;
 }
 
-int GaugeWrapper::luaSet(lua_State* state) {
+absl::StatusOr<int> GaugeWrapper::luaSet(lua_State* state) {
   const lua_Integer value = luaL_checkinteger(state, 2);
   if (value < 0) {
-    luaL_error(state, "gauge set value must be non-negative");
+    return absl::InvalidArgumentError("gauge set value must be non-negative");
   }
   gauge().set(static_cast<uint64_t>(value));
   return 0;
 }
 
-int GaugeWrapper::luaValue(lua_State* state) {
+absl::StatusOr<int> GaugeWrapper::luaValue(lua_State* state) {
   lua_pushnumber(state, static_cast<lua_Number>(gauge().value()));
   return 1;
 }
 
-int HistogramWrapper::luaRecordValue(lua_State* state) {
+absl::StatusOr<int> HistogramWrapper::luaRecordValue(lua_State* state) {
   const lua_Integer value = luaL_checkinteger(state, 2);
   if (value < 0) {
-    luaL_error(state, "histogram value must be non-negative");
+    return absl::InvalidArgumentError("histogram value must be non-negative");
   }
   histogram().recordValue(static_cast<uint64_t>(value));
   return 0;
 }
 
-int StatsScopeWrapper::luaCounter(lua_State* state) {
+absl::StatusOr<int> StatsScopeWrapper::luaCounter(lua_State* state) {
   const char* name = luaL_checkstring(state, 2);
   CounterWrapper::create(state, scope_, std::string(name));
   return 1;
 }
 
-int StatsScopeWrapper::luaGauge(lua_State* state) {
+absl::StatusOr<int> StatsScopeWrapper::luaGauge(lua_State* state) {
   const char* name = luaL_checkstring(state, 2);
   GaugeWrapper::create(state, scope_, std::string(name));
   return 1;
 }
 
-int StatsScopeWrapper::luaHistogram(lua_State* state) {
+absl::StatusOr<int> StatsScopeWrapper::luaHistogram(lua_State* state) {
   const char* name = luaL_checkstring(state, 2);
 
   // Parse optional unit parameter (default: Unspecified).
@@ -628,10 +649,10 @@ int StatsScopeWrapper::luaHistogram(lua_State* state) {
     } else if (unit_str == "unspecified") {
       unit = Stats::Histogram::Unit::Unspecified;
     } else {
-      luaL_error(state,
-                 "invalid histogram unit '%s', expected 'ms', 'milliseconds', 'microseconds', "
-                 "'bytes', or 'unspecified'",
-                 std::string(unit_str).c_str());
+      return absl::InvalidArgumentError(
+          absl::StrCat("invalid histogram unit '", unit_str,
+                       "', expected 'ms', 'milliseconds', 'microseconds', 'bytes', or "
+                       "'unspecified'"));
     }
   }
 
