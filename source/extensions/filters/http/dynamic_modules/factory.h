@@ -25,8 +25,8 @@ public:
       Server::Configuration::ExtraFactoryContext& extra_context) override;
 
   absl::StatusOr<Http::FilterFactoryCb>
-  createFilterFactory(const FilterConfig& proto_config, const std::string& stat_prefix,
-                      Server::Configuration::ServerFactoryContext& context, Stats::Scope& scope,
+  createFilterFactory(const FilterConfig& proto_config,
+                      Server::Configuration::ServerFactoryContext& context,
                       OptRef<Init::Manager> init_manager);
 
   absl::StatusOr<Router::RouteSpecificFilterConfigConstSharedPtr>

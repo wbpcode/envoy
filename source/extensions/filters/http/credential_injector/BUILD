@@ -32,6 +32,7 @@ envoy_cc_extension(
         "//source/common/protobuf:utility_lib",
         "//source/extensions/filters/http/common:factory_base_lib",
         "//source/extensions/http/injected_credentials/common:credential_config_interface",
+        "@abseil-cpp//absl/strings",
         "@envoy_api//envoy/extensions/filters/http/credential_injector/v3:pkg_cc_proto",
     ],
 )

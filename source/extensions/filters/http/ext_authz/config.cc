@@ -26,7 +26,7 @@ absl::StatusOr<Http::FilterFactoryCb> ExtAuthzFilterConfig::createHttpFilterFact
     Server::Configuration::ExtraFactoryContext& extra_context) {
   absl::Status creation_status = absl::OkStatus();
   const auto filter_config =
-      std::make_shared<FilterConfig>(proto_config, server_context.scope(),
+      std::make_shared<FilterConfig>(proto_config, extra_context.scopeOr(server_context),
                                      extra_context.stats_prefix, server_context, creation_status);
   RETURN_IF_NOT_OK_REF(creation_status);
   // The callback is created in main thread and executed in worker thread, variables except factory

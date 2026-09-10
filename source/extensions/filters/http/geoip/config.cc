@@ -7,6 +7,8 @@
 #include "source/extensions/filters/http/geoip/geoip_filter.h"
 #include "source/server/generic_factory_context.h"
 
+#include "absl/strings/str_cat.h"
+
 namespace Envoy {
 namespace Extensions {
 namespace HttpFilters {
@@ -42,7 +44,14 @@ absl::StatusOr<Http::FilterFactoryCb> GeoipFilterFactory::createFilterFactory(
           provider_config);
   ProtobufTypes::MessagePtr message = Envoy::Config::Utility::translateToFactoryConfig(
       provider_config, context.messageValidationVisitor(), geo_provider_factory);
-  auto driver = geo_provider_factory.createGeoipProviderDriver(*message, stat_prefix,
+  // The filter's own stats above live in the context's scope, so stat_prefix is relative to that
+  // scope. The provider driver creates its stats in the server's scope instead, so it has to be
+  // given stat_prefix joined with the prefix of the context's scope to keep the same stat names.
+  Stats::Scope& scope = context.scope();
+  const std::string scope_prefix = scope.constSymbolTable().toString(scope.prefix());
+  const std::string provider_stat_prefix =
+      scope_prefix.empty() ? stat_prefix : absl::StrCat(scope_prefix, ".", stat_prefix);
+  auto driver = geo_provider_factory.createGeoipProviderDriver(*message, provider_stat_prefix,
                                                                context.serverFactoryContext());
   return [filter_config, driver](Http::FilterChainFactoryCallbacks& callbacks) -> void {
     callbacks.addStreamDecoderFilter(std::make_shared<GeoipFilter>(filter_config, driver));
