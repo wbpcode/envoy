@@ -491,6 +491,10 @@ absl::Status InstanceBase::initializeOrThrow(Network::Address::InstanceConstShar
     if (stats_config.stats_tags().empty() && use_all_default_tags &&
         Runtime::runtimeFeatureEnabled("envoy.reloadable_features.enable_stats_explicit_tags")) {
       stats_store_.setUseExplicitTags(true);
+      // The http response code stats are named the same either way, but only the explicit-tags
+      // implementation attaches the response code, the virtual host, the virtual cluster and the
+      // route to them as tags, so it is only worth using where the store honors those tags.
+      http_context_.setUseExplicitTags(true);
     }
   }
 
