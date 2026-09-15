@@ -212,6 +212,18 @@ class GeoipFilterIntegrationTest : public testing::TestWithParam<Network::Addres
 public:
   GeoipFilterIntegrationTest() : HttpIntegrationTest(Http::CodecType::HTTP1, GetParam()) {}
 
+  // The stat names asserted below must be the same whether or not the HTTP filters are created
+  // with the connection manager's prefixed scope. Exercise both modes of the runtime guard without
+  // doubling the test matrix: the two IP versions run the server with the guard on and off.
+  bool prefixedScope() const { return version_ != Network::Address::IpVersion::v6; }
+
+  void initialize() override {
+    config_helper_.addRuntimeOverride(
+        "envoy.reloadable_features.use_prefixed_scope_for_http_filter",
+        prefixedScope() ? "true" : "false");
+    HttpIntegrationTest::initialize();
+  }
+
   absl::string_view headerValue(const absl::string_view& header_name) const {
     return upstream_request_->headers()
         .get(Http::LowerCaseString(header_name))[0]

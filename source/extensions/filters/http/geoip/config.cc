@@ -26,7 +26,8 @@ absl::Status validateConfig(const envoy::extensions::filters::http::geoip::v3::G
 
 absl::StatusOr<Http::FilterFactoryCb> GeoipFilterFactory::createFilterFactory(
     const envoy::extensions::filters::http::geoip::v3::Geoip& proto_config,
-    const std::string& stat_prefix, Server::Configuration::GenericFactoryContext& context) {
+    const std::string& stat_prefix, const std::string& provider_stat_prefix,
+    Server::Configuration::GenericFactoryContext& context) {
   // Validate configuration before creating the filter.
   auto status = validateConfig(proto_config);
   if (!status.ok()) {
@@ -42,7 +43,7 @@ absl::StatusOr<Http::FilterFactoryCb> GeoipFilterFactory::createFilterFactory(
           provider_config);
   ProtobufTypes::MessagePtr message = Envoy::Config::Utility::translateToFactoryConfig(
       provider_config, context.messageValidationVisitor(), geo_provider_factory);
-  auto driver = geo_provider_factory.createGeoipProviderDriver(*message, stat_prefix,
+  auto driver = geo_provider_factory.createGeoipProviderDriver(*message, provider_stat_prefix,
                                                                context.serverFactoryContext());
   return [filter_config, driver](Http::FilterChainFactoryCallbacks& callbacks) -> void {
     callbacks.addStreamDecoderFilter(std::make_shared<GeoipFilter>(filter_config, driver));
@@ -53,9 +54,14 @@ absl::StatusOr<Http::FilterFactoryCb> GeoipFilterFactory::createHttpFilterFactor
     const envoy::extensions::filters::http::geoip::v3::Geoip& proto_config,
     Server::Configuration::ServerFactoryContext& context,
     Server::Configuration::ExtraFactoryContext& extra_context) {
-  Server::GenericFactoryContextImpl generic_context(
-      context, extra_context.scope, extra_context.visitor, extra_context.init_manager);
-  return createFilterFactory(proto_config, extra_context.stats_prefix, generic_context);
+  // The filter's own stats live in the scope of the generic context below, so they are prefixed by
+  // statsPrefixOr(). The provider driver creates its stats in the server's scope instead, so it is
+  // given the full stats prefix of the filter chain.
+  Server::GenericFactoryContextImpl generic_context(context, extra_context.prefixedScopeOr(context),
+                                                    extra_context.visitor,
+                                                    extra_context.init_manager);
+  return createFilterFactory(proto_config, extra_context.statsPrefixOr(),
+                             extra_context.stats_prefix, generic_context);
 }
 
 /**

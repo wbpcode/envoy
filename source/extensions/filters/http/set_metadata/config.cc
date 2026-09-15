@@ -19,7 +19,7 @@ absl::StatusOr<Http::FilterFactoryCb> SetMetadataConfig::createHttpFilterFactory
     Server::Configuration::ServerFactoryContext& server_context,
     Server::Configuration::ExtraFactoryContext& extra_context) {
   ConfigSharedPtr filter_config(std::make_shared<Config>(
-      proto_config, extra_context.scopeOr(server_context), extra_context.stats_prefix));
+      proto_config, extra_context.prefixedScopeOr(server_context), extra_context.statsPrefixOr()));
 
   return [filter_config](Http::FilterChainFactoryCallbacks& callbacks) -> void {
     callbacks.addStreamDecoderFilter(

@@ -153,6 +153,8 @@ absl::StatusOr<Envoy::Http::FilterFactoryCb>
 DynamicModuleConfigFactory::createHttpFilterFactoryFromProtoTyped(
     const FilterConfig& proto_config, Server::Configuration::ServerFactoryContext& context,
     Server::Configuration::ExtraFactoryContext& extra_context) {
+  // The stats of a module are named after the metrics namespace that the module configures, not
+  // after the stat prefix of the filter, so they keep the plain scope rather than the prefixed one.
   return createFilterFactory(proto_config, extra_context.stats_prefix, context,
                              extra_context.scopeOr(context), extra_context.init_manager);
 }

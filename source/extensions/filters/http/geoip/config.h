@@ -27,10 +27,12 @@ public:
 private:
   // Shared factory creation used by the listener/cluster and route/vhost-level paths. A
   // GenericFactoryContext is used so the filter's scope and validation visitor stay correct for
-  // each path, while the provider driver is created with the server factory context.
+  // each path, while the provider driver is created with the server factory context. The driver
+  // therefore needs the prefix of the filter chain spelled out in provider_stat_prefix, while
+  // stat_prefix is relative to the scope of the given context.
   absl::StatusOr<Http::FilterFactoryCb>
   createFilterFactory(const envoy::extensions::filters::http::geoip::v3::Geoip& proto_config,
-                      const std::string& stat_prefix,
+                      const std::string& stat_prefix, const std::string& provider_stat_prefix,
                       Server::Configuration::GenericFactoryContext& context);
 };
 

@@ -6,12 +6,14 @@
 #include "envoy/config/typed_config.h"
 #include "envoy/extensions/filters/common/dependency/v3/dependency.pb.h"
 #include "envoy/http/filter.h"
+#include "envoy/http/http_filter_factory_context.h"
 #include "envoy/init/manager.h"
 #include "envoy/network/filter.h"
 #include "envoy/server/drain_manager.h"
 #include "envoy/server/factory_context.h"
 
 #include "source/common/common/assert.h"
+#include "source/common/common/empty_string.h"
 #include "source/common/common/macros.h"
 #include "source/common/protobuf/protobuf.h"
 
@@ -258,6 +260,12 @@ struct ExtraFactoryContext {
   // configurations. When it is nullopt, factories that need a scope should fall back to the scope
   // of the ServerFactoryContext.
   OptRef<Stats::Scope> scope = std::nullopt;
+  // Optional stats scope that is already prefixed by the stats prefix of the filter chain, such as
+  // the 'http.<stat_prefix>.' scope of the HTTP connection manager. It is only set for the
+  // contexts that provide one, and when it is set statsPrefixOr() is empty: the prefix lives in the
+  // name of this scope instead of in the string that is handed to the factories. Factories should
+  // not read it directly but go through prefixedScopeOr() and statsPrefixOr().
+  OptRef<Stats::Scope> prefixed_scope = std::nullopt;
   // Whether the filter is being created for an upstream filter chain rather than a downstream one.
   // Only dual filters, that is filters that can be configured in both the downstream and the
   // upstream filter chains, need to care about this. It is always false for contexts that can only
@@ -268,9 +276,42 @@ struct ExtraFactoryContext {
    * @return the scope to use for stats: this context's own scope if it has one, otherwise the scope
    *         of the given server factory context. Filters should prefer this over reading scope
    *         directly so that they work on both the listener/cluster and the route/embedded paths.
+   *         This never returns the prefixed scope, so the stat names that are created in the
+   *         returned scope must be prefixed by stats_prefix. It is the right scope for the few
+   *         stats that are not named after the stat prefix of the filter and must therefore keep
+   *         their place in the stat tree no matter how the filter chain scopes its filters: stats
+   *         of a nested extension that carries a namespace of its own, stats that the gRPC client
+   *         or the router charge to the root scope, etc. Every other filter should use
+   *         prefixedScopeOr() instead.
    */
   template <class ContextType> Stats::Scope& scopeOr(ContextType& context) const {
     return scope.has_value() ? scope.ref() : context.scope();
+  }
+
+  /**
+   * @return the same as scopeOr(), except that this context's prefixed scope takes priority when
+   *         it has one. This is the scope that filters should create their own stats in, and the
+   *         names they create in it must be prefixed by statsPrefixOr() rather than by
+   *         stats_prefix: when the prefixed scope is used the prefix is already part of the name
+   *         of the scope.
+   */
+  template <class ContextType> Stats::Scope& prefixedScopeOr(ContextType& context) const {
+    if (prefixed_scope.has_value()) {
+      return prefixed_scope.ref();
+    }
+    return scopeOr(context);
+  }
+
+  /**
+   * @return the prefix to prepend to the stat names that are created in prefixedScopeOr(). It is
+   *         the empty string when a prefixed scope is available, because the prefix is then already
+   *         part of the name of that scope, and stats_prefix otherwise.
+   *         WARNING: This should be used with prefixedScopeOr() together to ensure that the
+   *         stat names are correctly prefixed.
+   *
+   */
+  const std::string& statsPrefixOr() const {
+    return prefixed_scope.has_value() ? EMPTY_STRING : stats_prefix;
   }
 
   /**
@@ -287,6 +328,17 @@ struct ExtraFactoryContext {
     ExtraFactoryContext extra_context{context.messageValidationVisitor(), stats_prefix};
     extra_context.init_manager = context.initManager();
     extra_context.scope = context.scope();
+    // The HTTP connection manager may hand its filters a context that carries the
+    // 'http.<stat_prefix>.' scope in prefixedScope(). Every other factory context has a
+    // prefixedScope() of its own that has nothing to do with the stat prefix of the filters, hence
+    // the type check rather than an unconditional read. The scope stands in for one prefix only,
+    // so it is not handed to a filter that is created with a different one: an ECDS filter is
+    // created from the very same context but with its own
+    // 'extension_config_discovery.http_filter.<name>.' prefix and keeps the unprefixed scope.
+    if (auto* http_context = dynamic_cast<Http::HttpFilterFactoryContext*>(&context);
+        http_context != nullptr && stats_prefix == http_context->statsPrefix()) {
+      extra_context.prefixed_scope = http_context->prefixedScope();
+    }
     return extra_context;
   }
 

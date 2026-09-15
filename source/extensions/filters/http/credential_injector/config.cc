@@ -15,8 +15,9 @@ absl::StatusOr<Envoy::Http::FilterFactoryCb>
 CredentialInjectorFilterFactory::createFilterFactoryFromProtoHelper(
     const envoy::extensions::filters::http::credential_injector::v3::CredentialInjector&
         proto_config,
-    const std::string& stats_prefix, Server::Configuration::ServerFactoryContext& context,
-    Stats::Scope& scope, Init::Manager& init_manager) const {
+    const std::string& stats_prefix, const std::string& credential_stats_prefix,
+    Server::Configuration::ServerFactoryContext& context, Stats::Scope& scope,
+    Init::Manager& init_manager) const {
 
   // Find the credential injector factory.
   auto* config_factory = Envoy::Config::Utility::getFactory<NamedCredentialInjectorConfigFactory>(
@@ -34,7 +35,7 @@ CredentialInjectorFilterFactory::createFilterFactoryFromProtoHelper(
       *config_factory);
   CredentialInjectorSharedPtr credential_injector =
       config_factory->createCredentialInjectorFromProto(
-          *message, stats_prefix + "credential_injector.", context, init_manager);
+          *message, credential_stats_prefix + "credential_injector.", context, init_manager);
 
   FilterConfigSharedPtr config =
       std::make_shared<FilterConfig>(std::move(credential_injector), proto_config.overwrite(),
@@ -56,8 +57,9 @@ CredentialInjectorFilterFactory::createHttpFilterFactoryFromProtoTyped(
   Init::Manager& init_manager = extra_context.init_manager.has_value()
                                     ? extra_context.init_manager.ref()
                                     : context.initManager();
-  return createFilterFactoryFromProtoHelper(proto_config, extra_context.stats_prefix, context,
-                                            extra_context.scopeOr(context), init_manager);
+  return createFilterFactoryFromProtoHelper(proto_config, extra_context.statsPrefixOr(),
+                                            extra_context.stats_prefix, context,
+                                            extra_context.prefixedScopeOr(context), init_manager);
 }
 
 REGISTER_FACTORY(CredentialInjectorFilterFactory,
