@@ -3,6 +3,7 @@
 #include <functional>
 #include <memory>
 
+#include "envoy/common/callback.h"
 #include "envoy/data/core/v3/health_check_event.pb.h"
 #include "envoy/upstream/upstream.h"
 
@@ -48,8 +49,12 @@ public:
    * Install a callback that will be invoked every time a health check round is completed for
    * a host. The host's health check state may not have changed.
    * @param callback supplies the callback to invoke.
+   * @return CallbackHandlePtr a handle that removes the callback when it is destroyed. A
+   *         callback may remove itself from within the callback, but must not remove any other
+   *         callback from within a callback.
    */
-  virtual void addHostCheckCompleteCb(HostStatusCb callback) PURE;
+  ABSL_MUST_USE_RESULT virtual Common::CallbackHandlePtr
+  addHostCheckCompleteCb(HostStatusCb callback) PURE;
 
   /**
    * Start cyclic health checking based on the provided settings and the type of health checker.

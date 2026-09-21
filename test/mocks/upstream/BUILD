@@ -301,7 +301,9 @@ envoy_cc_mock(
     srcs = ["health_checker.cc"],
     hdrs = ["health_checker.h"],
     deps = [
+        "//envoy/common:callback",
         "//envoy/upstream:health_checker_interface",
+        "//source/common/common:callback_impl_lib",
     ],
 )
 

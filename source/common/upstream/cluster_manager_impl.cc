@@ -968,8 +968,9 @@ ClusterManagerImpl::loadCluster(const envoy::config::cluster::v3::Cluster& clust
                     cluster_info->name()));
   }
 
+  Common::CallbackHandlePtr health_check_cb_handle;
   if (new_cluster->healthChecker() != nullptr) {
-    new_cluster->healthChecker()->addHostCheckCompleteCb(
+    health_check_cb_handle = new_cluster->healthChecker()->addHostCheckCompleteCb(
         [this](HostSharedPtr host, HealthTransition changed_state, HealthState) {
           if (changed_state == HealthTransition::Changed &&
               host->healthFlagGet(Host::HealthFlag::FAILED_ACTIVE_HC)) {
@@ -1004,6 +1005,7 @@ ClusterManagerImpl::loadCluster(const envoy::config::cluster::v3::Cluster& clust
                                       avoid_cds_removal));
     ASSERT(inserted);
   }
+  cluster_entry_it->second->health_check_cb_handle_ = std::move(health_check_cb_handle);
 
   if (cluster_provided_lb) {
     cluster_entry_it->second->thread_aware_lb_ = std::move(lb);

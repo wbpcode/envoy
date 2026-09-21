@@ -1,6 +1,9 @@
 #pragma once
 
 #include <memory>
+#include <vector>
+
+#include "envoy/common/callback.h"
 
 #include "test/mocks/common.h"
 #include "test/mocks/event/mocks.h"
@@ -37,6 +40,9 @@ public:
   NiceMock<Random::MockRandomGenerator> random_;
   NiceMock<Runtime::MockLoader> runtime_;
   NiceMock<Server::Configuration::MockHealthCheckerFactoryContext> context_;
+  // Keeps the callbacks installed via HealthChecker::addHostCheckCompleteCb() registered for the
+  // duration of the test.
+  std::vector<Common::CallbackHandlePtr> host_status_cb_handles_;
 };
 
 } // namespace Upstream

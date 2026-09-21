@@ -193,10 +193,10 @@ public:
   }
 
   void addCompletionCallback() {
-    health_checker_->addHostCheckCompleteCb(
+    host_status_cb_handles_.push_back(health_checker_->addHostCheckCompleteCb(
         [this](HostSharedPtr host, HealthTransition changed_state, HealthState) -> void {
           onHostStatus(host, changed_state);
-        });
+        }));
   }
 
   void setupHC() {

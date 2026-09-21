@@ -494,6 +494,7 @@ private:
   absl::node_hash_map<HostSharedPtr, DetectorHostMonitorImpl*> host_monitors_;
   EventLoggerSharedPtr event_logger_;
   Common::CallbackHandlePtr member_update_cb_;
+  Common::CallbackHandlePtr health_check_cb_handle_;
   Random::RandomGenerator& random_generator_;
 
   // EjectionPair for external and local origin events.

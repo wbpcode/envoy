@@ -860,6 +860,7 @@ private:
     SystemTime last_updated_;
     Common::CallbackHandlePtr member_update_cb_;
     Common::CallbackHandlePtr priority_update_cb_;
+    Common::CallbackHandlePtr health_check_cb_handle_;
     // Accumulates per-priority host updates on the main thread (see the priority update callback in
     // onClusterInit()).
     ThreadLocalClusterUpdateParams pending_update_params_;

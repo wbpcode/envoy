@@ -342,7 +342,7 @@ void DetectorImpl::initialize(Cluster& cluster) {
   }
 
   if (config_.successfulActiveHealthCheckUnejectHost() && cluster.healthChecker() != nullptr) {
-    cluster.healthChecker()->addHostCheckCompleteCb(
+    health_check_cb_handle_ = cluster.healthChecker()->addHostCheckCompleteCb(
         [this](HostSharedPtr host, HealthTransition, HealthState current_check_result) {
           // If the host is ejected by outlier detection and active health check succeeds,
           // we should treat this host as healthy.

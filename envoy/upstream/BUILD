@@ -55,6 +55,7 @@ envoy_cc_library(
     hdrs = ["health_checker.h"],
     deps = [
         ":upstream_interface",
+        "//envoy/common:callback",
         "@envoy_api//envoy/data/core/v3:pkg_cc_proto",
     ],
 )

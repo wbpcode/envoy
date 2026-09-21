@@ -108,7 +108,7 @@ public:
   // fires. Returns whether a result was delivered.
   bool runUntilFirstResult(std::chrono::milliseconds fallback = std::chrono::seconds(15)) {
     bool done = false;
-    health_checker_->addHostCheckCompleteCb(
+    auto cb_handle = health_checker_->addHostCheckCompleteCb(
         [&](const Upstream::HostSharedPtr&, Upstream::HealthTransition, Upstream::HealthState) {
           done = true;
           dispatcher_->exit();

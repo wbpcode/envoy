@@ -1959,32 +1959,44 @@ void ClusterImplBase::onPreInitComplete() {
 
 void ClusterImplBase::onInitDone() {
   info()->configUpdateStats().warming_state_.set(0);
-  if (health_checker_ && pending_initialize_health_checks_ == 0) {
+  if (health_checker_ && pending_initialize_health_check_hosts_.empty()) {
     if (Runtime::runtimeFeatureEnabled(
             "envoy.reloadable_features.health_check_after_cluster_warming")) {
       health_checker_->start();
     }
+    size_t host_count = 0;
+    for (auto& host_set : prioritySet().hostSetsPerPriority()) {
+      host_count += host_set->hosts().size();
+    }
+    pending_initialize_health_check_hosts_.reserve(host_count);
     for (auto& host_set : prioritySet().hostSetsPerPriority()) {
       for (auto& host : host_set->hosts()) {
         if (host->disableActiveHealthCheck()) {
           continue;
         }
-        ++pending_initialize_health_checks_;
+        pending_initialize_health_check_hosts_.insert(host);
       }
     }
     ENVOY_LOG(debug, "Cluster onInitDone pending initialize health check count {}",
-              pending_initialize_health_checks_);
+              pending_initialize_health_check_hosts_.size());
 
-    // TODO(mattklein123): Remove this callback when done.
-    health_checker_->addHostCheckCompleteCb(
-        [this](HostSharedPtr, HealthTransition, HealthState) -> void {
-          if (pending_initialize_health_checks_ > 0 && --pending_initialize_health_checks_ == 0) {
+    // This callback is only needed until the cluster is initialized; finishInitialization()
+    // removes it by releasing the handle. It therefore only ever runs with hosts still pending,
+    // and cannot finish initialization twice.
+    health_check_init_cb_handle_ = health_checker_->addHostCheckCompleteCb(
+        [this](const HostSharedPtr& host, HealthTransition, HealthState) -> void {
+          // Only the first check result of each host counts towards initialization. A host may
+          // complete several checks (e.g. a short interval, or a passive health check failure)
+          // while other hosts have not been checked even once, so counting results instead of
+          // hosts would finish initialization too early.
+          pending_initialize_health_check_hosts_.erase(host);
+          if (pending_initialize_health_check_hosts_.empty()) {
             finishInitialization();
           }
         });
   }
 
-  if (pending_initialize_health_checks_ == 0) {
+  if (pending_initialize_health_check_hosts_.empty()) {
     finishInitialization();
   }
 }
@@ -1992,6 +2004,13 @@ void ClusterImplBase::onInitDone() {
 void ClusterImplBase::finishInitialization() {
   ASSERT(initialization_complete_callback_ != nullptr);
   ASSERT(initialization_started_);
+
+  // Neither the wait list nor the callback that maintains it is needed once the cluster is
+  // initialized. Note that releasing the handle here removes the callback while the health
+  // checker may be running it, which CallbackManager explicitly supports for a callback that
+  // removes itself.
+  pending_initialize_health_check_hosts_ = {};
+  health_check_init_cb_handle_.reset();
 
   // Snap a copy of the completion callback so that we can set it to nullptr to unblock
   // reloadHealthyHosts(). See that function for more info on why we do this.
@@ -2075,7 +2094,7 @@ void ClusterImplBase::setHealthChecker(const HealthCheckerSharedPtr& health_chec
           "envoy.reloadable_features.health_check_after_cluster_warming")) {
     health_checker_->start();
   }
-  health_checker_->addHostCheckCompleteCb(
+  health_check_cb_handle_ = health_checker_->addHostCheckCompleteCb(
       [this](const HostSharedPtr& host, HealthTransition changed_state, HealthState) -> void {
         // If we get a health check completion that resulted in a state change, signal to
         // update the host sets on all threads.

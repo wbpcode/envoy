@@ -308,6 +308,7 @@ envoy_cc_test_library(
         "health_checker_test_base.h",
     ],
     deps = [
+        "//envoy/common:callback",
         "//test/mocks:common_lib",
         "//test/mocks/event:event_mocks",
         "//test/mocks/runtime:runtime_mocks",

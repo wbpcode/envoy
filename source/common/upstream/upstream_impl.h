@@ -69,6 +69,7 @@
 #include "source/extensions/upstreams/tcp/config.h"
 #include "source/server/transport_socket_config_impl.h"
 
+#include "absl/container/flat_hash_set.h"
 #include "absl/container/inlined_vector.h"
 #include "absl/container/node_hash_set.h"
 #include "absl/synchronization/mutex.h"
@@ -1326,6 +1327,7 @@ protected:
   ClusterInfoConstSharedPtr info_; // This cluster info stores the stats scope so it must be
                                    // initialized first and destroyed last.
   HealthCheckerSharedPtr health_checker_;
+  Common::CallbackHandlePtr health_check_cb_handle_;
   Outlier::DetectorSharedPtr outlier_detector_;
   const bool wait_for_warm_on_init_;
 
@@ -1348,7 +1350,14 @@ private:
 
   bool initialization_started_{};
   std::function<absl::Status()> initialization_complete_callback_;
-  uint64_t pending_initialize_health_checks_{};
+  // Removes the health check callback that maintains the wait list below. Held only until
+  // initialization completes.
+  Common::CallbackHandlePtr health_check_init_cb_handle_;
+  // Hosts that have not yet completed their first active health check. Initialization is
+  // complete once this is empty. This is a set of hosts rather than a count because a single
+  // host may complete multiple health checks (and thus fire the completion callback multiple
+  // times) before other hosts have been checked at all.
+  absl::flat_hash_set<HostSharedPtr> pending_initialize_health_check_hosts_;
   const bool local_cluster_;
   Config::ConstMetadataSharedPoolSharedPtr const_metadata_shared_pool_;
   ConstLocalitySharedPoolSharedPtr const_locality_shared_pool_;

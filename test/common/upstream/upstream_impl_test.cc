@@ -3365,11 +3365,13 @@ TEST_F(StaticClusterImplTest, InitialHostsDisableHC) {
   EXPECT_EQ(1UL, cluster->info()->endpointStats().membership_healthy_.value());
   EXPECT_EQ(0UL, cluster->info()->endpointStats().membership_degraded_.value());
 
-  // Perform a health check for the second host, and then the initialization is finished.
+  // Perform a health check for the second host, and then the initialization is finished. The
+  // first host has active health checking disabled, so it is never health checked and never
+  // contributes to initialization.
   EXPECT_CALL(initialize_cb, Call).WillOnce(Return(absl::OkStatus()));
   cluster->prioritySet().hostSetsPerPriority()[0]->hosts()[1]->healthFlagClear(
       Host::HealthFlag::FAILED_ACTIVE_HC);
-  health_checker->runCallbacks(cluster->prioritySet().hostSetsPerPriority()[0]->hosts()[0],
+  health_checker->runCallbacks(cluster->prioritySet().hostSetsPerPriority()[0]->hosts()[1],
                                HealthTransition::Changed, HealthState::Healthy);
   EXPECT_EQ(2UL, cluster->prioritySet().hostSetsPerPriority()[0]->healthyHosts().size());
 }
@@ -7409,6 +7411,129 @@ TEST_P(ParametrizedClusterInfoImplTest, ClusterRetryPolicyWithRateLimitedBackoff
   const auto* retry_policy = cluster->info()->httpProtocolOptions().retryPolicy();
   ASSERT_NE(nullptr, retry_policy);
   EXPECT_EQ(3, retry_policy->numRetries());
+}
+
+// A single host may complete several health checks (short interval, retriable failures, passive
+// health check results, ...) before another host has been checked even once. Those extra results
+// must not stand in for the hosts that are still pending their first check.
+TEST_F(StaticClusterImplTest, InitializationWaitsForEveryHostToBeHealthChecked) {
+  const std::string yaml = R"EOF(
+    name: staticcluster
+    connect_timeout: 0.25s
+    type: STATIC
+    lb_policy: ROUND_ROBIN
+    load_assignment:
+        endpoints:
+          - lb_endpoints:
+            - endpoint:
+                address:
+                  socket_address:
+                    address: 10.0.0.1
+                    port_value: 11001
+            - endpoint:
+                address:
+                  socket_address:
+                    address: 10.0.0.1
+                    port_value: 11002
+  )EOF";
+
+  envoy::config::cluster::v3::Cluster cluster_config = parseClusterFromV3Yaml(yaml);
+
+  Envoy::Upstream::ClusterFactoryContextImpl factory_context(server_context_, nullptr, nullptr,
+                                                             false);
+  std::shared_ptr<StaticClusterImpl> cluster = createCluster(cluster_config, factory_context);
+
+  std::shared_ptr<MockHealthChecker> health_checker(new NiceMock<MockHealthChecker>());
+  cluster->setHealthChecker(health_checker);
+
+  bool initialized = false;
+  cluster->initialize([&initialized]() {
+    initialized = true;
+    return absl::OkStatus();
+  });
+
+  ASSERT_EQ(2UL, cluster->prioritySet().hostSetsPerPriority()[0]->hosts().size());
+  HostSharedPtr host1 = cluster->prioritySet().hostSetsPerPriority()[0]->hosts()[0];
+  HostSharedPtr host2 = cluster->prioritySet().hostSetsPerPriority()[0]->hosts()[1];
+
+  // The cluster registers a permanent callback plus one that only tracks initialization.
+  EXPECT_EQ(2UL, health_checker->callbacks_.size());
+
+  // The first host reports a failure, a second failure and then a success, all before the second
+  // host has been checked at all.
+  host1->healthFlagClear(Host::HealthFlag::PENDING_ACTIVE_HC);
+  health_checker->runCallbacks(host1, HealthTransition::Changed, HealthState::Unhealthy);
+  EXPECT_FALSE(initialized);
+  health_checker->runCallbacks(host1, HealthTransition::Unchanged, HealthState::Unhealthy);
+  EXPECT_FALSE(initialized);
+  host1->healthFlagClear(Host::HealthFlag::FAILED_ACTIVE_HC);
+  health_checker->runCallbacks(host1, HealthTransition::Changed, HealthState::Healthy);
+  EXPECT_FALSE(initialized);
+
+  // Initialization only completes once the second host has been checked as well.
+  host2->healthFlagClear(Host::HealthFlag::PENDING_ACTIVE_HC);
+  host2->healthFlagClear(Host::HealthFlag::FAILED_ACTIVE_HC);
+  health_checker->runCallbacks(host2, HealthTransition::Changed, HealthState::Healthy);
+  EXPECT_TRUE(initialized);
+  EXPECT_EQ(2UL, cluster->prioritySet().hostSetsPerPriority()[0]->healthyHosts().size());
+
+  // The initialization callback removed itself once it was done, from inside the health check
+  // completion it was running.
+  EXPECT_EQ(1UL, health_checker->callbacks_.size());
+  health_checker->runCallbacks(host1, HealthTransition::Unchanged, HealthState::Healthy);
+}
+
+// Health check results for hosts that are not waited on (e.g. a host with active health checking
+// disabled) do not contribute to initialization either.
+TEST_F(StaticClusterImplTest, InitializationIgnoresUntrackedHostHealthCheckResults) {
+  const std::string yaml = R"EOF(
+    name: staticcluster
+    connect_timeout: 0.25s
+    type: STATIC
+    lb_policy: ROUND_ROBIN
+    load_assignment:
+        endpoints:
+          - lb_endpoints:
+            - endpoint:
+                address:
+                  socket_address:
+                    address: 10.0.0.1
+                    port_value: 11001
+                health_check_config:
+                  disable_active_health_check: true
+            - endpoint:
+                address:
+                  socket_address:
+                    address: 10.0.0.1
+                    port_value: 11002
+  )EOF";
+
+  envoy::config::cluster::v3::Cluster cluster_config = parseClusterFromV3Yaml(yaml);
+
+  Envoy::Upstream::ClusterFactoryContextImpl factory_context(server_context_, nullptr, nullptr,
+                                                             false);
+  std::shared_ptr<StaticClusterImpl> cluster = createCluster(cluster_config, factory_context);
+
+  std::shared_ptr<MockHealthChecker> health_checker(new NiceMock<MockHealthChecker>());
+  cluster->setHealthChecker(health_checker);
+
+  bool initialized = false;
+  cluster->initialize([&initialized]() {
+    initialized = true;
+    return absl::OkStatus();
+  });
+
+  ASSERT_EQ(2UL, cluster->prioritySet().hostSetsPerPriority()[0]->hosts().size());
+  HostSharedPtr disabled_host = cluster->prioritySet().hostSetsPerPriority()[0]->hosts()[0];
+  HostSharedPtr checked_host = cluster->prioritySet().hostSetsPerPriority()[0]->hosts()[1];
+
+  health_checker->runCallbacks(disabled_host, HealthTransition::Changed, HealthState::Healthy);
+  EXPECT_FALSE(initialized);
+
+  checked_host->healthFlagClear(Host::HealthFlag::PENDING_ACTIVE_HC);
+  checked_host->healthFlagClear(Host::HealthFlag::FAILED_ACTIVE_HC);
+  health_checker->runCallbacks(checked_host, HealthTransition::Changed, HealthState::Healthy);
+  EXPECT_TRUE(initialized);
 }
 
 } // namespace

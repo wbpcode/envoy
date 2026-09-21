@@ -73,10 +73,11 @@ MetadataConstSharedPtr HealthCheckerImplBase::initTransportSocketMatchMetadata(
 }
 
 HealthCheckerImplBase::~HealthCheckerImplBase() {
-  // First clear callbacks that otherwise will be run from
+  // First stop running callbacks that otherwise would be run from
   // ActiveHealthCheckSession::onDeferredDeleteBase(). This prevents invoking a callback on a
-  // deleted parent object (e.g. Cluster).
-  callbacks_.clear();
+  // deleted parent object (e.g. Cluster). The callbacks cannot simply be dropped here because
+  // their owners hold handles that remove them.
+  destroying_ = true;
   // ASSERTs inside the session destructor check to make sure we have been previously deferred
   // deleted. Unify that logic here before actual destruction happens.
   for (auto& session : active_sessions_) {
@@ -200,9 +201,10 @@ void HealthCheckerImplBase::onClusterMemberUpdate(const HostVector& hosts_added,
 
 void HealthCheckerImplBase::runCallbacks(HostSharedPtr host, HealthTransition changed_state,
                                          HealthState current_check_result) {
-  for (const HostStatusCb& cb : callbacks_) {
-    cb(host, changed_state, current_check_result);
+  if (destroying_) {
+    return;
   }
+  callbacks_.runCallbacks(host, changed_state, current_check_result);
 }
 
 void HealthCheckerImplBase::HealthCheckHostMonitorImpl::setUnhealthy(UnhealthyType type) {

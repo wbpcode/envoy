@@ -11,6 +11,7 @@
 #include "envoy/type/matcher/string.pb.h"
 #include "envoy/upstream/health_checker.h"
 
+#include "source/common/common/callback_impl.h"
 #include "source/common/common/logger.h"
 #include "source/common/common/matchers.h"
 #include "source/common/network/transport_socket_options_impl.h"
@@ -46,7 +47,9 @@ class HealthCheckerImplBase : public HealthChecker,
                               public std::enable_shared_from_this<HealthCheckerImplBase> {
 public:
   // Upstream::HealthChecker
-  void addHostCheckCompleteCb(HostStatusCb callback) override { callbacks_.push_back(callback); }
+  Common::CallbackHandlePtr addHostCheckCompleteCb(HostStatusCb callback) override {
+    return callbacks_.add(callback);
+  }
   void start() override;
   std::shared_ptr<const Network::TransportSocketOptionsImpl> transportSocketOptions() const {
     return transport_socket_options_;
@@ -149,7 +152,7 @@ private:
   static MetadataConstSharedPtr
   initTransportSocketMatchMetadata(const envoy::config::core::v3::HealthCheck& config);
 
-  std::list<HostStatusCb> callbacks_;
+  Common::CallbackManager<void, const HostSharedPtr&, HealthTransition, HealthState> callbacks_;
   const std::chrono::milliseconds interval_;
   const std::chrono::milliseconds no_traffic_interval_;
   const std::chrono::milliseconds no_traffic_healthy_interval_;
@@ -164,6 +167,9 @@ private:
   const MetadataConstSharedPtr transport_socket_match_metadata_;
   const Common::CallbackHandlePtr member_update_cb_;
   bool started_{false};
+  // Set while the health checker is being destroyed, to stop callbacks from running against
+  // owners that may already be gone. See the destructor.
+  bool destroying_{false};
 };
 
 } // namespace Upstream
