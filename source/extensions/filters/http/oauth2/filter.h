@@ -33,6 +33,8 @@ namespace Extensions {
 namespace HttpFilters {
 namespace Oauth2 {
 
+constexpr size_t MaxCookieSize = 4096;
+
 class OAuth2Client;
 
 // Helper class used to fetch secrets (usually from SDS).
@@ -74,13 +76,29 @@ private:
   COUNTER(oauth_success)                                                                           \
   COUNTER(oauth_refreshtoken_success)                                                              \
   COUNTER(oauth_refreshtoken_failure)                                                              \
-  COUNTER(oauth_legacy_cbc_decrypt)
+  COUNTER(oauth_legacy_cbc_decrypt)                                                                \
+  COUNTER(oauth_token_cookie_chunked)                                                              \
+  COUNTER(oauth_token_cookie_reassembled)                                                          \
+  COUNTER(oauth_token_cookie_malformed_chunks)                                                     \
+  COUNTER(oauth_token_cookie_oversized)
 
 /**
  * Wrapper struct filter stats. @see stats_macros.h
  */
 struct FilterStats {
   ALL_OAUTH_FILTER_STATS(GENERATE_COUNTER_STRUCT)
+};
+
+// The forms of a token cookie a request carries.
+struct TokenCookieState {
+  // The token is present as a single cookie.
+  bool single_{false};
+  // The chunk count cookie is present.
+  bool chunks_{false};
+  // The chunk count cookie is malformed, or a chunk it counts is missing or all of them are empty.
+  bool malformed_{false};
+  // The chunk count from a valid chunk count cookie, 0 when it is missing or malformed.
+  size_t count_{0};
 };
 
 /**
@@ -359,6 +377,14 @@ private:
   std::string new_expires_;
   std::string host_;
   std::string original_request_url_;
+  // What decryptAndUpdateOAuthTokenCookies() found on the request for each token cookie, so
+  // response writes delete the forms the client has without reading the rewritten request again.
+  TokenCookieState bearer_token_cookie_state_;
+  TokenCookieState id_token_cookie_state_;
+  TokenCookieState refresh_token_cookie_state_;
+  // Latched from the envoy.reloadable_features.oauth2_chunk_large_token_cookies runtime guard at
+  // the start of each request.
+  bool chunk_large_token_cookies_{false};
   Http::RequestHeaderMap* request_headers_{nullptr};
   bool was_refresh_token_flow_{false};
 
@@ -380,16 +406,46 @@ private:
                                             const std::chrono::seconds& expires_in) const;
   std::string getExpiresTimeForIdToken(const std::string& id_token,
                                        const std::chrono::seconds& expires_in) const;
+  // The per cookie type values that fill the cookie tail format string.
+  struct CookieTailParts {
+    absl::string_view expires_time_;
+    absl::string_view same_site_;
+  };
+  CookieTailParts cookieTailParts(int cookie_type) const;
   std::string BuildCookieTail(int cookie_type) const;
+  size_t cookieTailSize(int cookie_type) const;
   void addResponseCookies(Http::ResponseHeaderMap& headers, const std::string& encoded_token) const;
+  bool tokenCookiesFit() const;
+  // Writes the token as a single cookie or as chunks, or deletes the one on the request when the
+  // token is empty.
+  void addTokenCookie(Http::ResponseHeaderMap& headers, absl::string_view cookie_name,
+                      TokenCookieState state, absl::string_view token, int cookie_type,
+                      absl::string_view cookie_domain) const;
+  void setCookie(Http::ResponseHeaderMap& headers, absl::string_view key, absl::string_view value,
+                 absl::string_view cookie_tail) const;
+  // Writes the value as cookie_count cookies, as returned by tokenCookieCount().
+  void setTokenCookie(Http::ResponseHeaderMap& headers, absl::string_view key,
+                      absl::string_view data, absl::string_view cookie_tail,
+                      size_t cookie_count) const;
+  // Adds expired Set-Cookie response headers that instruct the client to delete the forms of the
+  // token recorded for the request that the new value, written as new_cookie_count cookies (0
+  // when there is no new value), does not overwrite. This does not delete server-side state.
+  void deleteRecordedTokenCookies(Http::ResponseHeaderMap& headers, absl::string_view cookie_name,
+                                  TokenCookieState state, size_t new_cookie_count,
+                                  absl::string_view cookie_domain,
+                                  absl::string_view maybe_secure_attr) const;
+  void sendServiceUnavailableResponse(absl::string_view details);
   const std::string& bearerPrefix() const;
   CallbackValidationResult validateOAuthCallback(const Http::RequestHeaderMap& headers,
                                                  const absl::string_view path_str) const;
   bool validateCsrfToken(const Http::RequestHeaderMap& headers,
                          const std::string& csrf_token) const;
-  void decryptAndUpdateOAuthTokenCookies(Http::RequestHeaderMap& headers) const;
-  std::string encryptToken(const std::string& token) const;
-  std::string decryptToken(const std::string& encrypted_token) const;
+  void decryptAndUpdateOAuthTokenCookies(Http::RequestHeaderMap& headers);
+  std::string encryptToken(absl::string_view token) const;
+  // Upper bound of the size of encryptToken() output for a token of token_size bytes, so a size
+  // can be checked without encrypting.
+  static size_t maxEncryptedTokenSize(size_t token_size);
+  std::string decryptToken(absl::string_view encrypted_token) const;
   void removeOAuthFlowCookies(Http::RequestHeaderMap& headers) const;
 };
 

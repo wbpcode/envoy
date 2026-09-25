@@ -76,6 +76,10 @@ RUNTIME_GUARD(envoy_reloadable_features_lua_flow_control_while_http_call);
 RUNTIME_GUARD(envoy_reloadable_features_mmdb_files_reload_enabled);
 RUNTIME_GUARD(envoy_reloadable_features_no_extension_lookup_by_name);
 RUNTIME_GUARD(envoy_reloadable_features_no_timer_based_rate_limit_token_bucket);
+// Split OAuth2 token cookies too large for a browser to store. A cookie that already fits is
+// written exactly as before. Set false during a rolling upgrade, where a client may reach an
+// instance that cannot rejoin them.
+RUNTIME_GUARD(envoy_reloadable_features_oauth2_chunk_large_token_cookies);
 RUNTIME_GUARD(envoy_reloadable_features_oauth2_cleanup_cookies);
 RUNTIME_GUARD(envoy_reloadable_features_oauth2_encrypt_tokens);
 // OAuth2 filter cookie decryption: when true (the default), decrypt() accepts legacy CBC

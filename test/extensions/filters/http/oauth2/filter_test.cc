@@ -58,6 +58,98 @@ static const std::string TEST_ENCRYPTED_ID_TOKEN =
 static const std::string TEST_ENCRYPTED_REFRESH_TOKEN =
     "Fc1bBwAAAAAVzVsHAAAAAERBBlyQ3ASXvDHzyIRDhLwvl1w07AKhjwBz1s4wJGX8"; //"some-refresh-token"
 static const std::string TEST_HMAC_SECRET = "asdf_token_secret_fdsa";
+static const std::string TEST_ENCRYPTED_ACCESS_TOKEN_CHUNK_1 =
+    "Fc1bBwAAAAAVzVsHAAAAAD_ypXMASeUN_fjH-g9bL24jvDxGz0pe5AjExfk4zlZlzFb4V0a3mRT4SAVliOpQ3g_"
+    "5r9tIyI96E-bK_XCz3xyGI5owpJzWvpE1sQKQqytXZrH_"
+    "xbczkOcZUI0GShSaPLT2BP6yb3wBiXCvprBdUalAvwi1oJYuehlM8zYLkxYTg5T8z5gEN_"
+    "y2GWpv8AbWMha0buEUvrFbEeiPtHK8-eIjjjIKT3it8nTkczTCb-wSVWiEqe8xd6-2y3BuX7p8O5_fJm9B6dw-G-SF_X_"
+    "iE3HZ42jxdVE6IIdoIXKnOvP9vULgdw0X-aEePiAqTR3TJncsPXN8dmvtLEfk1_wh6p-"
+    "ksK8LWuNHAU1zl3burFwxo07rdDV3-4ERbLwdi6TCAC2pwjkY_1zcb0comAVrH4VHTM7Xug_JaUL1F0tVZQbm8S4_"
+    "0NuoXcd7dJtXDaNdzsjl0vZdYY6UDkugn7nJoMKs_uLd8QrZ2TVZ48HPOP2PBJko4TRZxfRgC01M_"
+    "U6JmAlyp61TewWv4lq1ZCRVO6qurpGSusdVi38pzo5gXl4h9dfN_0CZFHFsnRfMDL7q1SXOpo4qQ48Eoak8bhrc6de_"
+    "sCXQbwAEfOCyYODFPkZkbGYWtB3mgrywK-DeytW0_-9_huwLxGaTaINycYs0MnQA-78zqdEp7_XimuP_"
+    "cC7iNbsuUFISiI7wF52mbAE5AgYU8Rv_9Kiac70EqjZXKdwzM_t5Ob_O9h6RVL0LLNHDmERYapuJoA-"
+    "CgvtEWl17CCfjzUaMpVG0AZAUB9b8n1W3cZ3tFmtGegrAzb-"
+    "ZAdjiGcjIjrNhEVCBbhS3pRjFoVlErIelTUMyDmKWAGeBv5rhVu912qImWALVlDxwHFUKTtoEfloqI57h2CDwwlX2rJtb0"
+    "7UeQHHxgHSRUH6ENsLdqOsbZRj4VgXm9sx53QFJDme-4HjQsm7hogfdS1zsyP9kojcwJjcbDw7Yv8jbd9PgxKkPXLO-"
+    "6ST-oCLRuoosIFJDIsPjDxNs_"
+    "ne1cvN2ySheVIEmmJB85moRiJ9hrGDqNjowqlaAshcV9vYcIp7qyaiQJtOJF0Nw8SQk4jV8Uq93Zud3DqjH4dOaLCGSMOO"
+    "dL1SUMpIP4ijXK90Hl_kuKiNOWJ_Wfn4zCSzc4k5DO09RtGmor05SlQYKQ38QEEo8GmT7I2_"
+    "7J54bYTVmJXoslcQ2Uo9bfvKFF1a0OWYX3raeEZWgcrjjTF-"
+    "amAbmEi5ozdYiP3xTaDmJfbTd8sfX1hl0xLYYMUbBhr6eEhSzhxiF82IuaZ_MlWXcFbx0ev0FDM6-Wg0UiytYs__"
+    "uRHYKmMY8NEwjQ-c4MbcX0Pk3GzUWwr7Et2rAc4pZmhNIS-NI-5RfYHBVvhJRoTPB6Dk-"
+    "8kZjpYt7D5XMgi8pZwOJ9Q5kJlzE3b0pEarqg1wHmBHZMv0JC3XUtAVAeGsuEkV0tvdYGFzCUmFhA8FsfOju-"
+    "WUtX1NB1tAoy8L_zEbnDQrxHSqlNyPCituwELxPefWE1WfR0FzKQWpuOF9t0JRnYGtTtOZ3tLdPHh9-"
+    "aDsXFbUC3eclz4jCcuTVtaZethJTcL-0h2iBH8t9B7_SlJ_xPMptNHmUG3SWTR35GAmA0X5p_IYNo-4nkhT-"
+    "6NU4q1ibys9Qp26s3AENUDaNOgoaHuypPauT0pQ21AbF1ixVTXZVi_cCJ1ZZe9_"
+    "JvuIVWjKxVlTiKVfHgieWo2SPIYVE5RWSpKhWRyt1se_sYW-4CBWnLEa_"
+    "CVxWSQysxzanez1qi56Inv0eToGTXBOyhr7d8LHUCYZ_N2k2Q1n4VDZ6gC4Yqiow5uTRSt5in_"
+    "IqoBl6356dZ8K9X1XkslBDa3xwskRFcb-"
+    "Qf0wR6zKI6HMlOiLeg0IgcqxibCq2c7ZXJdxUWRjNrMbMieUcUrfCAKqBA7eZfI5d3-"
+    "frrAbCCIY1x6xKEOqoUESzlLp9sMPVtiL2SsaHupPiTiQLsV1zevCvmmgLokTMLvp91PjdGy88g78QrH5oaj6NxH1JryK0"
+    "en0HCzwYsgKcXgXdPjsQq4w6BbhcPNHitxdjgQlXEqFVe2K7RMp-1dCCzOmYVafZC4J6QuI8NMje-USyfaeo_"
+    "LycufFJhdrnSv5O534UhPugHwh6aUPBaSbIZ9kJOTqghoPrVYRU0gQqCUcDo0_"
+    "CzptSdIvLwc5vKS56uEhGQxPt7gY8DVQmj9zlWJSK5lGBwwpglit5SOkQELKyg41flYGvcvIyM5Z20vgaXg_"
+    "Jsu5VAk4c2aQH-cuHPYqyoojcq-EaVMY5TMpJv5cCgsMM0MImQOtZyCsTNAS2-mn7In6vKpV-"
+    "Y6nWf89cSRlj2AQevisBziOgZo2Fs2fosRebHpDkhBXSGVfg5c3A5t0D1cOoCyfLMwR0A7re2kPfkBHurbp61zOr7UWELm"
+    "wqeEc3joYAcOysLuYqVid3CB7STAMQr9zTgaXajWMrfXE-Vp1KhjXWNM1ESH7K4Qqhc7Dk9Fqa3QDvLQ_"
+    "DlGkMwTHsL8i1TRejgcGQzWY3i-"
+    "G1hMKJa9oYip0EbJSuKLlHvOmP7DqXvp8kgkj2rPggEr8Ca5XezNRzn1pv255uxjbmjqdrr8hOA2-bBi2-xB4fUAFu_"
+    "dX7pfvBqES7cildhYXyeDKd-ck0KmMCU1Bx9wttgKZvHqqKh1S6n4cUeNZVBsib4S0S_IxWRCYK3czGi_"
+    "Dg61dOWAvK8VMOrWudWYQ6mY48m5nf2tpFetcQQmSbodfiSMVFsqK-R7O0eO62sYh-q1ycCaZ-"
+    "eqJliBZFqkUuQjpx2nRvfhk-HgZhZkx1IQVxFpSK28sKf7_8JFYJuHnABUGYNHK7A0Jg86eklOZa0m-HmFb4qaRIUkR_"
+    "SRN9-czOOh6zmqhAb9dnEznx6YauYajlfOHDxxNQ9Bisimc8jIHoklwvc10eCnJrL0rbOG2pvGlzTtMg48vD_lS0__"
+    "9GLoRDGdkEwEMJ2D3RKL-YblQ6ieA_ypyC2wWOx1woMM9ruvzIKUlcS9tfGvr3n0j_"
+    "sO7dpfuyw1B1ul09Vpf7CJvqhoY7Xd4iWz1efOvSAkeVN4Mi3hywKbUGjXxLdhszDMFeudtxbrWhtAOik8xNgDwHg8tXNA"
+    "bRQ9j6tSz-3uvW7UAU_Dnb6FVIvDxBfTnVwMhk09vbvY4WNfi5JsB_"
+    "etSDvnnaroR9TIFf8TbHmS9xPI4QjguUyZ2ybshQb7LpWn8LBea1M-"
+    "6sN7MkYf4W8WRSaB5AG5N4LNZQBlHFwHgI4LivtPVrcl3qM-jxTt_yWX5xSJmUJ-"
+    "yLsjcDKNaG9X6jaS7mCn0crQQXiBI8toRWFjMOHF0CMWze28CebCq0Yp4mPtbVPtDhba9SoACDXJPaJCET0mrUiPVAQEWD"
+    "qUNzlU23HKRzoMLCfIjKguF5_4cVRe4p1hsFxMuWeJtBWWAnO12D_L_"
+    "8BsBSMNxfgX9GtUaP7MVYZOJy31mPujZYgjuu6H3tSAXKTDWGgjQkNIEHqLrPPni87JBGtv6_s3qmUofRQKdP2FXB-"
+    "i5IRAp6um4FtIKYZJagFi3mR8T7B2WxwNITeXDVvLPSr-shFRVsaw328aoK8mcKfxzisroy7Qdf9Kk_"
+    "VJzTn1v2LnDTh7gFhtMs9lHojCJEdneZOxWBrm83sM5CfsxytH4PnEAH2ocAxyO_WoLGt8b-4eRJtad5s_hif-"
+    "FZch4DMRJ4YJZgJfayayuODe0NQ9mWPFD0Byzu9jbJb6cLPtgqDj6BAVgpqgQRVNKiTfrhnIecuQscpeSnjFkrtrhSjJfZ"
+    "OR_bi2uOuHfq8ed8R_ZoUgqQ_bLccO7Wno0WDVSLp_"
+    "v8su6tvrNJjkmhCrUyoZ5zYx9u8KNaEO6EB7vqTDAkAwOLHWD7ATw2kvuNAHu_"
+    "n5iViBfoukmrqBFJeVE4gDOGwWyXrApdpl2gwSYV_"
+    "BwLS00W5VXIrfAhgbOWpDU10LwQj4tyzrnRfJamyU9dFexH6tnyNtSodhYR_eMExXYMvwXOSEYyrOUL9DdFqGjWFqS_BD";
+static const std::string TEST_ENCRYPTED_ACCESS_TOKEN_CHUNK_2 =
+    "VXg6QjQ-XOdof0QYYCcZ6jAORvbXB_n9Rf4dQQ8sssMJX3i2_b2qxfiWIKJGyR-RzzmNsakzKXnafa4xUUpF87gSlM_"
+    "OAaj1dZgvh49QCdmZJWfi49S6b0jFJE7yNfAEUzsFvN78ivOvYzjsLoJO1It1tVcfiTlkSNJ3039tXNNyiKRDECOKpinTf"
+    "d1ZjWBjKF5FKxu5riPxwupgwjX9O-su3qW-puEl-oG04PwqrydYiQfR6cwUGN0jor0xJeW-L-"
+    "7OfMdGdKP8CWAQH8ZeqRGJFjUsRH3GNNcfh4qPG3vEvyGYoN-"
+    "yVRirjTKPjPNAARq5PoMaR742aEpKSYkomBFz4KsZhhjpLBSGgH0cQ22YPJ-loXlgI9_9wD4Y8csl6OYHQnpHi1bUSB0r-"
+    "JZKNxQJAcoqoMGxxW2IULvJdPRTK6ooKpqnCg6C4V0ZmeczNLQ2VgHIzZ9gZd76nXyqmm1QmnWf7DDqlSgMq2cGMiD6BzW"
+    "mBuxQC33uCI47QLZ036-tvyxCfxa_Cqd8GHvM5Vd8bb1ZKgkh9jvzcvi4bSyXGF6b0yu5_"
+    "vRKp5GQdpUqLklyUR2Le1gDB8cSwBdxGyTZhD5dYK7qvClow0yAQhT2AwFSIMr16-nnq-DcUaRjOr4RN4GsKQ5SP-"
+    "IebmtMhMWtJ7V5uCrIZLOPByXWr5q7CutXLKWejhomSZlrUwol1QnDuxDKBulcXtn9PLHGMJkSngizlc18a8zG3C_"
+    "YiV15xI8XNgvY2bijXxf2HbYG81rSMZ_jbUO_u9URPwkfMbRRtQ5Llp4K-5m_tFods1pV3fBFK3tUe-ZLrD7JsjPYSSLx-"
+    "2E82zdEhPagepsJz-xeTYItSeiMl1xff_zJ-NfrEBNec15Zr1kWfeL2Q-"
+    "8Fgu1ne4psafSPFqJOQ3PiRsxdrLoIU0mb0v6lzdwFULUBbcKiwrZ2Pnt0ZrEo1bXgPnCUVo1KajgSZxZaT-"
+    "uXE6qASF3VfC6BnMZOiSMvgYNYra_zVbWDhKz-lEovxbVrm19zKHVBR05dzq005GB_"
+    "qvkeiFFAiNyQKEDsxAKcFMDsDpR0zOd5y2kFoyRKzfOK1LZjnTbyKB1BZ7KceIzsA-"
+    "iZr9IsJysHrwnLZ4DGss34dJSRTzzq6MKz4W0fmDIyeNdijGeCkPnrU40cjxRqqsaYiGAXI-D101sqXB5D-"
+    "i9ucQgPqkckjS00Ygz05h6g4JgaPb0ORBmpWQDev2RwOe8tWnR3pNa06sd8epuBc_"
+    "jYhbF90z2SjwZartmhgfR2tjuA056YpASKtxp22hAi0kMvgmgKpXDdyoYRBbm6kjeUp8Qv57w6PGbhW9RkdK_"
+    "PzFq3CNZiyrZIJIrknKQCWZ_wPCnYnfNlVjIL-9Zgz1yCxDRFvn24B0cAwECL1QN2SaqaFSubq_vsOc6g1u8tMR3NO_"
+    "CdJcNAFTMzg3srQpBueScFasEwuDSaWXwQDQpLTVlb-I265nCGPrfEQb0jEMZqbJ7_"
+    "NBD9yUPFJNRFYetZRY9ccXRCD32ZoZ5qV21K5LPr2AwGBTduGbhUJ7RKJM4QB3Jh784cQgXuQ56QtQZCeqgxfh9Z-"
+    "o94sldBFNy4EDDetZMDH5wdrg5fzqV0XYvp7A1NNNGApumOjxPyoLPcdCtH4qR8qDV8qcPkj-"
+    "UjLPUaZU4fn2m4ZCGcYth5Fzww4AdE9kiQSPZcYgBM_8SOlMEN-"
+    "5Ca6AgYPUyaNXkeRKx8PTmghzRXkKIM8FuOYMIFEIygvcZTJcdcBwt0aozDMR4kKVygvHTH5leexCQ8gShI05o3POevPCp"
+    "h6dflfj-"
+    "oQTy16zGmAFLcjyEQUvSoE3ifqG1GqOIuuLPbb95PuwD0zs3VaETN1OQevROOkvIEeoXof1CGBvwwRrIh7Ym5eAig-"
+    "RpM30wmjZYeiZGE_QQBbUgBsTVqE-E_Ioh2Ssm5TcBVMRzFRbtgnAKtUMlvcZKblAJARVH8bSkq3XYvGI1n4zetyGamN_"
+    "uxRW7jSQqFQWFz_hQPLWlo9vaLR-YBAHl7ye9Pxqde5k4t_"
+    "I6RPoZBPZMG49hMqFBQ7ksbq2b3uNtJ9fjD8vZx8pfRdzKfuvdpBBn83w7rSDjQoJi5BcXCf3zLCCD3-"
+    "qxdaDRmcbe5sTN60HkoBAAy7-1na1AveKpaV9t0reBLXH78JyAowxLrcJKPWKnMy6SsI15z0YAEkIR_8TkRBAWOrQo1O_"
+    "7GtfJ5QvnLo7Ph2MFmtTKV-R4uxjj_OdCdpnQTtwQw_3lxshx2atrscyOU-K-whXs7PrvsJj2onWtCFlS0pje7eK5ntlV_"
+    "XaEOw_oMzwPG_"
+    "eYaAnjyBOg9bRCfPhAQVHRYFnxEUkKyAOfd2F82t9OHxb0pCCPOhKoP5jcUJ664o5NhodeTj6wP1zXDFp-"
+    "mIhycgKRAkS5Ss-kTCcuz-Kn2Kyr7b7XGhCUeb7RMBOUfAkxYmLzca584oupQ3CA56mBZNf0n-"
+    "W9DvVHcHAUPbYRR5FUbfUG1QTRThVwVj50glNpcGjIQB0zWuiMKC78dayTg2VmkFgfM5xIIIWM33uXVan2KI6ZGCJXzIur"
+    "OnbHHOiVzWEmLS86LvBggBmZGeKsnq9o9Su2eoOf_kJWLN9TbdVwnxFdCHs-OubdjBclBZpXxTZkIc";
 
 namespace {
 Http::RegisterCustomInlineHeader<Http::CustomInlineHeaderRegistry::Type::RequestHeaders>
@@ -130,6 +222,40 @@ public:
     validator_ = std::make_shared<MockOAuth2CookieValidator>();
     filter_->validator_ = validator_;
   }
+
+  void initWithRealValidator(FilterConfigSharedPtr config) {
+    oauth_client_ = new MockOAuth2Client();
+    std::unique_ptr<OAuth2Client> oauth_client_ptr{oauth_client_};
+    validator_.reset();
+    config_ = config;
+    ON_CALL(test_random_, random()).WillByDefault(Return(123456789));
+    filter_ = std::make_shared<OAuth2Filter>(config_, std::move(oauth_client_ptr), test_time_,
+                                             test_random_);
+    filter_->setDecoderFilterCallbacks(decoder_callbacks_);
+    filter_->setEncoderFilterCallbacks(encoder_callbacks_);
+  }
+
+  std::string cookieHeaderFromResponse(const Http::ResponseHeaderMap& headers) const {
+    absl::flat_hash_map<std::string, std::string> cookies;
+    headers.iterate([&cookies](const Http::HeaderEntry& header) -> Http::HeaderMap::Iterate {
+      if (header.key().getStringView() != Http::Headers::get().SetCookie.get()) {
+        return Http::HeaderMap::Iterate::Continue;
+      }
+      const std::vector<absl::string_view> parts =
+          absl::StrSplit(header.value().getStringView(), absl::MaxSplits(';', 1));
+      const std::pair<absl::string_view, absl::string_view> name_value =
+          absl::StrSplit(parts[0], absl::MaxSplits('=', 1));
+      if (name_value.second == "deleted") {
+        cookies.erase(name_value.first);
+      } else {
+        cookies.insert_or_assign(std::string(name_value.first), std::string(name_value.second));
+      }
+      return Http::HeaderMap::Iterate::Continue;
+    });
+    return absl::StrJoin(cookies, "; ", absl::PairFormatter("="));
+  }
+
+  const std::string& refreshTokenForTest() const { return filter_->refresh_token_; }
 
   // Set up proto fields with standard config.
   FilterConfigSharedPtr getConfig(
@@ -277,6 +403,24 @@ public:
     return filter_->encryptToken(token);
   }
   std::string decryptTokenForTest(const std::string& ct) const { return filter_->decryptToken(ct); }
+  static size_t maxEncryptedTokenSizeForTest(size_t token_size) {
+    return OAuth2Filter::maxEncryptedTokenSize(token_size);
+  }
+  void setCookieExpiresForTest(const std::string& expires_in, const std::string& id_token_in,
+                               const std::string& refresh_token_in) {
+    filter_->expires_in_ = expires_in;
+    filter_->expires_id_token_in_ = id_token_in;
+    filter_->expires_refresh_token_in_ = refresh_token_in;
+  }
+  size_t cookieTailSizeForTest(int cookie_type) const {
+    return filter_->cookieTailSize(cookie_type);
+  }
+  std::string buildCookieTailForTest(int cookie_type) const {
+    return filter_->BuildCookieTail(cookie_type);
+  }
+  void decryptAndUpdateOAuthTokenCookiesForTest(Http::RequestHeaderMap& headers) {
+    filter_->decryptAndUpdateOAuthTokenCookies(headers);
+  }
 
   // Validates the behavior of the cookie validator.
   void expectValidCookies(const CookieNames& cookie_names, const std::string& cookie_domain) {
@@ -770,11 +914,18 @@ TEST_F(OAuth2Test, PreservesQueryParametersInAuthorizationEndpointWithUrlEncodin
  * Expected behavior: the filter should redirect to the server name with cleared OAuth cookies.
  */
 TEST_F(OAuth2Test, RequestSignout) {
+  std::string long_token(5000, 'x');
+
   Http::TestRequestHeaderMapImpl request_headers{
       {Http::Headers::get().Path.get(), "/_signout"},
       {Http::Headers::get().Host.get(), "traffic.example.com"},
       {Http::Headers::get().Method.get(), Http::Headers::get().MethodValues.Get},
       {Http::Headers::get().Scheme.get(), "https"},
+      {Http::Headers::get().Cookie.get(),
+       absl::StrCat("BearerToken_0=", long_token.substr(0, 3955))},
+      {Http::Headers::get().Cookie.get(),
+       absl::StrCat("BearerToken_1=", long_token.substr(3955, 5000))},
+      {Http::Headers::get().Cookie.get(), "BearerToken_chunks=2"},
   };
 
   Http::TestResponseHeaderMapImpl response_headers{
@@ -791,6 +942,12 @@ TEST_F(OAuth2Test, RequestSignout) {
        "OauthNonce=deleted; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT"},
       {Http::Headers::get().SetCookie.get(),
        "CodeVerifier=deleted; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT"},
+      {Http::Headers::get().SetCookie.get(),
+       "BearerToken_0=deleted; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT"},
+      {Http::Headers::get().SetCookie.get(),
+       "BearerToken_1=deleted; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT"},
+      {Http::Headers::get().SetCookie.get(),
+       "BearerToken_chunks=deleted; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT"},
       {Http::Headers::get().Location.get(), "https://traffic.example.com/"},
   };
   EXPECT_CALL(decoder_callbacks_, encodeHeaders_(HeaderMapEqualRef(&response_headers), true));
@@ -4182,6 +4339,974 @@ TEST_F(OAuth2Test, PostMigrationConfigRejectsCbcCiphertext) {
   // Rejection path (no marker + compat off) must not tick the legacy CBC counter: nothing was
   // decrypted, just refused.
   EXPECT_EQ(0, config_->stats().oauth_legacy_cbc_decrypt_.value());
+}
+
+TEST_F(OAuth2Test, RequestSignoutWithTokenCookieChunkingDisabled) {
+  TestScopedRuntime scoped_runtime;
+  scoped_runtime.mergeValues(
+      {{"envoy.reloadable_features.oauth2_chunk_large_token_cookies", "false"}});
+
+  std::string long_token(5000, 'x');
+
+  Http::TestRequestHeaderMapImpl request_headers{
+      {Http::Headers::get().Path.get(), "/_signout"},
+      {Http::Headers::get().Host.get(), "traffic.example.com"},
+      {Http::Headers::get().Method.get(), Http::Headers::get().MethodValues.Get},
+      {Http::Headers::get().Scheme.get(), "https"},
+      {Http::Headers::get().Cookie.get(), "OauthNonce=csrf_token"},
+      {Http::Headers::get().Cookie.get(), "CodeVerifier=code_verifier"},
+      {Http::Headers::get().Cookie.get(),
+       absl::StrCat("BearerToken_0=", long_token.substr(0, 3955))},
+      {Http::Headers::get().Cookie.get(),
+       absl::StrCat("BearerToken_1=", long_token.substr(3955, 5000))},
+      {Http::Headers::get().Cookie.get(), "BearerToken_chunks=2"},
+  };
+
+  EXPECT_CALL(decoder_callbacks_, encodeHeaders_(_, true))
+      .WillOnce(Invoke([&](Http::ResponseHeaderMap& headers, bool) {
+        EXPECT_EQ(headers.Status()->value(), "302");
+        EXPECT_EQ(headers.get(Http::Headers::get().SetCookie).size(), 9);
+        EXPECT_EQ(headers.get(Http::Headers::get().Location)[0]->value().getStringView(),
+                  "https://traffic.example.com/");
+        EXPECT_EQ(Http::Utility::parseSetCookieValue(headers, "OauthHMAC"), "deleted");
+        EXPECT_EQ(Http::Utility::parseSetCookieValue(headers, "BearerToken_0"), "deleted");
+        EXPECT_EQ(Http::Utility::parseSetCookieValue(headers, "BearerToken_1"), "deleted");
+        EXPECT_EQ(Http::Utility::parseSetCookieValue(headers, "BearerToken_chunks"), "deleted");
+        EXPECT_EQ(Http::Utility::parseSetCookieValue(headers, "BearerToken"), "deleted");
+        EXPECT_EQ(Http::Utility::parseSetCookieValue(headers, "IdToken"), "deleted");
+        EXPECT_EQ(Http::Utility::parseSetCookieValue(headers, "RefreshToken"), "deleted");
+        EXPECT_EQ(Http::Utility::parseSetCookieValue(headers, "OauthNonce"), "deleted");
+        EXPECT_EQ(Http::Utility::parseSetCookieValue(headers, "CodeVerifier"), "deleted");
+      }));
+
+  EXPECT_EQ(Http::FilterHeadersStatus::StopIteration,
+            filter_->decodeHeaders(request_headers, false));
+}
+
+TEST_F(OAuth2Test, OAuthAccessTokenSucessWithChunkedToken) {
+  TestScopedRuntime scoped_runtime;
+  scoped_runtime.mergeValues(
+      {{"envoy.reloadable_features.oauth2_chunk_large_token_cookies", "true"}});
+
+  std::string long_token(5000, 'x');
+  oauthHMAC = "70RVEPVYna4P+pWr7p9ILsA9RobsKbFUiuMp5FGpAm4=;";
+  // Set SystemTime to a fixed point so we get consistent HMAC encodings between test runs.
+  test_time_.setSystemTime(SystemTime(std::chrono::seconds(1000)));
+
+  // host_ must be set, which is guaranteed (ASAN).
+  Http::TestRequestHeaderMapImpl request_headers{
+      {Http::Headers::get().Host.get(), "traffic.example.com"},
+      {Http::Headers::get().Path.get(), "/_signout"},
+      {Http::Headers::get().Method.get(), Http::Headers::get().MethodValues.Get},
+  };
+  filter_->decodeHeaders(request_headers, false);
+
+  // Expected response after the callback is complete.
+  Http::TestRequestHeaderMapImpl expected_headers{
+      {Http::Headers::get().Status.get(), "302"},
+      {Http::Headers::get().SetCookie.get(),
+       "OauthHMAC=" + oauthHMAC + "path=/;Max-Age=600;secure;HttpOnly"},
+      {Http::Headers::get().SetCookie.get(),
+       "OauthExpires=1600;path=/;Max-Age=600;secure;HttpOnly"},
+      {Http::Headers::get().SetCookie.get(),
+       absl::StrCat("BearerToken_0=", TEST_ENCRYPTED_ACCESS_TOKEN_CHUNK_1,
+                    ";path=/;Max-Age=600;secure;HttpOnly")},
+      {Http::Headers::get().SetCookie.get(),
+       absl::StrCat("BearerToken_1=", TEST_ENCRYPTED_ACCESS_TOKEN_CHUNK_2,
+                    ";path=/;Max-Age=600;secure;HttpOnly")},
+      {Http::Headers::get().SetCookie.get(),
+       "BearerToken_chunks=2;path=/;Max-Age=600;secure;HttpOnly"},
+      {Http::Headers::get().SetCookie.get(),
+       "IdToken=" + TEST_ENCRYPTED_ID_TOKEN + ";path=/;Max-Age=600;secure;HttpOnly"},
+      {Http::Headers::get().Location.get(), ""},
+  };
+
+  EXPECT_CALL(decoder_callbacks_, encodeHeaders_(HeaderMapEqualRef(&expected_headers), true));
+
+  filter_->onGetAccessTokenSuccess(long_token, "some-id-token", "some-refresh-token",
+                                   std::chrono::seconds(600));
+  EXPECT_EQ(1, config_->stats().oauth_token_cookie_chunked_.value());
+}
+
+// With the guard off, a token too large for one cookie is written as one oversized cookie, as
+// before chunking.
+TEST_F(OAuth2Test, OAuthAccessTokenSucessWithChunkedTokenDisabled) {
+  TestScopedRuntime scoped_runtime;
+  scoped_runtime.mergeValues(
+      {{"envoy.reloadable_features.oauth2_chunk_large_token_cookies", "false"}});
+
+  std::string long_token(5000, 'x');
+  oauthHMAC = "70RVEPVYna4P+pWr7p9ILsA9RobsKbFUiuMp5FGpAm4=;";
+  test_time_.setSystemTime(SystemTime(std::chrono::seconds(1000)));
+
+  Http::TestRequestHeaderMapImpl request_headers{
+      {Http::Headers::get().Host.get(), "traffic.example.com"},
+      {Http::Headers::get().Path.get(), "/_signout"},
+      {Http::Headers::get().Method.get(), Http::Headers::get().MethodValues.Get},
+  };
+  filter_->decodeHeaders(request_headers, false);
+
+  Http::TestRequestHeaderMapImpl expected_headers{
+      {Http::Headers::get().Status.get(), "302"},
+      {Http::Headers::get().SetCookie.get(),
+       "OauthHMAC=" + oauthHMAC + "path=/;Max-Age=600;secure;HttpOnly"},
+      {Http::Headers::get().SetCookie.get(),
+       "OauthExpires=1600;path=/;Max-Age=600;secure;HttpOnly"},
+      {Http::Headers::get().SetCookie.get(),
+       absl::StrCat("BearerToken=", TEST_ENCRYPTED_ACCESS_TOKEN_CHUNK_1,
+                    TEST_ENCRYPTED_ACCESS_TOKEN_CHUNK_2, ";path=/;Max-Age=600;secure;HttpOnly")},
+      {Http::Headers::get().SetCookie.get(),
+       "IdToken=" + TEST_ENCRYPTED_ID_TOKEN + ";path=/;Max-Age=600;secure;HttpOnly"},
+      {Http::Headers::get().Location.get(), ""},
+  };
+
+  EXPECT_CALL(decoder_callbacks_, encodeHeaders_(HeaderMapEqualRef(&expected_headers), true));
+
+  filter_->onGetAccessTokenSuccess(long_token, "some-id-token", "some-refresh-token",
+                                   std::chrono::seconds(600));
+}
+
+// Enabling the guard must not change anything for a cookie that already fits. This pins the exact
+// boundary: at the size limit the output is identical either way, and only one byte past it does
+// chunking start. Encryption is off so the cookie value is the token itself and the maths is exact.
+TEST_F(OAuth2Test, TokenCookieAtSizeLimitIsNotChunked) {
+  constexpr auto DisabledSameSite = ::envoy::extensions::filters::http::oauth2::v3::
+      CookieConfig_SameSite::CookieConfig_SameSite_DISABLED;
+
+  auto emit = [&](bool chunking_enabled, const std::string& access_token) {
+    TestScopedRuntime scoped_runtime;
+    scoped_runtime.mergeValues({{"envoy.reloadable_features.oauth2_chunk_large_token_cookies",
+                                 chunking_enabled ? "true" : "false"}});
+    init(getConfig(true /* forward_bearer_token */, true /* use_refresh_token */,
+                   ::envoy::extensions::filters::http::oauth2::v3::OAuth2Config_AuthType::
+                       OAuth2Config_AuthType_URL_ENCODED_BODY,
+                   0, false, false, false, false, false, DisabledSameSite, DisabledSameSite,
+                   DisabledSameSite, DisabledSameSite, DisabledSameSite, DisabledSameSite,
+                   DisabledSameSite, 0, 0, true /* disable_token_encryption */));
+    test_time_.setSystemTime(SystemTime(std::chrono::seconds(1000)));
+
+    Http::TestRequestHeaderMapImpl request_headers{
+        {Http::Headers::get().Path.get(), "/original_path"},
+        {Http::Headers::get().Host.get(), "traffic.example.com"},
+        {Http::Headers::get().Method.get(), Http::Headers::get().MethodValues.Get},
+        {Http::Headers::get().Scheme.get(), "https"},
+    };
+    EXPECT_CALL(*validator_, setParams(_, _));
+    EXPECT_CALL(*validator_, isValid()).WillOnce(Return(true));
+    std::string legit_token{"legit_token"};
+    EXPECT_CALL(*validator_, token()).WillRepeatedly(ReturnRef(legit_token));
+    filter_->decodeHeaders(request_headers, false);
+
+    std::vector<std::string> cookies;
+    EXPECT_CALL(decoder_callbacks_, encodeHeaders_(_, true))
+        .WillOnce(Invoke([&cookies](Http::ResponseHeaderMap& headers, bool) {
+          headers.iterate([&cookies](const Http::HeaderEntry& header) -> Http::HeaderMap::Iterate {
+            if (header.key().getStringView() == Http::Headers::get().SetCookie.get()) {
+              cookies.push_back(std::string(header.value().getStringView()));
+            }
+            return Http::HeaderMap::Iterate::Continue;
+          });
+        }));
+    filter_->onGetAccessTokenSuccess(access_token, "", "", std::chrono::seconds(600));
+    return cookies;
+  };
+
+  auto bearer_cookie = [](const std::vector<std::string>& cookies) {
+    for (const auto& cookie : cookies) {
+      if (absl::StartsWith(cookie, "BearerToken=")) {
+        return cookie;
+      }
+    }
+    return std::string{};
+  };
+
+  // Measure everything the cookie carries besides the value.
+  const std::string probe = bearer_cookie(emit(false, "x"));
+  ASSERT_FALSE(probe.empty());
+  const size_t overhead = probe.size() - 1;
+  ASSERT_LT(overhead, MaxCookieSize);
+
+  // A token that fills the cookie exactly to the limit must be written the same way either way.
+  const std::string exact_fit(MaxCookieSize - overhead, 'a');
+  const std::vector<std::string> without_guard = emit(false, exact_fit);
+  const std::vector<std::string> with_guard = emit(true, exact_fit);
+  EXPECT_EQ(without_guard, with_guard);
+  EXPECT_EQ(bearer_cookie(with_guard).size(), MaxCookieSize);
+
+  // One byte past the limit is where chunking starts.
+  const std::string one_too_big(MaxCookieSize - overhead + 1, 'a');
+  const std::vector<std::string> over = emit(true, one_too_big);
+  // The base cookie is either absent or expired, never carrying the value.
+  const std::string over_base = bearer_cookie(over);
+  EXPECT_TRUE(over_base.empty() || absl::StartsWith(over_base, "BearerToken=deleted"));
+  bool has_chunk_count = false;
+  for (const auto& cookie : over) {
+    if (absl::StartsWith(cookie, "BearerToken_chunks=")) {
+      has_chunk_count = true;
+    }
+  }
+  EXPECT_TRUE(has_chunk_count);
+}
+
+TEST_F(OAuth2Test, SetTokenCookie) {
+  TestScopedRuntime scoped_runtime;
+  scoped_runtime.mergeValues(
+      {{"envoy.reloadable_features.oauth2_chunk_large_token_cookies", "true"}});
+  init(getConfig(true /* forward_bearer_token */, true /* use_refresh_token */));
+
+  // Helper function to create tokens of specific sizes
+  auto createToken = [](size_t size, char fill_char) { return std::string(size, fill_char); };
+
+  // Test mixed token sizes: single cookie, chunked, and empty.
+  {
+    // Access token: Small enough to fit in a single cookie
+    std::string access_token = createToken(100, 'a');
+
+    // ID token: Large enough to require chunking
+    std::string id_token = createToken(5000, 'i');
+
+    std::string refresh_token;
+
+    Http::TestRequestHeaderMapImpl request_headers{
+        {Http::Headers::get().Path.get(), "/original_path?var1=1&var2=2"},
+        {Http::Headers::get().Host.get(), "traffic.example.com"},
+        {Http::Headers::get().Method.get(), Http::Headers::get().MethodValues.Get},
+        {Http::Headers::get().Scheme.get(), "https"},
+    };
+
+    EXPECT_CALL(*validator_, setParams(_, _));
+    EXPECT_CALL(*validator_, isValid()).WillOnce(Return(true));
+    std::string legit_token{"legit_token"};
+    EXPECT_CALL(*validator_, token()).WillRepeatedly(ReturnRef(legit_token));
+    filter_->decodeHeaders(request_headers, false);
+
+    Http::TestResponseHeaderMapImpl response_headers;
+    EXPECT_CALL(decoder_callbacks_, encodeHeaders_(_, true))
+        .WillOnce(Invoke([&response_headers](Http::ResponseHeaderMap& headers, bool) {
+          response_headers = Http::TestResponseHeaderMapImpl(headers);
+        }));
+
+    filter_->onGetAccessTokenSuccess(access_token, id_token, refresh_token,
+                                     std::chrono::seconds(600));
+
+    auto extract_cookies = [](const Http::TestResponseHeaderMapImpl& headers) {
+      std::vector<std::string> cookies;
+      headers.iterate([&cookies](const Http::HeaderEntry& header) -> Http::HeaderMap::Iterate {
+        if (header.key().getStringView() == Http::Headers::get().SetCookie.get()) {
+          cookies.push_back(std::string(header.value().getStringView()));
+        }
+        return Http::HeaderMap::Iterate::Continue;
+      });
+      return cookies;
+    };
+    auto cookies = extract_cookies(response_headers);
+
+    // Count cookies by type
+    int bearer_token_count = 0;
+    int id_token_chunk_count = 0;
+    int id_token_chunks_count = 0;
+    int refresh_token_count = 0;
+
+    for (const auto& cookie : cookies) {
+      if (cookie.find("BearerToken=") == 0) {
+        bearer_token_count++;
+      } else if (cookie.find("IdToken_0=") == 0) {
+        id_token_chunk_count++;
+      } else if (cookie.find("IdToken_1=") == 0) {
+        id_token_chunk_count++;
+      } else if (cookie.find("IdToken_chunks=2") == 0) {
+        id_token_chunks_count++;
+      } else if (cookie.find("RefreshToken") == 0) {
+        refresh_token_count++;
+      }
+    }
+
+    // Verify expected cookie counts
+    EXPECT_EQ(bearer_token_count, 1) << "Expected exactly 1 BearerToken cookie";
+    EXPECT_EQ(id_token_chunk_count, 2)
+        << "Expected exactly 2 IdToken chunk cookies (IdToken_0 and IdToken_1)";
+    EXPECT_EQ(id_token_chunks_count, 1) << "Expected exactly 1 IdToken_chunks cookie";
+    EXPECT_EQ(refresh_token_count, 0) << "Expected no RefreshToken cookies for an empty token";
+  }
+}
+
+TEST_F(OAuth2Test, EncryptedChunkedCookieRoundTripUsesRealValidator) {
+  TestScopedRuntime scoped_runtime;
+  scoped_runtime.mergeValues(
+      {{"envoy.reloadable_features.oauth2_chunk_large_token_cookies", "true"}});
+  initWithRealValidator(getConfig(true /* forward_bearer_token */));
+  test_time_.setSystemTime(SystemTime(std::chrono::seconds(1000)));
+
+  Http::TestRequestHeaderMapImpl initial_request{
+      {Http::Headers::get().Path.get(), "/_signout"},
+      {Http::Headers::get().Host.get(), "traffic.example.com"},
+      {Http::Headers::get().Method.get(), Http::Headers::get().MethodValues.Get},
+      {Http::Headers::get().Scheme.get(), "https"},
+  };
+  EXPECT_EQ(Http::FilterHeadersStatus::StopIteration,
+            filter_->decodeHeaders(initial_request, false));
+
+  Http::TestResponseHeaderMapImpl login_response;
+  EXPECT_CALL(decoder_callbacks_, encodeHeaders_(_, true))
+      .WillOnce(Invoke([&login_response](Http::ResponseHeaderMap& headers, bool) {
+        login_response = Http::TestResponseHeaderMapImpl(headers);
+      }));
+  const std::string access_token(5000, 'a');
+  filter_->onGetAccessTokenSuccess(access_token, "", "", std::chrono::seconds(600));
+  EXPECT_FALSE(Http::Utility::parseSetCookieValue(login_response, "BearerToken_chunks").empty());
+
+  const std::string cookie_header = cookieHeaderFromResponse(login_response);
+  initWithRealValidator(getConfig(true /* forward_bearer_token */));
+  Http::TestRequestHeaderMapImpl authenticated_request{
+      {Http::Headers::get().Path.get(), "/resource"},
+      {Http::Headers::get().Host.get(), "traffic.example.com"},
+      {Http::Headers::get().Method.get(), Http::Headers::get().MethodValues.Get},
+      {Http::Headers::get().Scheme.get(), "https"},
+      {Http::Headers::get().Cookie.get(), cookie_header},
+  };
+
+  EXPECT_EQ(Http::FilterHeadersStatus::Continue,
+            filter_->decodeHeaders(authenticated_request, false));
+  EXPECT_EQ(authenticated_request.getInline(authorization_handle.handle())->value().getStringView(),
+            absl::StrCat("Bearer ", access_token));
+  const absl::string_view upstream_cookies =
+      authenticated_request.get(Http::Headers::get().Cookie)[0]->value().getStringView();
+  EXPECT_EQ(upstream_cookies.find("BearerToken_"), absl::string_view::npos);
+  EXPECT_EQ(upstream_cookies.find("BearerToken_chunks"), absl::string_view::npos);
+}
+
+TEST_F(OAuth2Test, RuntimeRollbackReplacesChunkedCookie) {
+  TestScopedRuntime scoped_runtime;
+  scoped_runtime.mergeValues(
+      {{"envoy.reloadable_features.oauth2_chunk_large_token_cookies", "false"}});
+  init(getConfig(false /* forward_bearer_token */));
+  const size_t split = TEST_ENCRYPTED_ACCESS_TOKEN.size() / 2;
+  Http::TestRequestHeaderMapImpl request_headers{
+      {Http::Headers::get().Path.get(), "/resource"},
+      {Http::Headers::get().Host.get(), "traffic.example.com"},
+      {Http::Headers::get().Method.get(), Http::Headers::get().MethodValues.Get},
+      {Http::Headers::get().Scheme.get(), "https"},
+      {Http::Headers::get().Cookie.get(),
+       absl::StrCat("BearerToken_0=", TEST_ENCRYPTED_ACCESS_TOKEN.substr(0, split))},
+      {Http::Headers::get().Cookie.get(),
+       absl::StrCat("BearerToken_1=", TEST_ENCRYPTED_ACCESS_TOKEN.substr(split))},
+      {Http::Headers::get().Cookie.get(), "BearerToken_chunks=2"},
+  };
+  EXPECT_CALL(*validator_, setParams(_, _));
+  EXPECT_CALL(*validator_, isValid()).WillOnce(Return(true));
+  EXPECT_EQ(Http::FilterHeadersStatus::Continue, filter_->decodeHeaders(request_headers, false));
+
+  EXPECT_CALL(decoder_callbacks_, encodeHeaders_(_, true))
+      .WillOnce(Invoke([](Http::ResponseHeaderMap& headers, bool) {
+        EXPECT_EQ(Http::Utility::parseSetCookieValue(headers, "BearerToken_0"), "deleted");
+        EXPECT_EQ(Http::Utility::parseSetCookieValue(headers, "BearerToken_1"), "deleted");
+        EXPECT_EQ(Http::Utility::parseSetCookieValue(headers, "BearerToken_chunks"), "deleted");
+        // With the guard off, a token too large for one cookie is still written as one cookie.
+        const std::string bearer = Http::Utility::parseSetCookieValue(headers, "BearerToken");
+        EXPECT_GT(bearer.size(), MaxCookieSize);
+      }));
+  // Large enough that it would be chunked with the guard on.
+  filter_->onGetAccessTokenSuccess(std::string(5000, 'x'), "", "", std::chrono::seconds(600));
+  EXPECT_EQ(0, config_->stats().oauth_token_cookie_chunked_.value());
+}
+
+TEST_F(OAuth2Test, RefreshFlowPreservesNormalizedChunkedRefreshToken) {
+  init(getConfig(true /* forward_bearer_token */, true /* use_refresh_token */));
+  const size_t split = TEST_ENCRYPTED_REFRESH_TOKEN.size() / 2;
+  Http::TestRequestHeaderMapImpl request_headers{
+      {Http::Headers::get().Path.get(), "/resource"},
+      {Http::Headers::get().Host.get(), "traffic.example.com"},
+      {Http::Headers::get().Method.get(), Http::Headers::get().MethodValues.Get},
+      {Http::Headers::get().Scheme.get(), "https"},
+      {Http::Headers::get().Cookie.get(),
+       absl::StrCat("RefreshToken_0=", TEST_ENCRYPTED_REFRESH_TOKEN.substr(0, split))},
+      {Http::Headers::get().Cookie.get(),
+       absl::StrCat("RefreshToken_1=", TEST_ENCRYPTED_REFRESH_TOKEN.substr(split))},
+      {Http::Headers::get().Cookie.get(), "RefreshToken_chunks=2"},
+  };
+  std::string refresh_token{"some-refresh-token"};
+  EXPECT_CALL(*validator_, setParams(_, _));
+  EXPECT_CALL(*validator_, isValid()).WillOnce(Return(false));
+  EXPECT_CALL(*validator_, canUpdateTokenByRefreshToken()).WillOnce(Return(true));
+  EXPECT_CALL(*validator_, refreshToken()).WillRepeatedly(ReturnRef(refresh_token));
+  EXPECT_CALL(*oauth_client_, asyncRefreshAccessToken(refresh_token, _, _, _));
+  EXPECT_EQ(Http::FilterHeadersStatus::StopAllIterationAndWatermark,
+            filter_->decodeHeaders(request_headers, false));
+
+  EXPECT_CALL(decoder_callbacks_, continueDecoding());
+  filter_->onRefreshAccessTokenSuccess("new-access-token", "", "", std::chrono::seconds(600));
+  EXPECT_EQ(refreshTokenForTest(), refresh_token);
+  const absl::string_view upstream_cookies =
+      request_headers.get(Http::Headers::get().Cookie)[0]->value().getStringView();
+  EXPECT_EQ(upstream_cookies.find("RefreshToken"), absl::string_view::npos);
+}
+
+TEST_F(OAuth2Test, OversizedTokenStopsBeforeSettingSessionCookies) {
+  TestScopedRuntime scoped_runtime;
+  scoped_runtime.mergeValues(
+      {{"envoy.reloadable_features.oauth2_chunk_large_token_cookies", "true"}});
+  Http::TestRequestHeaderMapImpl request_headers{
+      {Http::Headers::get().Path.get(), "/_signout"},
+      {Http::Headers::get().Host.get(), "traffic.example.com"},
+      {Http::Headers::get().Method.get(), Http::Headers::get().MethodValues.Get},
+      {Http::Headers::get().Scheme.get(), "https"},
+  };
+  filter_->decodeHeaders(request_headers, false);
+
+  EXPECT_CALL(decoder_callbacks_, encodeHeaders_(_, false))
+      .WillOnce(Invoke([](Http::ResponseHeaderMap& headers, bool) {
+        EXPECT_TRUE(headers.get(Http::Headers::get().SetCookie).empty());
+      }));
+  EXPECT_CALL(decoder_callbacks_,
+              sendLocalReply(Http::Code::ServiceUnavailable, "Service Unavailable", _, _, _));
+  filter_->onGetAccessTokenSuccess(std::string(MaxCookieSize * 15, 'x'), "", "",
+                                   std::chrono::seconds(600));
+  EXPECT_EQ(1, config_->stats().oauth_token_cookie_oversized_.value());
+}
+
+TEST_F(OAuth2Test, RequestSignoutWithMalformedChunkCount) {
+  Http::TestRequestHeaderMapImpl request_headers{
+      {Http::Headers::get().Path.get(), "/_signout"},
+      {Http::Headers::get().Host.get(), "traffic.example.com"},
+      {Http::Headers::get().Method.get(), Http::Headers::get().MethodValues.Get},
+      {Http::Headers::get().Scheme.get(), "https"},
+      {Http::Headers::get().Cookie.get(), "BearerToken_chunks=invalid"},
+  };
+
+  EXPECT_CALL(decoder_callbacks_, encodeHeaders_(_, true))
+      .WillOnce(Invoke([&](Http::ResponseHeaderMap& headers, bool) {
+        // Without a valid count every index a chunk may use is deleted, with the count cookie.
+        for (size_t index = 0; index < 5; ++index) {
+          EXPECT_EQ(
+              Http::Utility::parseSetCookieValue(headers, absl::StrCat("BearerToken_", index)),
+              "deleted");
+        }
+        EXPECT_EQ(Http::Utility::parseSetCookieValue(headers, "BearerToken_chunks"), "deleted");
+        EXPECT_EQ(Http::Utility::parseSetCookieValue(headers, "BearerToken"), "deleted");
+      }));
+
+  EXPECT_EQ(Http::FilterHeadersStatus::StopIteration,
+            filter_->decodeHeaders(request_headers, false));
+}
+
+// Replacing a chunked token with a smaller chunked token must not send a delete and a set for the
+// same cookie name. Only the stale chunks beyond the new count are deleted.
+TEST_F(OAuth2Test, RechunkedTokenOnlyDeletesStaleChunks) {
+  TestScopedRuntime scoped_runtime;
+  scoped_runtime.mergeValues(
+      {{"envoy.reloadable_features.oauth2_chunk_large_token_cookies", "true"}});
+  init(getConfig(false /* forward_bearer_token */));
+  test_time_.setSystemTime(SystemTime(std::chrono::seconds(1000)));
+  Http::TestRequestHeaderMapImpl request_headers{
+      {Http::Headers::get().Path.get(), "/resource"},
+      {Http::Headers::get().Host.get(), "traffic.example.com"},
+      {Http::Headers::get().Method.get(), Http::Headers::get().MethodValues.Get},
+      {Http::Headers::get().Scheme.get(), "https"},
+      {Http::Headers::get().Cookie.get(), "BearerToken_0=a"},
+      {Http::Headers::get().Cookie.get(), "BearerToken_1=b"},
+      {Http::Headers::get().Cookie.get(), "BearerToken_2=c"},
+      {Http::Headers::get().Cookie.get(), "BearerToken_chunks=3"},
+  };
+  EXPECT_CALL(*validator_, setParams(_, _));
+  EXPECT_CALL(*validator_, isValid()).WillOnce(Return(true));
+  EXPECT_EQ(Http::FilterHeadersStatus::Continue, filter_->decodeHeaders(request_headers, false));
+
+  EXPECT_CALL(decoder_callbacks_, encodeHeaders_(_, true))
+      .WillOnce(Invoke([](Http::ResponseHeaderMap& headers, bool) {
+        absl::flat_hash_map<std::string, int> name_counts;
+        headers.iterate(
+            [&name_counts](const Http::HeaderEntry& header) -> Http::HeaderMap::Iterate {
+              if (header.key().getStringView() == Http::Headers::get().SetCookie.get()) {
+                const std::vector<absl::string_view> name_value =
+                    absl::StrSplit(header.value().getStringView(), absl::MaxSplits('=', 1));
+                name_counts[std::string(name_value[0])]++;
+              }
+              return Http::HeaderMap::Iterate::Continue;
+            });
+        for (const auto& [name, count] : name_counts) {
+          EXPECT_EQ(count, 1) << name;
+        }
+        EXPECT_EQ(Http::Utility::parseSetCookieValue(headers, "BearerToken_chunks"), "2");
+        EXPECT_NE(Http::Utility::parseSetCookieValue(headers, "BearerToken_0"), "deleted");
+        EXPECT_NE(Http::Utility::parseSetCookieValue(headers, "BearerToken_1"), "deleted");
+        EXPECT_EQ(Http::Utility::parseSetCookieValue(headers, "BearerToken_2"), "deleted");
+      }));
+  filter_->onGetAccessTokenSuccess(std::string(5000, 'x'), "", "", std::chrono::seconds(600));
+}
+
+// When a chunked token is not replaced by a new one, the chunks recorded while rebuilding the
+// request cookies must be deleted along with the base cookie.
+TEST_F(OAuth2Test, ChunkedTokenWithoutReplacementIsFullyDeleted) {
+  init(getConfig(false /* forward_bearer_token */));
+  test_time_.setSystemTime(SystemTime(std::chrono::seconds(1000)));
+  const size_t split = TEST_ENCRYPTED_ID_TOKEN.size() / 2;
+  Http::TestRequestHeaderMapImpl request_headers{
+      {Http::Headers::get().Path.get(), "/resource"},
+      {Http::Headers::get().Host.get(), "traffic.example.com"},
+      {Http::Headers::get().Method.get(), Http::Headers::get().MethodValues.Get},
+      {Http::Headers::get().Scheme.get(), "https"},
+      {Http::Headers::get().Cookie.get(),
+       absl::StrCat("IdToken_0=", TEST_ENCRYPTED_ID_TOKEN.substr(0, split))},
+      {Http::Headers::get().Cookie.get(),
+       absl::StrCat("IdToken_1=", TEST_ENCRYPTED_ID_TOKEN.substr(split))},
+      {Http::Headers::get().Cookie.get(), "IdToken_chunks=2"},
+  };
+  EXPECT_CALL(*validator_, setParams(_, _));
+  EXPECT_CALL(*validator_, isValid()).WillOnce(Return(true));
+  EXPECT_EQ(Http::FilterHeadersStatus::Continue, filter_->decodeHeaders(request_headers, false));
+
+  EXPECT_CALL(decoder_callbacks_, encodeHeaders_(_, true))
+      .WillOnce(Invoke([](Http::ResponseHeaderMap& headers, bool) {
+        // The client only had the chunks, so there is no single cookie to delete.
+        EXPECT_TRUE(Http::Utility::parseSetCookieValue(headers, "IdToken").empty());
+        EXPECT_EQ(Http::Utility::parseSetCookieValue(headers, "IdToken_0"), "deleted");
+        EXPECT_EQ(Http::Utility::parseSetCookieValue(headers, "IdToken_1"), "deleted");
+        EXPECT_EQ(Http::Utility::parseSetCookieValue(headers, "IdToken_chunks"), "deleted");
+      }));
+  // No new ID token, so the existing chunked one is deleted.
+  filter_->onGetAccessTokenSuccess("new-access-token", "", "", std::chrono::seconds(600));
+}
+
+// The size check uses an upper bound of the encrypted size instead of encrypting. It must never be
+// smaller than what encryptToken() produces, with either cipher.
+TEST_F(OAuth2Test, MaxEncryptedTokenSizeCoversEncryptedToken) {
+  for (const bool use_gcm : {false, true}) {
+    TestScopedRuntime scoped_runtime;
+    scoped_runtime.mergeValues(
+        {{"envoy.reloadable_features.oauth2_use_gcm_encryption", use_gcm ? "true" : "false"}});
+    std::vector<size_t> sizes;
+    for (size_t size = 0; size <= 100; ++size) {
+      sizes.push_back(size);
+    }
+    sizes.insert(sizes.end(), {1000, 4096, 12345, 20000});
+    for (const size_t size : sizes) {
+      const size_t encrypted_size = encryptTokenForTest(std::string(size, 'x')).size();
+      const size_t bound = maxEncryptedTokenSizeForTest(size);
+      EXPECT_GE(bound, encrypted_size) << "gcm=" << use_gcm << " size=" << size;
+      // The bound only over-estimates by a few bytes.
+      EXPECT_LE(bound - encrypted_size, 22) << "gcm=" << use_gcm << " size=" << size;
+    }
+  }
+}
+
+// cookieTailSize() must match the tail BuildCookieTail() builds, for every cookie type.
+TEST_F(OAuth2Test, CookieTailSizeMatchesBuiltTail) {
+  constexpr auto StrictSameSite = ::envoy::extensions::filters::http::oauth2::v3::
+      CookieConfig_SameSite::CookieConfig_SameSite_STRICT;
+  constexpr auto DisabledSameSite = ::envoy::extensions::filters::http::oauth2::v3::
+      CookieConfig_SameSite::CookieConfig_SameSite_DISABLED;
+  for (const bool set_cookie_domain : {false, true}) {
+    init(getConfig(true /* forward_bearer_token */, true /* use_refresh_token */,
+                   ::envoy::extensions::filters::http::oauth2::v3::OAuth2Config_AuthType::
+                       OAuth2Config_AuthType_URL_ENCODED_BODY,
+                   0, false, false, set_cookie_domain, false, false, StrictSameSite,
+                   DisabledSameSite, StrictSameSite, DisabledSameSite, StrictSameSite,
+                   DisabledSameSite, DisabledSameSite));
+    setCookieExpiresForTest("600", "3600", "604800");
+    for (int cookie_type = 1; cookie_type <= 5; ++cookie_type) {
+      EXPECT_EQ(cookieTailSizeForTest(cookie_type), buildCookieTailForTest(cookie_type).size())
+          << "domain=" << set_cookie_domain << " type=" << cookie_type;
+    }
+  }
+}
+
+// Chunks do not overwrite a single cookie of the same token, so a single cookie on the request is
+// deleted when the new value is chunked.
+TEST_F(OAuth2Test, ChunkedTokenDeletesSingleCookie) {
+  TestScopedRuntime scoped_runtime;
+  scoped_runtime.mergeValues(
+      {{"envoy.reloadable_features.oauth2_chunk_large_token_cookies", "true"}});
+  init(getConfig(false /* forward_bearer_token */));
+  test_time_.setSystemTime(SystemTime(std::chrono::seconds(1000)));
+  Http::TestRequestHeaderMapImpl request_headers{
+      {Http::Headers::get().Path.get(), "/resource"},
+      {Http::Headers::get().Host.get(), "traffic.example.com"},
+      {Http::Headers::get().Method.get(), Http::Headers::get().MethodValues.Get},
+      {Http::Headers::get().Scheme.get(), "https"},
+      {Http::Headers::get().Cookie.get(), "BearerToken=" + TEST_ENCRYPTED_ACCESS_TOKEN},
+  };
+  EXPECT_CALL(*validator_, setParams(_, _));
+  EXPECT_CALL(*validator_, isValid()).WillOnce(Return(true));
+  EXPECT_EQ(Http::FilterHeadersStatus::Continue, filter_->decodeHeaders(request_headers, false));
+
+  EXPECT_CALL(decoder_callbacks_, encodeHeaders_(_, true))
+      .WillOnce(Invoke([](Http::ResponseHeaderMap& headers, bool) {
+        EXPECT_EQ(Http::Utility::parseSetCookieValue(headers, "BearerToken"), "deleted");
+        EXPECT_EQ(Http::Utility::parseSetCookieValue(headers, "BearerToken_chunks"), "2");
+        EXPECT_FALSE(Http::Utility::parseSetCookieValue(headers, "BearerToken_0").empty());
+        EXPECT_FALSE(Http::Utility::parseSetCookieValue(headers, "BearerToken_1").empty());
+      }));
+  filter_->onGetAccessTokenSuccess(std::string(5000, 'x'), "", "", std::chrono::seconds(600));
+}
+
+// Sign out sees the token cookies after they are rejoined and decrypted, so the end session
+// endpoint gets the ID token itself, and the chunks of the ID token are deleted too.
+TEST_F(OAuth2Test, RequestSignoutSendsDecryptedChunkedIdTokenHint) {
+  envoy::extensions::filters::http::oauth2::v3::OAuth2Config p;
+  auto* endpoint = p.mutable_token_endpoint();
+  endpoint->set_cluster("auth.example.com");
+  endpoint->set_uri("auth.example.com/_oauth");
+  endpoint->mutable_timeout()->set_seconds(1);
+  p.set_redirect_uri("%REQ(:scheme)%://%REQ(:authority)%" + TEST_CALLBACK);
+  p.mutable_redirect_path_matcher()->mutable_path()->set_exact(TEST_CALLBACK);
+  p.set_authorization_endpoint("https://auth.example.com/oauth/authorize/");
+  p.mutable_signout_path()->mutable_path()->set_exact("/_signout");
+  auto credentials = p.mutable_credentials();
+  credentials->set_client_id(TEST_CLIENT_ID);
+  credentials->mutable_token_secret()->set_name("secret");
+  credentials->mutable_hmac_secret()->set_name("hmac");
+  p.set_end_session_endpoint("https://auth.example.com/oauth/logout");
+  p.add_auth_scopes("openid");
+  auto secret_reader = std::make_shared<MockSecretReader>();
+  init(std::make_shared<FilterConfig>(p, factory_context_.server_factory_context_, secret_reader,
+                                      scope_, "test."));
+
+  const size_t split = TEST_ENCRYPTED_ID_TOKEN.size() / 2;
+  Http::TestRequestHeaderMapImpl request_headers{
+      {Http::Headers::get().Path.get(), "/_signout"},
+      {Http::Headers::get().Host.get(), "traffic.example.com"},
+      {Http::Headers::get().Method.get(), Http::Headers::get().MethodValues.Get},
+      {Http::Headers::get().Scheme.get(), "https"},
+      {Http::Headers::get().Cookie.get(),
+       absl::StrCat("IdToken_0=", TEST_ENCRYPTED_ID_TOKEN.substr(0, split))},
+      {Http::Headers::get().Cookie.get(),
+       absl::StrCat("IdToken_1=", TEST_ENCRYPTED_ID_TOKEN.substr(split))},
+      {Http::Headers::get().Cookie.get(), "IdToken_chunks=2"},
+  };
+
+  EXPECT_CALL(decoder_callbacks_, encodeHeaders_(_, true))
+      .WillOnce(Invoke([](Http::ResponseHeaderMap& headers, bool) {
+        EXPECT_EQ(headers.getLocationValue(),
+                  "https://auth.example.com/oauth/logout?id_token_hint=some-id-token&client_id=1&"
+                  "post_logout_redirect_uri=https%3A%2F%2Ftraffic.example.com%2F");
+        EXPECT_EQ(Http::Utility::parseSetCookieValue(headers, "IdToken"), "deleted");
+        EXPECT_EQ(Http::Utility::parseSetCookieValue(headers, "IdToken_0"), "deleted");
+        EXPECT_EQ(Http::Utility::parseSetCookieValue(headers, "IdToken_1"), "deleted");
+        EXPECT_EQ(Http::Utility::parseSetCookieValue(headers, "IdToken_chunks"), "deleted");
+      }));
+  EXPECT_EQ(Http::FilterHeadersStatus::StopIteration,
+            filter_->decodeHeaders(request_headers, false));
+}
+
+// A refreshed token too large for the cookies is refused without continuing the request.
+TEST_F(OAuth2Test, RefreshWithOversizedTokenIsRefused) {
+  TestScopedRuntime scoped_runtime;
+  scoped_runtime.mergeValues(
+      {{"envoy.reloadable_features.oauth2_chunk_large_token_cookies", "true"}});
+  init(getConfig(true /* forward_bearer_token */, true /* use_refresh_token */));
+  Http::TestRequestHeaderMapImpl request_headers{
+      {Http::Headers::get().Path.get(), "/resource"},
+      {Http::Headers::get().Host.get(), "traffic.example.com"},
+      {Http::Headers::get().Method.get(), Http::Headers::get().MethodValues.Get},
+      {Http::Headers::get().Scheme.get(), "https"},
+      {Http::Headers::get().Cookie.get(), "RefreshToken=" + TEST_ENCRYPTED_REFRESH_TOKEN},
+  };
+  std::string refresh_token{"some-refresh-token"};
+  EXPECT_CALL(*validator_, setParams(_, _));
+  EXPECT_CALL(*validator_, isValid()).WillOnce(Return(false));
+  EXPECT_CALL(*validator_, canUpdateTokenByRefreshToken()).WillOnce(Return(true));
+  EXPECT_CALL(*validator_, refreshToken()).WillRepeatedly(ReturnRef(refresh_token));
+  EXPECT_CALL(*oauth_client_, asyncRefreshAccessToken(refresh_token, _, _, _));
+  EXPECT_EQ(Http::FilterHeadersStatus::StopAllIterationAndWatermark,
+            filter_->decodeHeaders(request_headers, false));
+
+  EXPECT_CALL(decoder_callbacks_, continueDecoding()).Times(0);
+  EXPECT_CALL(decoder_callbacks_,
+              sendLocalReply(Http::Code::ServiceUnavailable, "Service Unavailable", _, _, _));
+  EXPECT_CALL(decoder_callbacks_, encodeHeaders_(_, false))
+      .WillOnce(Invoke([](Http::ResponseHeaderMap& headers, bool) {
+        EXPECT_TRUE(headers.get(Http::Headers::get().SetCookie).empty());
+      }));
+  filter_->onRefreshAccessTokenSuccess(std::string(MaxCookieSize * 15, 'x'), "", "",
+                                       std::chrono::seconds(600));
+  EXPECT_EQ(1, config_->stats().oauth_token_cookie_oversized_.value());
+}
+
+// Without decryption and without chunks there is nothing to change, so the Cookie header is left
+// exactly as the client sent it.
+TEST_F(OAuth2Test, SingleTokenCookieIsNotRewrittenWithoutDecryption) {
+  constexpr auto DisabledSameSite = ::envoy::extensions::filters::http::oauth2::v3::
+      CookieConfig_SameSite::CookieConfig_SameSite_DISABLED;
+  init(getConfig(true /* forward_bearer_token */, false /* use_refresh_token */,
+                 ::envoy::extensions::filters::http::oauth2::v3::OAuth2Config_AuthType::
+                     OAuth2Config_AuthType_URL_ENCODED_BODY,
+                 0, false, false, false, false, false, DisabledSameSite, DisabledSameSite,
+                 DisabledSameSite, DisabledSameSite, DisabledSameSite, DisabledSameSite,
+                 DisabledSameSite, 0, 0, true /* disable_token_encryption */));
+  const std::string cookie_header = "b=2; BearerToken=abc; a=\"quoted\"";
+  Http::TestRequestHeaderMapImpl request_headers{
+      {Http::Headers::get().Cookie.get(), cookie_header},
+  };
+  decryptAndUpdateOAuthTokenCookiesForTest(request_headers);
+  EXPECT_EQ(request_headers.get(Http::Headers::get().Cookie)[0]->value().getStringView(),
+            cookie_header);
+}
+
+// A malformed chunk count falls back to the single cookie, and the chunk related cookies are
+// removed before the request goes upstream.
+TEST_F(OAuth2Test, MalformedChunkCountFallsBackToSingleCookie) {
+  Http::TestRequestHeaderMapImpl request_headers{
+      {Http::Headers::get().Cookie.get(), "BearerToken=" + TEST_ENCRYPTED_ACCESS_TOKEN},
+      {Http::Headers::get().Cookie.get(), "BearerToken_chunks=abc"},
+  };
+  decryptAndUpdateOAuthTokenCookiesForTest(request_headers);
+
+  const auto cookies = Http::Utility::parseCookies(request_headers);
+  EXPECT_EQ(cookies.at("BearerToken"), "access_code");
+  EXPECT_FALSE(cookies.contains("BearerToken_chunks"));
+  EXPECT_EQ(1, config_->stats().oauth_token_cookie_malformed_chunks_.value());
+}
+
+// Envoy never writes a single chunk, so a count of 1 is malformed and the single cookie is used.
+TEST_F(OAuth2Test, SingleChunkCountIsMalformed) {
+  Http::TestRequestHeaderMapImpl request_headers{
+      {Http::Headers::get().Cookie.get(), "BearerToken=" + TEST_ENCRYPTED_ACCESS_TOKEN},
+      {Http::Headers::get().Cookie.get(), "BearerToken_0=chunk"},
+      {Http::Headers::get().Cookie.get(), "BearerToken_chunks=1"},
+  };
+  decryptAndUpdateOAuthTokenCookiesForTest(request_headers);
+
+  const auto cookies = Http::Utility::parseCookies(request_headers);
+  EXPECT_EQ(cookies.at("BearerToken"), "access_code");
+  EXPECT_FALSE(cookies.contains("BearerToken_chunks"));
+  // The fragment of the malformed set is not forwarded upstream.
+  EXPECT_FALSE(cookies.contains("BearerToken_0"));
+  EXPECT_EQ(1, config_->stats().oauth_token_cookie_malformed_chunks_.value());
+  EXPECT_EQ(0, config_->stats().oauth_token_cookie_reassembled_.value());
+}
+
+// Valid chunks are rejoined and decrypted under the token name.
+TEST_F(OAuth2Test, ChunkedTokenIsRejoinedAndDecrypted) {
+  const size_t split = TEST_ENCRYPTED_REFRESH_TOKEN.size() / 2;
+  Http::TestRequestHeaderMapImpl request_headers{
+      {Http::Headers::get().Cookie.get(),
+       absl::StrCat("RefreshToken_0=", TEST_ENCRYPTED_REFRESH_TOKEN.substr(0, split))},
+      {Http::Headers::get().Cookie.get(),
+       absl::StrCat("RefreshToken_1=", TEST_ENCRYPTED_REFRESH_TOKEN.substr(split))},
+      {Http::Headers::get().Cookie.get(), "RefreshToken_chunks=2"},
+      {Http::Headers::get().Cookie.get(), "other=1"},
+  };
+  decryptAndUpdateOAuthTokenCookiesForTest(request_headers);
+
+  const auto cookies = Http::Utility::parseCookies(request_headers);
+  EXPECT_EQ(cookies.at("RefreshToken"), "some-refresh-token");
+  EXPECT_EQ(cookies.at("other"), "1");
+  EXPECT_FALSE(cookies.contains("RefreshToken_0"));
+  EXPECT_FALSE(cookies.contains("RefreshToken_1"));
+  EXPECT_FALSE(cookies.contains("RefreshToken_chunks"));
+  EXPECT_EQ(1, config_->stats().oauth_token_cookie_reassembled_.value());
+}
+
+// A chunk set missing a counted chunk yields no token, and its fragments are not forwarded
+// upstream.
+TEST_F(OAuth2Test, IncompleteChunkSetIsNotForwarded) {
+  Http::TestRequestHeaderMapImpl request_headers{
+      {Http::Headers::get().Cookie.get(), "other=1"},
+      {Http::Headers::get().Cookie.get(), "RefreshToken_0=part0"},
+      {Http::Headers::get().Cookie.get(), "RefreshToken_chunks=2"},
+  };
+  decryptAndUpdateOAuthTokenCookiesForTest(request_headers);
+
+  const auto cookies = Http::Utility::parseCookies(request_headers);
+  EXPECT_EQ(cookies.at("other"), "1");
+  EXPECT_FALSE(cookies.contains("RefreshToken"));
+  EXPECT_FALSE(cookies.contains("RefreshToken_0"));
+  EXPECT_FALSE(cookies.contains("RefreshToken_chunks"));
+  EXPECT_EQ(1, config_->stats().oauth_token_cookie_malformed_chunks_.value());
+}
+
+// After a refresh, encodeHeaders() writes the tokens. A large access token is chunked, and the
+// refresh token recorded as chunks on the request is written back as a single cookie with its
+// chunks deleted.
+TEST_F(OAuth2Test, RefreshResponseChunksTokenAndDeletesRecordedChunks) {
+  init(getConfig(true /* forward_bearer_token */, true /* use_refresh_token */));
+  test_time_.setSystemTime(SystemTime(std::chrono::seconds(1000)));
+  const size_t split = TEST_ENCRYPTED_REFRESH_TOKEN.size() / 2;
+  Http::TestRequestHeaderMapImpl request_headers{
+      {Http::Headers::get().Path.get(), "/resource"},
+      {Http::Headers::get().Host.get(), "traffic.example.com"},
+      {Http::Headers::get().Method.get(), Http::Headers::get().MethodValues.Get},
+      {Http::Headers::get().Scheme.get(), "https"},
+      {Http::Headers::get().Cookie.get(),
+       absl::StrCat("RefreshToken_0=", TEST_ENCRYPTED_REFRESH_TOKEN.substr(0, split))},
+      {Http::Headers::get().Cookie.get(),
+       absl::StrCat("RefreshToken_1=", TEST_ENCRYPTED_REFRESH_TOKEN.substr(split))},
+      {Http::Headers::get().Cookie.get(), "RefreshToken_chunks=2"},
+  };
+  std::string refresh_token{"some-refresh-token"};
+  EXPECT_CALL(*validator_, setParams(_, _));
+  EXPECT_CALL(*validator_, isValid()).WillOnce(Return(false));
+  EXPECT_CALL(*validator_, canUpdateTokenByRefreshToken()).WillOnce(Return(true));
+  EXPECT_CALL(*validator_, refreshToken()).WillRepeatedly(ReturnRef(refresh_token));
+  EXPECT_CALL(*oauth_client_, asyncRefreshAccessToken(refresh_token, _, _, _));
+  EXPECT_EQ(Http::FilterHeadersStatus::StopAllIterationAndWatermark,
+            filter_->decodeHeaders(request_headers, false));
+
+  EXPECT_CALL(decoder_callbacks_, continueDecoding());
+  filter_->onRefreshAccessTokenSuccess(std::string(5000, 'x'), "", "", std::chrono::seconds(600));
+
+  Http::TestResponseHeaderMapImpl response_headers{{Http::Headers::get().Status.get(), "200"}};
+  EXPECT_EQ(Http::FilterHeadersStatus::Continue, filter_->encodeHeaders(response_headers, false));
+
+  // The access token is chunked. The client had no access token cookie, so there is none to delete.
+  EXPECT_EQ(Http::Utility::parseSetCookieValue(response_headers, "BearerToken_chunks"), "2");
+  EXPECT_FALSE(Http::Utility::parseSetCookieValue(response_headers, "BearerToken_0").empty());
+  EXPECT_FALSE(Http::Utility::parseSetCookieValue(response_headers, "BearerToken_1").empty());
+  EXPECT_TRUE(Http::Utility::parseSetCookieValue(response_headers, "BearerToken").empty());
+  // The preserved refresh token fits in one cookie, so its recorded chunks are deleted.
+  const std::string refresh_cookie =
+      Http::Utility::parseSetCookieValue(response_headers, "RefreshToken");
+  EXPECT_FALSE(refresh_cookie.empty());
+  EXPECT_NE(refresh_cookie, "deleted");
+  EXPECT_EQ(Http::Utility::parseSetCookieValue(response_headers, "RefreshToken_0"), "deleted");
+  EXPECT_EQ(Http::Utility::parseSetCookieValue(response_headers, "RefreshToken_1"), "deleted");
+  EXPECT_EQ(Http::Utility::parseSetCookieValue(response_headers, "RefreshToken_chunks"), "deleted");
+  EXPECT_EQ(1, config_->stats().oauth_token_cookie_chunked_.value());
+}
+
+// With token encryption disabled the chunks carry the token itself. A complete set is rejoined as
+// is, and the fragments of an incomplete set are not forwarded upstream.
+TEST_F(OAuth2Test, ChunksAreRejoinedWithoutDecryption) {
+  constexpr auto DisabledSameSite = ::envoy::extensions::filters::http::oauth2::v3::
+      CookieConfig_SameSite::CookieConfig_SameSite_DISABLED;
+  init(getConfig(true /* forward_bearer_token */, true /* use_refresh_token */,
+                 ::envoy::extensions::filters::http::oauth2::v3::OAuth2Config_AuthType::
+                     OAuth2Config_AuthType_URL_ENCODED_BODY,
+                 0, false, false, false, false, false, DisabledSameSite, DisabledSameSite,
+                 DisabledSameSite, DisabledSameSite, DisabledSameSite, DisabledSameSite,
+                 DisabledSameSite, 0, 0, true /* disable_token_encryption */));
+  Http::TestRequestHeaderMapImpl request_headers{
+      {Http::Headers::get().Cookie.get(), "other=1"},
+      {Http::Headers::get().Cookie.get(), "RefreshToken_0=plain-"},
+      {Http::Headers::get().Cookie.get(), "RefreshToken_1=refresh-token"},
+      {Http::Headers::get().Cookie.get(), "RefreshToken_chunks=2"},
+      {Http::Headers::get().Cookie.get(), "BearerToken_0=partial"},
+      {Http::Headers::get().Cookie.get(), "BearerToken_chunks=2"},
+  };
+  decryptAndUpdateOAuthTokenCookiesForTest(request_headers);
+
+  const auto cookies = Http::Utility::parseCookies(request_headers);
+  EXPECT_EQ(cookies.at("RefreshToken"), "plain-refresh-token");
+  EXPECT_EQ(cookies.at("other"), "1");
+  for (const absl::string_view name : {"RefreshToken_0", "RefreshToken_1", "RefreshToken_chunks",
+                                       "BearerToken", "BearerToken_0", "BearerToken_chunks"}) {
+    EXPECT_FALSE(cookies.contains(name)) << name;
+  }
+  EXPECT_EQ(1, config_->stats().oauth_token_cookie_reassembled_.value());
+  EXPECT_EQ(1, config_->stats().oauth_token_cookie_malformed_chunks_.value());
+}
+
+// A token is accepted up to exactly 5 chunks and refused one byte past that. Encryption is off so
+// the cookie value is the token itself and the maths is exact.
+TEST_F(OAuth2Test, TokenCookieChunkLimitBoundary) {
+  constexpr auto DisabledSameSite = ::envoy::extensions::filters::http::oauth2::v3::
+      CookieConfig_SameSite::CookieConfig_SameSite_DISABLED;
+  const auto make_config = [&]() {
+    return getConfig(true /* forward_bearer_token */, false /* use_refresh_token */,
+                     ::envoy::extensions::filters::http::oauth2::v3::OAuth2Config_AuthType::
+                         OAuth2Config_AuthType_URL_ENCODED_BODY,
+                     0, false, false, false, false, false, DisabledSameSite, DisabledSameSite,
+                     DisabledSameSite, DisabledSameSite, DisabledSameSite, DisabledSameSite,
+                     DisabledSameSite, 0, 0, true /* disable_token_encryption */);
+  };
+
+  // Each chunk carries "BearerToken_<index>=" and the tail, and the data fills the rest.
+  init(make_config());
+  setCookieExpiresForTest("600", "600", "600");
+  const size_t chunk_size =
+      MaxCookieSize - (std::string("BearerToken").size() + 3 /* "_<index>" */ + 1 /* "=" */ +
+                       cookieTailSizeForTest(1));
+
+  const auto login = [&](size_t token_size) {
+    init(make_config());
+    test_time_.setSystemTime(SystemTime(std::chrono::seconds(1000)));
+    Http::TestRequestHeaderMapImpl request_headers{
+        {Http::Headers::get().Path.get(), "/original_path"},
+        {Http::Headers::get().Host.get(), "traffic.example.com"},
+        {Http::Headers::get().Method.get(), Http::Headers::get().MethodValues.Get},
+        {Http::Headers::get().Scheme.get(), "https"},
+    };
+    std::string legit_token{"legit_token"};
+    EXPECT_CALL(*validator_, setParams(_, _));
+    EXPECT_CALL(*validator_, isValid()).WillOnce(Return(true));
+    EXPECT_CALL(*validator_, token()).WillRepeatedly(ReturnRef(legit_token));
+    filter_->decodeHeaders(request_headers, false);
+    filter_->onGetAccessTokenSuccess(std::string(token_size, 'a'), "", "",
+                                     std::chrono::seconds(600));
+  };
+
+  // Exactly 5 full chunks is accepted.
+  std::string chunk_count;
+  EXPECT_CALL(decoder_callbacks_, encodeHeaders_(_, true))
+      .WillOnce(Invoke([&chunk_count](Http::ResponseHeaderMap& headers, bool) {
+        chunk_count = Http::Utility::parseSetCookieValue(headers, "BearerToken_chunks");
+      }));
+  login(5 * chunk_size);
+  EXPECT_EQ(chunk_count, "5");
+  EXPECT_EQ(0, config_->stats().oauth_token_cookie_oversized_.value());
+
+  // One more byte would need a sixth chunk, so the session is refused.
+  EXPECT_CALL(decoder_callbacks_,
+              sendLocalReply(Http::Code::ServiceUnavailable, "Service Unavailable", _, _, _));
+  EXPECT_CALL(decoder_callbacks_, encodeHeaders_(_, false))
+      .WillOnce(Invoke([](Http::ResponseHeaderMap& headers, bool) {
+        EXPECT_TRUE(headers.get(Http::Headers::get().SetCookie).empty());
+      }));
+  login(5 * chunk_size + 1);
+  EXPECT_EQ(1, config_->stats().oauth_token_cookie_oversized_.value());
+}
+
+// Chunk deletes carry the same attributes as the single cookie delete: the cookie domain, and the
+// Secure attribute for a "__Secure-" name, without which the browser ignores the delete.
+TEST_F(OAuth2Test, ChunkDeletesCarryDomainAndSecureAttribute) {
+  envoy::extensions::filters::http::oauth2::v3::OAuth2Config p;
+  auto* endpoint = p.mutable_token_endpoint();
+  endpoint->set_cluster("auth.example.com");
+  endpoint->set_uri("auth.example.com/_oauth");
+  p.set_authorization_endpoint("https://auth.example.com/oauth/authorize/");
+  p.mutable_signout_path()->mutable_path()->set_exact("/_signout");
+  p.mutable_redirect_path_matcher()->mutable_path()->set_exact(TEST_CALLBACK);
+  auto* credentials = p.mutable_credentials();
+  credentials->set_client_id(TEST_CLIENT_ID);
+  credentials->mutable_token_secret()->set_name("secret");
+  credentials->mutable_hmac_secret()->set_name("hmac");
+  credentials->set_cookie_domain("example.com");
+  credentials->mutable_cookie_names()->set_id_token("__Secure-IdToken");
+  auto secret_reader = std::make_shared<MockSecretReader>();
+  init(std::make_shared<FilterConfig>(p, factory_context_.server_factory_context_, secret_reader,
+                                      scope_, "test."));
+
+  Http::TestRequestHeaderMapImpl request_headers{
+      {Http::Headers::get().Path.get(), "/_signout"},
+      {Http::Headers::get().Host.get(), "traffic.example.com"},
+      {Http::Headers::get().Method.get(), Http::Headers::get().MethodValues.Get},
+      {Http::Headers::get().Scheme.get(), "https"},
+      {Http::Headers::get().Cookie.get(), "__Secure-IdToken_0=a"},
+      {Http::Headers::get().Cookie.get(), "__Secure-IdToken_1=b"},
+      {Http::Headers::get().Cookie.get(), "__Secure-IdToken_chunks=2"},
+  };
+
+  EXPECT_CALL(decoder_callbacks_, encodeHeaders_(_, true))
+      .WillOnce(Invoke([](Http::ResponseHeaderMap& headers, bool) {
+        std::vector<std::string> set_cookies;
+        headers.iterate(
+            [&set_cookies](const Http::HeaderEntry& header) -> Http::HeaderMap::Iterate {
+              if (header.key().getStringView() == Http::Headers::get().SetCookie.get()) {
+                set_cookies.push_back(std::string(header.value().getStringView()));
+              }
+              return Http::HeaderMap::Iterate::Continue;
+            });
+        for (const absl::string_view name :
+             {"__Secure-IdToken_0", "__Secure-IdToken_1", "__Secure-IdToken_chunks"}) {
+          EXPECT_THAT(set_cookies,
+                      testing::Contains(absl::StrCat(
+                          name, "=deleted; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT",
+                          ";domain=example.com; Secure")))
+              << name;
+        }
+      }));
+  EXPECT_EQ(Http::FilterHeadersStatus::StopIteration,
+            filter_->decodeHeaders(request_headers, false));
 }
 
 } // namespace Oauth2
