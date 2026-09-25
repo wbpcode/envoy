@@ -2517,5 +2517,66 @@ TEST_P(OdCdsScopedRdsIntegrationTest, OnDemandUpdateFailsBecauseOdCdsIsDisabledI
 
   cleanupUpstreamAndDownstream();
 }
+
+// tests a scenario when:
+//  - singleton subscriptions for regular config sources are enabled
+//  - making requests to two unknown clusters
+//  - odcds creates a separate subscription (stream) for each of the clusters
+//  - the first response contains the cluster and the request is resumed
+//  - the second response removes the cluster and the request fails
+TEST_P(OdCdsIntegrationTest, OnDemandClusterDiscoveryWithSingletonSubscriptions) {
+  config_helper_.addRuntimeOverride(
+      "envoy.reloadable_features.odcds_singleton_subscriptions_for_config_source", "true");
+  addPerRouteConfig(OdCdsIntegrationHelper::createPerRouteConfig(
+                        OdCdsIntegrationHelper::createOdCdsConfigSource("odcds_cluster"), 2500),
+                    "integration", {});
+  initialize();
+  codec_client_ = makeHttpConnection(makeClientConnection(lookupPort("http")));
+  Http::TestRequestHeaderMapImpl request_headers{{":method", "GET"},
+                                                 {":path", "/"},
+                                                 {":scheme", "http"},
+                                                 {":authority", "vhost.first"},
+                                                 {"Pick-This-Cluster", "new_cluster"}};
+  IntegrationStreamDecoderPtr response = codec_client_->makeHeaderOnlyRequest(request_headers);
+
+  createXdsConnection();
+  auto result = xds_connection_->waitForNewStream(*dispatcher_, odcds_stream_);
+  RELEASE_ASSERT(result, result.message());
+  odcds_stream_->startGrpcStream();
+
+  EXPECT_TRUE(compareDeltaDiscoveryRequest(Config::TestTypeUrl::get().Cluster, {"new_cluster"}, {},
+                                           odcds_stream_.get()));
+  sendDeltaDiscoveryResponse<envoy::config::cluster::v3::Cluster>(
+      Config::TestTypeUrl::get().Cluster, {new_cluster_}, {}, "1", odcds_stream_.get());
+  EXPECT_TRUE(compareDeltaDiscoveryRequest(Config::TestTypeUrl::get().Cluster, {}, {},
+                                           odcds_stream_.get()));
+
+  waitForNextUpstreamRequest(new_cluster_upstream_idx_);
+  upstream_request_->encodeHeaders(default_response_headers_, true);
+  ASSERT_TRUE(response->waitForEndStream());
+  verifyResponse(std::move(response), "200", {}, {});
+
+  // A request to another cluster creates a new subscription, over a new stream.
+  request_headers.setCopy(Http::LowerCaseString("Pick-This-Cluster"), "new_cluster2");
+  response = codec_client_->makeHeaderOnlyRequest(request_headers);
+
+  FakeStreamPtr odcds_stream2;
+  result = xds_connection_->waitForNewStream(*dispatcher_, odcds_stream2);
+  RELEASE_ASSERT(result, result.message());
+  odcds_stream2->startGrpcStream();
+
+  EXPECT_TRUE(compareDeltaDiscoveryRequest(Config::TestTypeUrl::get().Cluster, {"new_cluster2"}, {},
+                                           odcds_stream2.get()));
+  sendDeltaDiscoveryResponse<envoy::config::cluster::v3::Cluster>(
+      Config::TestTypeUrl::get().Cluster, {}, {"new_cluster2"}, "1", odcds_stream2.get());
+  EXPECT_TRUE(compareDeltaDiscoveryRequest(Config::TestTypeUrl::get().Cluster, {}, {},
+                                           odcds_stream2.get()));
+
+  ASSERT_TRUE(response->waitForEndStream());
+  verifyResponse(std::move(response), "503", {}, {});
+
+  cleanUpXdsConnection();
+  cleanupUpstreamAndDownstream();
+}
 } // namespace
 } // namespace Envoy
