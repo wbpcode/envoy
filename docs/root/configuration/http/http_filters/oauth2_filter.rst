@@ -273,3 +273,7 @@ The OAuth2 filter outputs statistics in the ``<stat_prefix>.`` namespace.
   oauth_unauthorization_rq, Counter, Total unauthorized requests.
   oauth_refreshtoken_success, Counter, Total successfull requests for update access token using by refresh token
   oauth_refreshtoken_failure, Counter, Total failed requests for update access token using by refresh token
+  oauth_token_cookie_chunked, Counter, Total token cookies that were split across multiple cookies
+  oauth_token_cookie_reassembled, Counter, Total token cookies rebuilt from a chunked cookie set
+  oauth_token_cookie_malformed_chunks, Counter, Total chunked cookie sets discarded as malformed
+  oauth_token_cookie_oversized, Counter, Total sessions refused because a token exceeded the chunk limit
