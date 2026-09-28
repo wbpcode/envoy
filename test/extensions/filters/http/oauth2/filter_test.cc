@@ -4468,7 +4468,7 @@ TEST_F(OAuth2Test, OAuthAccessTokenSucessWithChunkedTokenDisabled) {
 
 // Enabling the guard must not change anything for a cookie that already fits. This pins the exact
 // boundary: at the size limit the output is identical either way, and only one byte past it does
-// chunking start. Encryption is off so the cookie value is the token itself and the maths is exact.
+// chunking start. Encryption is off so the cookie value is the token itself and the math is exact.
 TEST_F(OAuth2Test, TokenCookieAtSizeLimitIsNotChunked) {
   constexpr auto DisabledSameSite = ::envoy::extensions::filters::http::oauth2::v3::
       CookieConfig_SameSite::CookieConfig_SameSite_DISABLED;
@@ -4776,7 +4776,7 @@ TEST_F(OAuth2Test, RequestSignoutWithMalformedChunkCount) {
   EXPECT_CALL(decoder_callbacks_, encodeHeaders_(_, true))
       .WillOnce(Invoke([&](Http::ResponseHeaderMap& headers, bool) {
         // Without a valid count every index a chunk may use is deleted, with the count cookie.
-        for (size_t index = 0; index < 5; ++index) {
+        for (size_t index = 0; index < MaxChunksPerToken; ++index) {
           EXPECT_EQ(
               Http::Utility::parseSetCookieValue(headers, absl::StrCat("BearerToken_", index)),
               "deleted");
@@ -5196,8 +5196,8 @@ TEST_F(OAuth2Test, ChunksAreRejoinedWithoutDecryption) {
   EXPECT_EQ(1, config_->stats().oauth_token_cookie_malformed_chunks_.value());
 }
 
-// A token is accepted up to exactly 5 chunks and refused one byte past that. Encryption is off so
-// the cookie value is the token itself and the maths is exact.
+// A token is accepted up to exactly MaxChunksPerToken chunks and refused one byte past that.
+// Encryption is off so the cookie value is the token itself and the math is exact.
 TEST_F(OAuth2Test, TokenCookieChunkLimitBoundary) {
   constexpr auto DisabledSameSite = ::envoy::extensions::filters::http::oauth2::v3::
       CookieConfig_SameSite::CookieConfig_SameSite_DISABLED;
@@ -5235,24 +5235,24 @@ TEST_F(OAuth2Test, TokenCookieChunkLimitBoundary) {
                                      std::chrono::seconds(600));
   };
 
-  // Exactly 5 full chunks is accepted.
+  // Exactly MaxChunksPerToken full chunks is accepted.
   std::string chunk_count;
   EXPECT_CALL(decoder_callbacks_, encodeHeaders_(_, true))
       .WillOnce(Invoke([&chunk_count](Http::ResponseHeaderMap& headers, bool) {
         chunk_count = Http::Utility::parseSetCookieValue(headers, "BearerToken_chunks");
       }));
-  login(5 * chunk_size);
-  EXPECT_EQ(chunk_count, "5");
+  login(MaxChunksPerToken * chunk_size);
+  EXPECT_EQ(chunk_count, absl::StrCat(MaxChunksPerToken));
   EXPECT_EQ(0, config_->stats().oauth_token_cookie_oversized_.value());
 
-  // One more byte would need a sixth chunk, so the session is refused.
+  // One more byte would need one more chunk, so the session is refused.
   EXPECT_CALL(decoder_callbacks_,
               sendLocalReply(Http::Code::ServiceUnavailable, "Service Unavailable", _, _, _));
   EXPECT_CALL(decoder_callbacks_, encodeHeaders_(_, false))
       .WillOnce(Invoke([](Http::ResponseHeaderMap& headers, bool) {
         EXPECT_TRUE(headers.get(Http::Headers::get().SetCookie).empty());
       }));
-  login(5 * chunk_size + 1);
+  login(MaxChunksPerToken * chunk_size + 1);
   EXPECT_EQ(1, config_->stats().oauth_token_cookie_oversized_.value());
 }
 

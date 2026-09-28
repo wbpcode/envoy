@@ -82,14 +82,13 @@ constexpr absl::string_view SameSiteLax = ";SameSite=Lax";
 constexpr absl::string_view SameSiteStrict = ";SameSite=Strict";
 constexpr absl::string_view SameSiteNone = ";SameSite=None";
 constexpr absl::string_view HmacPayloadSeparator = "\n";
-constexpr size_t MaxChunksPerToken = 5;
 
 // Envoy only chunks a value that does not fit in a single cookie, and each chunk holds less than a
 // single cookie would, so a valid chunked set always has at least 2 chunks.
-std::optional<size_t> parseChunkedCookiesCount(absl::string_view count_value) {
+absl::optional<size_t> parseChunkedCookiesCount(absl::string_view count_value) {
   size_t count = 0;
   if (!absl::SimpleAtoi(count_value, &count) || count < 2 || count > MaxChunksPerToken) {
-    return std::nullopt;
+    return absl::nullopt;
   }
   return count;
 }
@@ -140,7 +139,7 @@ findTokenCookieValueAndState(const absl::flat_hash_map<std::string, std::string>
 
   // Chunked cookies is present and should be processed preferentially over a single cookie.
   if (result.state_.chunks_) {
-    const std::optional<size_t> count = parseChunkedCookiesCount(count_it->second);
+    const auto count = parseChunkedCookiesCount(count_it->second);
     if (count.has_value()) {
       // Valid chunks take precedence over a single cookie.
       result.state_.count_ = count.value();
@@ -193,15 +192,16 @@ void eraseTokenCookies(absl::flat_hash_map<std::string, std::string>& cookies,
   }
 }
 
-std::optional<size_t> tokenCookieDataSize(size_t key_size, size_t tail_size) {
+absl::optional<size_t> tokenCookieDataSize(size_t key_size, size_t tail_size) {
   // Size of the chunk cookie name suffix, e.g., "_1", "_2", etc. 3 is used because we assume
   // no more than 99 chunks, so the suffix will be at most 3 characters long.
   constexpr size_t chunk_suffix_size = 3;
+  static_assert(MaxChunksPerToken <= 100, "a chunk index must fit in two digits");
   // Size of the separator between the key and the value in the cookie (e.g., "=")
   constexpr size_t separator_size = 1;
   const size_t chunk_overhead = key_size + chunk_suffix_size + separator_size + tail_size;
   if (chunk_overhead >= MaxCookieSize) {
-    return std::nullopt;
+    return absl::nullopt;
   }
   return MaxCookieSize - chunk_overhead;
 }
@@ -221,7 +221,7 @@ bool tokenCookieFits(size_t key_size, size_t value_size, size_t tail_size) {
   if (key_size + 1 /* "=" */ + value_size + tail_size <= MaxCookieSize) {
     return true;
   }
-  const std::optional<size_t> chunk_size = tokenCookieDataSize(key_size, tail_size);
+  const auto chunk_size = tokenCookieDataSize(key_size, tail_size);
   // No room for data in a chunk: the value is written as a single cookie, as before chunking.
   if (!chunk_size.has_value()) {
     return true;
@@ -240,7 +240,7 @@ absl::string_view mayAddSecureAttributeForCookie(absl::string_view cookie_name) 
 // chunks.
 size_t tokenCookieCount(absl::string_view key, absl::string_view data,
                         absl::string_view cookie_tail, bool chunking_enabled) {
-  const std::optional<size_t> chunk_size = tokenCookieDataSize(key.size(), cookie_tail.size());
+  const auto chunk_size = tokenCookieDataSize(key.size(), cookie_tail.size());
   // No room for data in a chunk: the value is written as a single cookie, as before chunking.
   if (!chunk_size.has_value() ||
       !tokenCookieNeedsChunking(key, data, cookie_tail, chunking_enabled)) {
@@ -578,7 +578,7 @@ DecryptResult decryptCbc(absl::string_view encrypted, absl::string_view secret) 
   // Resize to actual plaintext length
   plaintext.resize(plaintext_len);
 
-  return {std::string(plaintext.begin(), plaintext.end()), std::nullopt};
+  return {std::string(plaintext.begin(), plaintext.end()), absl::nullopt};
 }
 
 } // namespace
@@ -735,7 +735,7 @@ DecryptResult decrypt(absl::string_view encrypted, absl::string_view secret) {
   // Resize to actual plaintext length
   plaintext.resize(plaintext_len);
 
-  return {std::string(plaintext.begin(), plaintext.end()), std::nullopt, /*is_gcm=*/true};
+  return {std::string(plaintext.begin(), plaintext.end()), absl::nullopt, /*is_gcm=*/true};
 }
 
 FilterConfig::FilterConfig(
@@ -1338,14 +1338,14 @@ void OAuth2Filter::setCookie(Http::ResponseHeaderMap& headers, absl::string_view
 void OAuth2Filter::setTokenCookie(Http::ResponseHeaderMap& headers, absl::string_view key,
                                   absl::string_view data, absl::string_view cookie_tail,
                                   size_t cookie_count) const {
-  // Limit: 3 tokens (access, id, refresh) × (5 chunks each + 1 count cookie) = 18 cookies total.
-  // That is about 20KB per token, so three fully chunked tokens already reach the default
-  // max_request_headers_kb. This can be made configurable in the future if needed.
+  // Limit: each of the 3 tokens (access, id, refresh) is written as at most MaxChunksPerToken
+  // chunks of up to MaxCookieSize bytes and 1 count cookie. Fully chunked tokens together can
+  // exceed the default max_request_headers_kb. This can be made configurable in the future if
+  // needed.
 
   ASSERT(cookie_count > 0);
 
-  const std::optional<size_t> max_allowed_data_size =
-      tokenCookieDataSize(key.size(), cookie_tail.size());
+  const auto max_allowed_data_size = tokenCookieDataSize(key.size(), cookie_tail.size());
 
   // A single cookie pays no chunk index suffix, so it fits at sizes a chunk would not. Anything
   // that fits is written as it is today. Without room for data in a chunk, fall back to the legacy

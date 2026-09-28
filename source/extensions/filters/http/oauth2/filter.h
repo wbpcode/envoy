@@ -34,6 +34,8 @@ namespace HttpFilters {
 namespace Oauth2 {
 
 constexpr size_t MaxCookieSize = 4096;
+// The most chunks a token cookie is split into. A chunk count above it is treated as malformed.
+constexpr size_t MaxChunksPerToken = 8;
 
 class OAuth2Client;
 
