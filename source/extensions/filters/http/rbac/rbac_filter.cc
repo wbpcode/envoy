@@ -2,6 +2,7 @@
 
 #include "envoy/stats/scope.h"
 
+#include "source/common/config/well_known_names.h"
 #include "source/common/http/matching/inputs.h"
 #include "source/common/http/utility.h"
 #include "source/common/network/matching/inputs.h"
@@ -72,8 +73,11 @@ RoleBasedAccessControlFilterConfig::RoleBasedAccessControlFilterConfig(
     const std::string& stats_prefix, Stats::Scope& scope,
     Server::Configuration::ServerFactoryContext& context,
     ProtobufMessage::ValidationVisitor& validation_visitor)
+    // http.[<stat_prefix>.]rbac.[<rules_stat_prefix>.]policy.(<policy>.)<stat>
     : stats_(Filters::Common::RBAC::generateStats(stats_prefix, proto_config.rules_stat_prefix(),
-                                                  proto_config.shadow_rules_stat_prefix(), scope)),
+                                                  proto_config.shadow_rules_stat_prefix(), scope,
+                                                  Envoy::Config::TagNames::get().RBAC_HTTP_PREFIX,
+                                                  Envoy::Config::TagNames::get().RBAC_POLICY_NAME)),
       rules_stat_prefix_(proto_config.rules_stat_prefix()),
       shadow_rules_stat_prefix_(proto_config.shadow_rules_stat_prefix()),
       per_rule_stats_(proto_config.track_per_rule_stats()),

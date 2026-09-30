@@ -11,9 +11,11 @@
 #include "source/common/common/enum_to_int.h"
 #include "source/common/common/macros.h"
 #include "source/common/common/matchers.h"
+#include "source/common/config/well_known_names.h"
 #include "source/common/http/utility.h"
 #include "source/common/protobuf/utility.h"
 #include "source/common/router/config_impl.h"
+#include "source/common/stats/prefix_utility.h"
 #include "source/extensions/filters/common/processing_effect/processing_effect.h"
 
 namespace Envoy {
@@ -117,8 +119,41 @@ absl::StatusOr<std::optional<Http::Utility::QueryParamsMulti>> modifyQueryParame
 
 } // namespace
 
+namespace {
+
+// http.[<stat_prefix>.]ext_authz.[<ext_authz_prefix>.]<stat>: the prefix of the filter's own
+// stats, with the filter's stat prefix as a tag when it has one.
+Stats::TaggedStatName filterStatsPrefix(Stats::SymbolTable& symbol_table,
+                                        absl::string_view stats_prefix,
+                                        absl::string_view filter_stats_prefix) {
+  if (filter_stats_prefix.empty()) {
+    return Stats::mergeStatPrefix(symbol_table, stats_prefix, "ext_authz");
+  }
+  const Stats::TagStringView tag{Envoy::Config::TagNames::get().EXT_AUTHZ_PREFIX,
+                                 filter_stats_prefix};
+  return Stats::mergeStatPrefix(symbol_table, stats_prefix, "ext_authz",
+                                Stats::TagStringViewSpan(&tag, 1),
+                                absl::StrCat("ext_authz.", filter_stats_prefix));
+}
+
+// cluster.[<cluster>.]ext_authz.[<ext_authz_prefix>.]<stat>: the prefix of the stats charged to
+// the upstream cluster's scope, with the filter's stat prefix as a tag when it has one.
+Stats::TaggedStatName clusterStatsPrefix(Stats::SymbolTable& symbol_table,
+                                         absl::string_view filter_stats_prefix) {
+  if (filter_stats_prefix.empty()) {
+    return Stats::TaggedStatName(symbol_table, "ext_authz", {}, {});
+  }
+  const Stats::TagStringView tag{Envoy::Config::TagNames::get().EXT_AUTHZ_PREFIX,
+                                 filter_stats_prefix};
+  return Stats::TaggedStatName(symbol_table, "ext_authz", Stats::TagStringViewSpan(&tag, 1),
+                               absl::StrCat("ext_authz.", filter_stats_prefix));
+}
+
+} // namespace
+
 FilterConfig::FilterConfig(const envoy::extensions::filters::http::ext_authz::v3::ExtAuthz& config,
-                           Stats::Scope& scope, const std::string& stats_prefix,
+                           Stats::Scope& scope, Stats::Scope& stats_scope,
+                           const std::string& stats_prefix,
                            Server::Configuration::ServerFactoryContext& factory_context,
                            absl::Status& creation_status)
     : allow_partial_message_(config.with_request_body().allow_partial_message()),
@@ -178,13 +213,12 @@ FilterConfig::FilterConfig(const envoy::extensions::filters::http::ext_authz::v3
       charge_cluster_response_stats_(
           PROTOBUF_GET_WRAPPED_OR_DEFAULT(config, charge_cluster_response_stats, true)),
       emit_client_span_(PROTOBUF_GET_WRAPPED_OR_DEFAULT(config, emit_client_span, true)),
-      stats_(generateStats(stats_prefix, config.stat_prefix(), scope)),
-      ext_authz_ok_(pool_.add(createPoolStatName(config.stat_prefix(), "ok"))),
-      ext_authz_denied_(pool_.add(createPoolStatName(config.stat_prefix(), "denied"))),
-      ext_authz_error_(pool_.add(createPoolStatName(config.stat_prefix(), "error"))),
-      ext_authz_invalid_(pool_.add(createPoolStatName(config.stat_prefix(), "invalid"))),
-      ext_authz_failure_mode_allowed_(
-          pool_.add(createPoolStatName(config.stat_prefix(), "failure_mode_allowed"))) {
+      stats_prefix_(filterStatsPrefix(scope_.symbolTable(), stats_prefix, config.stat_prefix())),
+      cluster_stats_prefix_(clusterStatsPrefix(scope_.symbolTable(), config.stat_prefix())),
+      stats_(generateStats(stats_prefix_, stats_scope)), ext_authz_ok_(pool_.add("ok")),
+      ext_authz_denied_(pool_.add("denied")), ext_authz_error_(pool_.add("error")),
+      ext_authz_invalid_(pool_.add("invalid")),
+      ext_authz_failure_mode_allowed_(pool_.add("failure_mode_allowed")) {
   auto bootstrap = factory_context.bootstrap();
   auto labels_key_it =
       bootstrap.node().metadata().fields().find(config.bootstrap_metadata_labels_key());

@@ -24,6 +24,7 @@
 #include "source/common/http/header_map_impl.h"
 #include "source/common/protobuf/arena_wrapped_proto.h"
 #include "source/common/runtime/runtime_protos.h"
+#include "source/common/stats/utility.h"
 #include "source/extensions/filters/common/ext_authz/check_request_utils.h"
 #include "source/extensions/filters/common/ext_authz/ext_authz.h"
 #include "source/extensions/filters/common/ext_authz/ext_authz_grpc_impl.h"
@@ -187,8 +188,14 @@ class FilterConfig {
   using LabelsMap = Protobuf::Map<std::string, std::string>;
 
 public:
+  /**
+   * @param scope the server scope; the response code stats are charged to it.
+   * @param stats_scope the scope the filter's own stats are created in, under stats_prefix.
+   * @param stats_prefix the prefix of the filter's own stats, e.g. the 'http.<stat_prefix>.' of the
+   *        connection manager; empty when stats_scope is already named after it.
+   */
   FilterConfig(const envoy::extensions::filters::http::ext_authz::v3::ExtAuthz& config,
-               Stats::Scope& scope, const std::string& stats_prefix,
+               Stats::Scope& scope, Stats::Scope& stats_scope, const std::string& stats_prefix,
                Server::Configuration::ServerFactoryContext& factory_context,
                absl::Status& creation_status);
 
@@ -265,8 +272,12 @@ public:
 
   const ExtAuthzFilterStats& stats() const { return stats_; }
 
+  // Increments the 'ext_authz[.<stat_prefix>].<name>' stat of the given (cluster) scope.
   void incCounter(Stats::Scope& scope, Stats::StatName name) {
-    scope.counterFromStatName(name).inc();
+    Stats::Utility::counterFromTaggedPrefix(scope, cluster_stats_prefix_.baseName(),
+                                            cluster_stats_prefix_.tags(),
+                                            cluster_stats_prefix_.name(), name)
+        .inc();
   }
 
   bool includePeerCertificate() const { return include_peer_certificate_; }
@@ -300,20 +311,9 @@ private:
     return Http::Code::Forbidden;
   }
 
-  ExtAuthzFilterStats generateStats(const std::string& prefix,
-                                    const std::string& filter_stats_prefix, Stats::Scope& scope) {
-    const std::string final_prefix = absl::StrCat(prefix, "ext_authz.", filter_stats_prefix);
-    return {ALL_EXT_AUTHZ_FILTER_STATS(POOL_COUNTER_PREFIX(scope, final_prefix))};
-  }
-
-  // This generates ext_authz.<optional filter_stats_prefix>.name, for example: ext_authz.waf.ok
-  // when filter_stats_prefix is "waf", and ext_authz.ok when filter_stats_prefix is empty.
-  const std::string createPoolStatName(const std::string& filter_stats_prefix,
-                                       const std::string& name) {
-    return absl::StrCat("ext_authz",
-                        filter_stats_prefix.empty() ? EMPTY_STRING
-                                                    : absl::StrCat(".", filter_stats_prefix),
-                        ".", name);
+  static ExtAuthzFilterStats generateStats(const Stats::TaggedStatName& prefix,
+                                           Stats::Scope& scope) {
+    return {ALL_EXT_AUTHZ_FILTER_STATS(POOL_COUNTER_TAGGED(scope, prefix))};
   }
 
   const bool allow_partial_message_;
@@ -354,6 +354,14 @@ private:
   const bool charge_cluster_response_stats_;
   const bool emit_client_span_;
 
+  // '<stats_prefix>ext_authz[.<stat_prefix>]', the prefix of the filter's own stats: its
+  // tag-extracted form, its tags (the connection manager prefix when the stats prefix carries it,
+  // and the filter's stat prefix) and its flat form.
+  const Stats::TaggedStatName stats_prefix_;
+  // 'ext_authz[.<stat_prefix>]', the prefix of the stats charged to the upstream cluster's scope,
+  // with the filter's stat prefix as its tag.
+  const Stats::TaggedStatName cluster_stats_prefix_;
+
   // The stats for the filter.
   ExtAuthzFilterStats stats_;
 
@@ -363,6 +371,7 @@ private:
 public:
   // TODO(nezdolik): deprecate cluster scope stats counters in favor of filter scope stats
   // (ExtAuthzFilterStats stats_).
+  // The leaf names of the cluster scope stats, charged through incCounter().
   const Stats::StatName ext_authz_ok_;
   const Stats::StatName ext_authz_denied_;
   const Stats::StatName ext_authz_error_;

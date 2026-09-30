@@ -1574,6 +1574,62 @@ TEST_F(FaultFilterSettingsTest, CheckOverrideRuntimeKeys) {
 }
 
 } // namespace
+
+// The stats carry explicit tags: the connection manager prefix is extracted from the stats prefix,
+// and the per-cluster stats add the downstream cluster as a tag of their own.
+TEST_F(FaultFilterTest, StatsAreTagged) {
+  // The tags of a stat as (name, value) pairs.
+  const auto tags_of = [](const Stats::Metric& metric) {
+    std::vector<std::pair<std::string, std::string>> tags;
+    for (const Stats::Tag& tag : metric.tags()) {
+      tags.emplace_back(tag.name_, tag.value_);
+    }
+    return tags;
+  };
+
+  NiceMock<Stats::MockIsolatedStatsStore> store;
+  FaultFilterConfig config(convertYamlStrToProtoConfig(fixed_delay_only_yaml), "http.hcm.",
+                           *store.rootScope(), context_);
+
+  EXPECT_EQ("http.hcm.fault.aborts_injected", config.stats().aborts_injected_.name());
+  EXPECT_EQ("http.fault.aborts_injected", config.stats().aborts_injected_.tagExtractedName());
+  EXPECT_THAT(
+      tags_of(config.stats().aborts_injected_),
+      testing::UnorderedElementsAre(testing::Pair("envoy.http_conn_manager_prefix", "hcm")));
+  EXPECT_EQ("http.fault.active_faults", config.stats().active_faults_.tagExtractedName());
+
+  Stats::StatNameDynamicStorage cluster("cluster", store.symbolTable());
+  config.incAborts(cluster.statName());
+  config.incDelays(cluster.statName());
+  const Stats::CounterSharedPtr aborts =
+      TestUtility::findCounter(store, "http.hcm.fault.cluster.aborts_injected");
+  ASSERT_NE(aborts, nullptr);
+  EXPECT_EQ(1U, aborts->value());
+  EXPECT_EQ("http.fault.aborts_injected", aborts->tagExtractedName());
+  EXPECT_THAT(tags_of(*aborts), testing::UnorderedElementsAre(
+                                    testing::Pair("envoy.http_conn_manager_prefix", "hcm"),
+                                    testing::Pair("envoy.fault_downstream_cluster", "cluster")));
+  const Stats::CounterSharedPtr delays =
+      TestUtility::findCounter(store, "http.hcm.fault.cluster.delays_injected");
+  ASSERT_NE(delays, nullptr);
+  EXPECT_EQ("http.fault.delays_injected", delays->tagExtractedName());
+
+  // Without a recognized parent prefix only the downstream cluster is a tag.
+  FaultFilterConfig plain_config(convertYamlStrToProtoConfig(fixed_delay_only_yaml), "prefix.",
+                                 *store.rootScope(), context_);
+  EXPECT_EQ("prefix.fault.aborts_injected", plain_config.stats().aborts_injected_.name());
+  EXPECT_EQ("prefix.fault.aborts_injected",
+            plain_config.stats().aborts_injected_.tagExtractedName());
+  EXPECT_TRUE(plain_config.stats().aborts_injected_.tags().empty());
+  plain_config.incAborts(cluster.statName());
+  const Stats::CounterSharedPtr plain_aborts =
+      TestUtility::findCounter(store, "prefix.fault.cluster.aborts_injected");
+  ASSERT_NE(plain_aborts, nullptr);
+  EXPECT_EQ("prefix.fault.aborts_injected", plain_aborts->tagExtractedName());
+  EXPECT_THAT(tags_of(*plain_aborts), testing::UnorderedElementsAre(testing::Pair(
+                                          "envoy.fault_downstream_cluster", "cluster")));
+}
+
 } // namespace Fault
 } // namespace HttpFilters
 } // namespace Extensions

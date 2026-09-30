@@ -19,6 +19,7 @@
 #include "source/common/http/header_utility.h"
 #include "source/common/protobuf/protobuf.h"
 #include "source/common/stats/symbol_table.h"
+#include "source/common/stats/utility.h"
 #include "source/extensions/filters/common/fault/fault_config.h"
 #include "source/extensions/filters/http/common/stream_rate_limiter.h"
 
@@ -138,18 +139,23 @@ public:
   }
 
 private:
-  static FaultFilterStats generateStats(const std::string& prefix, Stats::Scope& scope);
+  static FaultFilterStats generateStats(const Stats::TaggedStatName& prefix, Stats::Scope& scope);
   void incCounter(Stats::StatName downstream_cluster, Stats::StatName stat_name);
 
   const FaultSettings settings_;
   Runtime::Loader& runtime_;
-  FaultFilterStats stats_;
   Stats::Scope& scope_;
+  // '<stats_prefix>fault': the tag-extracted form, the tags of the stats prefix (the connection
+  // manager prefix, when it carries one) and the flat form of the prefix of every stat of the
+  // filter.
+  const Stats::TaggedStatName stats_prefix_;
+  FaultFilterStats stats_;
   TimeSource& time_source_;
   Stats::StatNameSetPtr stat_name_set_;
   const Stats::StatName aborts_injected_;
   const Stats::StatName delays_injected_;
-  const Stats::StatName stats_prefix_; // Includes ".fault".
+  // The tag the downstream cluster is emitted as on the per-cluster stats.
+  const Stats::StatName downstream_cluster_tag_;
 };
 
 using FaultFilterConfigSharedPtr = std::shared_ptr<FaultFilterConfig>;

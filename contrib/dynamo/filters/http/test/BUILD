@@ -41,6 +41,7 @@ envoy_cc_test(
         "//contrib/dynamo/filters/http/source:dynamo_stats_lib",
         "//source/common/stats:stats_lib",
         "//test/mocks/stats:stats_mocks",
+        "//test/test_common:utility_lib",
     ],
 )
 

@@ -28,6 +28,7 @@ envoy_cc_library(
     deps = [
         "//envoy/http:filter_interface",
         "//envoy/stats:stats_macros",
+        "//source/common/config:well_known_names",
         "//source/common/http:utility_lib",
         "//source/extensions/filters/common/rbac:engine_lib",
         "//source/extensions/filters/common/rbac:utility_lib",

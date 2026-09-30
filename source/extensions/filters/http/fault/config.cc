@@ -15,8 +15,12 @@ absl::StatusOr<Http::FilterFactoryCb> FaultFilterFactory::createHttpFilterFactor
     const envoy::extensions::filters::http::fault::v3::HTTPFault& config,
     Server::Configuration::ServerFactoryContext& server_context,
     Server::Configuration::ExtraFactoryContext& extra_context) {
+  // The stats of the filter live under its stats prefix, so they go in the prefixed scope when the
+  // filter chain provides one (the prefix is then part of the scope's name and statsPrefixOr() is
+  // empty) and under the stats prefix otherwise.
   FaultFilterConfigSharedPtr filter_config(std::make_shared<FaultFilterConfig>(
-      config, extra_context.stats_prefix, extra_context.scopeOr(server_context), server_context));
+      config, extra_context.statsPrefixOr(), extra_context.statsPrefixScopeOr(server_context),
+      server_context));
   return [filter_config](Http::FilterChainFactoryCallbacks& callbacks) -> void {
     callbacks.addStreamFilter(std::make_shared<FaultFilter>(filter_config));
   };

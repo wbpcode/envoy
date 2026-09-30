@@ -18,6 +18,7 @@
 #include "test/mocks/server/server_factory_context.h"
 #include "test/test_common/struct_matchers.h"
 #include "test/test_common/test_runtime.h"
+#include "test/test_common/utility.h"
 
 #include "gmock/gmock.h"
 #include "xds/type/matcher/v3/matcher.pb.h"
@@ -1651,6 +1652,81 @@ TEST_F(RoleBasedAccessControlFilterTest, EnforcedEngineOnlyAllowsAccessMetadataT
                         IsStructString("rules_stat_prefix_enforced_engine_result", "allowed"),
                         IsStructString("rules_stat_prefix_enforced_effective_policy_id",
                                        "enforced_only_policy"))))));
+}
+
+// The stats carry explicit tags: the connection manager prefix is extracted from the stats prefix,
+// the rules prefix is a tag and so is the policy of the per-policy stats.
+TEST_F(RoleBasedAccessControlFilterTest, StatsAreTagged) {
+  // The tags of a stat as (name, value) pairs.
+  const auto tags_of = [](const Stats::Metric& metric) {
+    std::vector<std::pair<std::string, std::string>> tags;
+    for (const Stats::Tag& tag : metric.tags()) {
+      tags.emplace_back(tag.name_, tag.value_);
+    }
+    return tags;
+  };
+
+  envoy::extensions::filters::http::rbac::v3::RBAC config;
+  envoy::config::rbac::v3::Policy policy;
+  policy.add_permissions()->set_any(true);
+  policy.add_principals()->set_any(true);
+  config.mutable_rules()->set_action(envoy::config::rbac::v3::RBAC::ALLOW);
+  (*config.mutable_rules()->mutable_policies())["foo"] = policy;
+  config.set_rules_stat_prefix("rules_prefix");
+  config.mutable_shadow_rules()->set_action(envoy::config::rbac::v3::RBAC::DENY);
+  (*config.mutable_shadow_rules()->mutable_policies())["bar"] = policy;
+
+  RoleBasedAccessControlFilterConfig filter_config(config, "http.hcm.", *stats_store_.rootScope(),
+                                                   context_,
+                                                   ProtobufMessage::getStrictValidationVisitor());
+  Filters::Common::RBAC::RoleBasedAccessControlFilterStats& stats = filter_config.stats();
+
+  EXPECT_EQ("http.hcm.rbac.rules_prefix.allowed", stats.allowed_.name());
+  EXPECT_EQ("http.rbac.allowed", stats.allowed_.tagExtractedName());
+  EXPECT_THAT(tags_of(stats.allowed_),
+              UnorderedElementsAre(Pair("envoy.http_conn_manager_prefix", "hcm"),
+                                   Pair("envoy.rbac_http_prefix", "rules_prefix")));
+  // No shadow rules prefix: nothing to tag beyond the connection manager prefix.
+  EXPECT_EQ("http.hcm.rbac.shadow_denied", stats.shadow_denied_.name());
+  EXPECT_EQ("http.rbac.shadow_denied", stats.shadow_denied_.tagExtractedName());
+  EXPECT_THAT(tags_of(stats.shadow_denied_),
+              UnorderedElementsAre(Pair("envoy.http_conn_manager_prefix", "hcm")));
+
+  stats.incPolicyAllowed("foo");
+  const Stats::CounterSharedPtr policy_allowed =
+      TestUtility::findCounter(stats_store_, "http.hcm.rbac.rules_prefix.policy.foo.allowed");
+  ASSERT_NE(policy_allowed, nullptr);
+  EXPECT_EQ(1U, policy_allowed->value());
+  EXPECT_EQ("http.rbac.policy.allowed", policy_allowed->tagExtractedName());
+  EXPECT_THAT(tags_of(*policy_allowed),
+              UnorderedElementsAre(Pair("envoy.http_conn_manager_prefix", "hcm"),
+                                   Pair("envoy.rbac_http_prefix", "rules_prefix"),
+                                   Pair("envoy.rbac_policy_name", "foo")));
+
+  stats.incPolicyShadowDenied("bar");
+  const Stats::CounterSharedPtr policy_shadow_denied =
+      TestUtility::findCounter(stats_store_, "http.hcm.rbac.policy.bar.shadow_denied");
+  ASSERT_NE(policy_shadow_denied, nullptr);
+  EXPECT_EQ("http.rbac.policy.shadow_denied", policy_shadow_denied->tagExtractedName());
+  EXPECT_THAT(tags_of(*policy_shadow_denied),
+              UnorderedElementsAre(Pair("envoy.http_conn_manager_prefix", "hcm"),
+                                   Pair("envoy.rbac_policy_name", "bar")));
+
+  // Without tag names (the network filter), the prefixes and the policy stay plain segments of
+  // the stat names and the stats carry no tags.
+  Filters::Common::RBAC::RoleBasedAccessControlFilterStats untagged =
+      Filters::Common::RBAC::generateStats("tcp_prefix", "", "shadow", *stats_store_.rootScope());
+  EXPECT_EQ("tcp_prefix.rbac.allowed", untagged.allowed_.name());
+  EXPECT_EQ("tcp_prefix.rbac.allowed", untagged.allowed_.tagExtractedName());
+  EXPECT_TRUE(untagged.allowed_.tags().empty());
+  EXPECT_EQ("tcp_prefix.rbac.shadow.shadow_allowed", untagged.shadow_allowed_.name());
+  EXPECT_EQ("tcp_prefix.rbac.shadow.shadow_allowed", untagged.shadow_allowed_.tagExtractedName());
+  untagged.incPolicyAllowed("foo");
+  const Stats::CounterSharedPtr untagged_policy =
+      TestUtility::findCounter(stats_store_, "tcp_prefix.rbac.policy.foo.allowed");
+  ASSERT_NE(untagged_policy, nullptr);
+  EXPECT_EQ("tcp_prefix.rbac.policy.foo.allowed", untagged_policy->tagExtractedName());
+  EXPECT_TRUE(untagged_policy->tags().empty());
 }
 
 } // namespace

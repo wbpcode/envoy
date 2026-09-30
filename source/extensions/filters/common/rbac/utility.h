@@ -4,6 +4,8 @@
 
 #include "source/common/common/fmt.h"
 #include "source/common/singleton/const_singleton.h"
+#include "source/common/stats/symbol_table.h"
+#include "source/common/stats/utility.h"
 #include "source/extensions/filters/common/rbac/engine_impl.h"
 
 namespace Envoy {
@@ -34,37 +36,60 @@ struct RoleBasedAccessControlFilterStats {
   SHADOW_RBAC_FILTER_STATS(GENERATE_COUNTER_STRUCT)
 
   Stats::Scope& scope_;
-  std::string per_policy_final_prefix_;
-  std::string per_policy_final_shadow_prefix_;
+  // '<prefix>rbac[.<rules_prefix>].policy' and '<prefix>rbac[.<shadow_rules_prefix>].policy', the
+  // prefixes of the per-policy stats: their tag-extracted form, the tags they carry and their flat
+  // form. See generateStats().
+  const Stats::TaggedStatName per_policy_prefix_;
+  const Stats::TaggedStatName per_policy_shadow_prefix_;
+  // The tag the policy name is emitted as on the per-policy stats, or empty when the policy name
+  // is not tagged and stays a plain segment of the stat name.
+  const std::string policy_tag_name_;
 
   void incPolicyAllowed(absl::string_view name) {
-    incCounter(per_policy_final_prefix_, name, ".allowed");
+    incPolicyCounter(per_policy_prefix_, name, "allowed");
   }
 
   void incPolicyDenied(absl::string_view name) {
-    incCounter(per_policy_final_prefix_, name, ".denied");
+    incPolicyCounter(per_policy_prefix_, name, "denied");
   }
 
   void incPolicyShadowAllowed(absl::string_view name) {
-    incCounter(per_policy_final_shadow_prefix_, name, ".shadow_allowed");
+    incPolicyCounter(per_policy_shadow_prefix_, name, "shadow_allowed");
   }
 
   void incPolicyShadowDenied(absl::string_view name) {
-    incCounter(per_policy_final_shadow_prefix_, name, ".shadow_denied");
+    incPolicyCounter(per_policy_shadow_prefix_, name, "shadow_denied");
   }
 
-  void incCounter(absl::string_view prefix, absl::string_view name, absl::string_view suffix) {
-    Stats::StatNameDynamicPool pool(scope_.symbolTable());
-    Stats::StatName metric_prefix = pool.add(prefix);
-    Stats::StatName metric_name = pool.add(absl::StrCat(name, suffix));
-    Stats::Utility::counterFromElements(scope_, {metric_prefix, metric_name}).inc();
-  }
+  /**
+   * Increments '<prefix>.<policy>.<stat>'. When policy_tag_name_ is set the policy name is emitted
+   * as that tag and the tag-extracted name is '<prefix base>.<stat>'; otherwise the stat carries
+   * no tag of its own.
+   */
+  void incPolicyCounter(const Stats::TaggedStatName& prefix, absl::string_view policy,
+                        absl::string_view stat);
 };
 
-RoleBasedAccessControlFilterStats generateStats(const std::string& prefix,
-                                                const std::string& rules_prefix,
-                                                const std::string& shadow_rules_prefix,
-                                                Stats::Scope& scope);
+/**
+ * Creates the stats of an RBAC filter, named '<prefix>rbac[.<rules_prefix>].<stat>' for the
+ * enforced rules, '<prefix>rbac[.<shadow_rules_prefix>].<stat>' for the shadow rules and
+ * '<prefix>rbac[.<rules_prefix>].policy.<policy>.<stat>' per policy.
+ *
+ * @param prefix the prefix of the stats, e.g. the 'http.<stat_prefix>.' of a connection manager;
+ *        when it carries a well-known tag that tag is extracted (see Stats::mergeStatPrefix()).
+ *        It is empty when `scope` is already named after the prefix.
+ * @param rules_prefix the optional prefix of the enforced rules' stats.
+ * @param shadow_rules_prefix the optional prefix of the shadow rules' stats.
+ * @param scope the scope to create the stats in.
+ * @param rules_prefix_tag_name the tag the rules prefixes are emitted as, or empty when they stay
+ *        plain segments of the stat names.
+ * @param policy_tag_name the tag the policy names are emitted as, or empty when they stay plain
+ *        segments of the stat names.
+ */
+RoleBasedAccessControlFilterStats
+generateStats(const std::string& prefix, const std::string& rules_prefix,
+              const std::string& shadow_rules_prefix, Stats::Scope& scope,
+              absl::string_view rules_prefix_tag_name = {}, absl::string_view policy_tag_name = {});
 
 template <class ConfigType>
 std::unique_ptr<RoleBasedAccessControlEngine>

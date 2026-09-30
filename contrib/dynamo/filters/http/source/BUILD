@@ -58,6 +58,8 @@ envoy_cc_library(
     deps = [
         ":dynamo_request_parser_lib",
         "//envoy/stats:stats_interface",
+        "//source/common/config:well_known_names",
+        "//source/common/stats:prefix_utility_lib",
         "//source/common/stats:symbol_table_lib",
         "//source/common/stats:utility_lib",
     ],

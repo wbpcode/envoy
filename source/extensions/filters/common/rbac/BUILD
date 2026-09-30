@@ -17,6 +17,9 @@ envoy_cc_library(
         ":engine_lib",
         "//envoy/stats:stats_macros",
         "//source/common/singleton:const_singleton",
+        "//source/common/stats:prefix_utility_lib",
+        "//source/common/stats:symbol_table_lib",
+        "//source/common/stats:utility_lib",
     ],
 )
 

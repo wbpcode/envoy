@@ -15,11 +15,13 @@
 #include "source/common/common/assert.h"
 #include "source/common/common/empty_string.h"
 #include "source/common/common/fmt.h"
+#include "source/common/config/well_known_names.h"
 #include "source/common/http/codes.h"
 #include "source/common/http/header_map_impl.h"
 #include "source/common/http/headers.h"
 #include "source/common/http/utility.h"
 #include "source/common/protobuf/utility.h"
+#include "source/common/stats/prefix_utility.h"
 #include "source/common/stats/utility.h"
 
 namespace Envoy {
@@ -83,18 +85,29 @@ FaultFilterConfig::FaultFilterConfig(
     const envoy::extensions::filters::http::fault::v3::HTTPFault& fault,
     const std::string& stats_prefix, Stats::Scope& scope,
     Server::Configuration::CommonFactoryContext& context)
-    : settings_(fault, context), runtime_(context.runtime()),
-      stats_(generateStats(stats_prefix, scope)), scope_(scope), time_source_(context.timeSource()),
+    : settings_(fault, context), runtime_(context.runtime()), scope_(scope),
+      // http.[<stat_prefix>.]fault.(<downstream_cluster>.)*
+      stats_prefix_(Stats::mergeStatPrefix(scope.symbolTable(), stats_prefix, "fault")),
+      stats_(generateStats(stats_prefix_, scope)), time_source_(context.timeSource()),
       stat_name_set_(scope.symbolTable().makeSet("Fault")),
       aborts_injected_(stat_name_set_->add("aborts_injected")),
       delays_injected_(stat_name_set_->add("delays_injected")),
-      stats_prefix_(stat_name_set_->add(absl::StrCat(stats_prefix, "fault"))) {}
+      downstream_cluster_tag_(
+          stat_name_set_->add(Envoy::Config::TagNames::get().FAULT_DOWNSTREAM_CLUSTER)) {}
 
 void FaultFilterConfig::incCounter(Stats::StatName downstream_cluster, Stats::StatName stat_name) {
-  if (!settings_.disableDownstreamClusterStats()) {
-    Stats::Utility::counterFromStatNames(scope_, {stats_prefix_, downstream_cluster, stat_name})
-        .inc();
+  if (settings_.disableDownstreamClusterStats()) {
+    return;
   }
+  // '<stats_prefix>fault.<downstream_cluster>.<stat_name>', tagged with the downstream cluster on
+  // top of the tags of the stats prefix; the tag-extracted name drops the cluster segment.
+  Stats::StatNameTagVec tags(stats_prefix_.tags().begin(), stats_prefix_.tags().end());
+  tags.emplace_back(downstream_cluster_tag_, downstream_cluster);
+  const Stats::SymbolTable::StoragePtr prefix =
+      scope_.symbolTable().join({stats_prefix_.name(), downstream_cluster});
+  Stats::Utility::counterFromTaggedPrefix(scope_, stats_prefix_.baseName(), tags,
+                                          Stats::StatName(prefix.get()), stat_name)
+      .inc();
 }
 
 FaultFilter::FaultFilter(FaultFilterConfigSharedPtr config) : config_(config) {}
@@ -401,10 +414,10 @@ Http::FilterTrailersStatus FaultFilter::decodeTrailers(Http::RequestTrailerMap&)
                                  : Http::FilterTrailersStatus::StopIteration;
 }
 
-FaultFilterStats FaultFilterConfig::generateStats(const std::string& prefix, Stats::Scope& scope) {
-  const std::string final_prefix = prefix + "fault.";
-  return {ALL_FAULT_FILTER_STATS(POOL_COUNTER_PREFIX(scope, final_prefix),
-                                 POOL_GAUGE_PREFIX(scope, final_prefix))};
+FaultFilterStats FaultFilterConfig::generateStats(const Stats::TaggedStatName& prefix,
+                                                  Stats::Scope& scope) {
+  return {
+      ALL_FAULT_FILTER_STATS(POOL_COUNTER_TAGGED(scope, prefix), POOL_GAUGE_TAGGED(scope, prefix))};
 }
 
 bool FaultFilter::tryIncActiveFaults() {
