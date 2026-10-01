@@ -25,12 +25,14 @@
 #include "source/common/common/hex.h"
 #include "source/common/common/safe_memcpy.h"
 #include "source/common/common/utility.h"
+#include "source/common/config/well_known_names.h"
 #include "source/common/network/address_impl.h"
 #include "source/common/network/proxy_protocol_filter_state.h"
 #include "source/common/network/utility.h"
 #include "source/common/protobuf/utility.h"
 #include "source/common/router/string_accessor_impl.h"
 #include "source/common/runtime/runtime_features.h"
+#include "source/common/stats/utility.h"
 #include "source/extensions/common/proxy_protocol/proxy_protocol_header.h"
 
 using envoy::config::core::v3::ProxyProtocolConfig;
@@ -113,16 +115,33 @@ ProxyProtocolStats ProxyProtocolStats::create(Stats::Scope& scope, absl::string_
     filter_stat_prefix = absl::StrCat(kProxyProtoStatsPrefix, stat_prefix, ".");
   }
 
+  // proxy_proto.(<stat_prefix>.)*: the stat prefix, when there is one, is a tag.
+  absl::InlinedVector<Stats::TagStringView, 2> tags;
+  if (!stat_prefix.empty()) {
+    tags.push_back({Envoy::Config::TagNames::get().PROXY_PROTOCOL_PREFIX, stat_prefix});
+  }
+  const Stats::TaggedStatName general_prefix(scope.symbolTable(), kProxyProtoStatsPrefix, tags,
+                                             filter_stat_prefix);
+
+  // proxy_proto.[<stat_prefix>.]versions.v(<N>).*: the version is a tag on top of the prefix.
+  tags.push_back({Envoy::Config::TagNames::get().PROXY_PROTOCOL_VERSION, "1"});
+  const Stats::TaggedStatName v1_prefix{
+      scope.symbolTable(), kProxyProtoStatsPrefix, tags,
+      absl::StrCat(filter_stat_prefix, kVersionStatsPrefix, "v1")};
+  tags.pop_back(); // Remove the version tag for v1 before creating v2.
+  tags.push_back({Envoy::Config::TagNames::get().PROXY_PROTOCOL_VERSION, "2"});
+  const Stats::TaggedStatName v2_prefix = {
+      scope.symbolTable(), kProxyProtoStatsPrefix, tags,
+      absl::StrCat(filter_stat_prefix, kVersionStatsPrefix, "v2")};
+
   return {
       /*legacy_=*/{LEGACY_PROXY_PROTOCOL_STATS(POOL_COUNTER(scope))},
       /*general_=*/
-      {GENERAL_PROXY_PROTOCOL_STATS(POOL_COUNTER_PREFIX(scope, filter_stat_prefix))},
+      {GENERAL_PROXY_PROTOCOL_STATS(POOL_COUNTER_TAGGED(scope, general_prefix))},
       /*v1_=*/
-      {VERSIONED_PROXY_PROTOCOL_STATS(POOL_COUNTER_PREFIX(
-          scope, absl::StrCat(filter_stat_prefix, kVersionStatsPrefix, "v1.")))},
+      {VERSIONED_PROXY_PROTOCOL_STATS(POOL_COUNTER_TAGGED(scope, v1_prefix))},
       /*v2_=*/
-      {VERSIONED_PROXY_PROTOCOL_STATS(POOL_COUNTER_PREFIX(
-          scope, absl::StrCat(filter_stat_prefix, kVersionStatsPrefix, "v2.")))},
+      {VERSIONED_PROXY_PROTOCOL_STATS(POOL_COUNTER_TAGGED(scope, v2_prefix))},
   };
 }
 
