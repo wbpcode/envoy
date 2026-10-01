@@ -5,6 +5,9 @@
 #include "envoy/stats/scope.h"
 #include "envoy/stats/stats_macros.h"
 
+#include "source/common/config/well_known_names.h"
+#include "source/common/stats/utility.h"
+
 namespace Envoy {
 namespace Extensions {
 namespace NetworkFilters {
@@ -42,10 +45,13 @@ namespace ThriftProxy {
 struct ThriftFilterStats {
   ALL_THRIFT_FILTER_STATS(GENERATE_COUNTER_STRUCT, GENERATE_GAUGE_STRUCT, GENERATE_HISTOGRAM_STRUCT)
 
-  static ThriftFilterStats generateStats(const std::string& prefix, Stats::Scope& scope) {
-    return ThriftFilterStats{ALL_THRIFT_FILTER_STATS(POOL_COUNTER_PREFIX(scope, prefix),
-                                                     POOL_GAUGE_PREFIX(scope, prefix),
-                                                     POOL_HISTOGRAM_PREFIX(scope, prefix))};
+  static ThriftFilterStats generateStats(const std::string& stats_prefix, Stats::Scope& scope) {
+    const Stats::TagStringView tag{Envoy::Config::TagNames::get().THRIFT_PREFIX, stats_prefix};
+    Stats::TaggedStatName prefix(scope.symbolTable(), "thrift.", {tag},
+                                 absl::StrCat("thrift.", stats_prefix));
+    return ThriftFilterStats{ALL_THRIFT_FILTER_STATS(POOL_COUNTER_TAGGED(scope, prefix),
+                                                     POOL_GAUGE_TAGGED(scope, prefix),
+                                                     POOL_HISTOGRAM_TAGGED(scope, prefix))};
   }
 };
 

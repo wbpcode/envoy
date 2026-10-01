@@ -17,6 +17,7 @@ namespace {
 
 constexpr absl::string_view HTTP_PREFIX = "http.";
 constexpr absl::string_view CLUSTER_PREFIX = "cluster.";
+constexpr absl::string_view THRIFT_PREFIX = "thrift.";
 
 // Extracts the parent prefix's single tag: "http.<x>." -> {HTTP_CONN_MANAGER_PREFIX, x},
 // "cluster.<x>." -> {CLUSTER_NAME, x}, anything else -> none. The trailing dot is stripped first.
@@ -34,6 +35,10 @@ std::optional<TagStringView> extractParentTag(absl::string_view prefix) {
   if (absl::StartsWith(prefix, CLUSTER_PREFIX)) {
     return TagStringView{Envoy::Config::TagNames::get().CLUSTER_NAME,
                          prefix.substr(CLUSTER_PREFIX.size())};
+  }
+  if (absl::StartsWith(prefix, THRIFT_PREFIX)) {
+    return TagStringView{Envoy::Config::TagNames::get().THRIFT_PREFIX,
+                         prefix.substr(THRIFT_PREFIX.size())};
   }
   return std::nullopt;
 }
