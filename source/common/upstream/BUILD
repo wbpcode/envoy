@@ -105,6 +105,8 @@ envoy_cc_library(
         "//source/common/config:subscription_factory_lib",
         "//source/common/config:utility_lib",
         "//source/common/config:xds_resource_lib",
+        "//source/common/stats:prefix_utility_lib",
+        "//source/common/stats:utility_lib",
         "//source/common/grpc:async_client_manager_lib",
         "//source/common/http:async_client_lib",
         "//source/common/http:http_server_properties_cache",

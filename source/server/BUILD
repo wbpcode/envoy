@@ -80,7 +80,10 @@ envoy_cc_library(
         "//envoy/network:connection_handler_interface",
         "//envoy/network:listener_interface",
         "//envoy/stats:timespan_interface",
+        "//source/common/stats:prefix_utility_lib",
         "//source/common/stats:timespan_lib",
+        "//source/common/stats:utility_lib",
+        "@abseil-cpp//absl/strings",
     ],
 )
 
@@ -147,7 +150,9 @@ envoy_cc_library(
         "//source/common/config:utility_lib",
         "//source/common/event:libevent_lib",
         "//source/common/protobuf:utility_lib",
+        "//source/common/stats:prefix_utility_lib",
         "//source/common/stats:symbol_table_lib",
+        "//source/common/stats:utility_lib",
         "//source/common/watchdog:abort_action_config",
         "@envoy_api//envoy/config/bootstrap/v3:pkg_cc_proto",
         "@envoy_api//envoy/watchdog/v3:pkg_cc_proto",

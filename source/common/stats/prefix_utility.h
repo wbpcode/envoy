@@ -1,5 +1,7 @@
 #pragma once
 
+#include <optional>
+
 #include "envoy/stats/stats.h"
 #include "envoy/stats/tag.h"
 
@@ -37,6 +39,23 @@ namespace Stats {
 TaggedStatName mergeStatPrefix(SymbolTable& symbol_table, absl::string_view prefix,
                                absl::string_view base_name, TagStringViewSpan tags = {},
                                absl::string_view name = {});
+
+/**
+ * @return the worker id when 'name' is the name of a worker thread ('worker_<id>', the
+ *         well-known form the listener manager names its workers with), std::nullopt otherwise.
+ */
+std::optional<absl::string_view> workerIdFromName(absl::string_view name);
+
+/**
+ * Creates the prefix of the stats of a thread.
+ *
+ * @param symbol_table the symbol table used to pre-encode the names and tags.
+ * @param prefix empty or '.' suffixed parent prefix, e.g. "listener_manager.".
+ * @param name worker name, e.g. "worker_0".
+ * @param suffix empty or '.' suffixed suffix, e.g. "dispatcher.".
+ */
+TaggedStatName workerStatPrefix(SymbolTable& symbol_table, absl::string_view prefix,
+                                absl::string_view name, absl::string_view suffix = {});
 
 } // namespace Stats
 } // namespace Envoy

@@ -153,6 +153,56 @@ TEST_F(MergeStatPrefixTest, EmptySelfWithParent) {
   EXPECT_THAT(tags(p), testing::ElementsAre(std::make_pair(hcm_tag_, "ingress")));
 }
 
+TEST(WorkerIdFromThreadNameTest, All) {
+  EXPECT_EQ(workerIdFromThreadName("worker_0"), "0");
+  EXPECT_EQ(workerIdFromThreadName("worker_12"), "12");
+  EXPECT_FALSE(workerIdFromThreadName("worker_").has_value());
+  EXPECT_FALSE(workerIdFromThreadName("worker_1a").has_value());
+  EXPECT_FALSE(workerIdFromThreadName("main_thread").has_value());
+  EXPECT_FALSE(workerIdFromThreadName("").has_value());
+}
+
+// A worker thread: the worker id is a tag and the tag-extracted prefix drops the thread name.
+TEST_F(MergeStatPrefixTest, workerStatPrefixWorker) {
+  const std::string& worker_tag = Envoy::Config::TagNames::get().WORKER_ID;
+
+  const auto dispatcher = workerStatPrefix(symbol_table_, "", "worker_3", "dispatcher");
+  EXPECT_EQ(taggedName(dispatcher), "worker_3.dispatcher.name");
+  EXPECT_EQ(taggedName(dispatcher), legacyName("worker_3.dispatcher."));
+  EXPECT_EQ(base(dispatcher), "dispatcher");
+  EXPECT_THAT(tags(dispatcher), testing::ElementsAre(std::make_pair(worker_tag, "3")));
+
+  // A trailing dot on the parent prefix is tolerated.
+  const auto cluster_manager =
+      workerStatPrefix(symbol_table_, "thread_local_cluster_manager.", "worker_0");
+  EXPECT_EQ(taggedName(cluster_manager), "thread_local_cluster_manager.worker_0.name");
+  EXPECT_EQ(taggedName(cluster_manager), legacyName("thread_local_cluster_manager.worker_0"));
+  EXPECT_EQ(base(cluster_manager), "thread_local_cluster_manager");
+  EXPECT_THAT(tags(cluster_manager), testing::ElementsAre(std::make_pair(worker_tag, "0")));
+
+  // Only the thread name: the tag-extracted prefix is empty and stats sit directly in the scope.
+  const auto handler = workerStatPrefix(symbol_table_, "", "worker_1");
+  EXPECT_EQ(taggedName(handler), "worker_1.name");
+  EXPECT_EQ(taggedName(handler), legacyName("worker_1."));
+  EXPECT_EQ(base(handler), "");
+  EXPECT_THAT(tags(handler), testing::ElementsAre(std::make_pair(worker_tag, "1")));
+}
+
+// Any other thread name stays a plain segment and the prefix carries no tag.
+TEST_F(MergeStatPrefixTest, workerStatPrefixNotAWorker) {
+  const auto main_thread = workerStatPrefix(symbol_table_, "server", "main_thread", "dispatcher");
+  EXPECT_EQ(taggedName(main_thread), "server.main_thread.dispatcher.name");
+  EXPECT_EQ(base(main_thread), "server.main_thread.dispatcher");
+  EXPECT_TRUE(tags(main_thread).empty());
+
+  // No thread name at all: just the parent and the own name.
+  const auto no_thread = workerStatPrefix(symbol_table_, "server.", "", "dispatcher");
+  EXPECT_EQ(taggedName(no_thread), "server.dispatcher.name");
+  EXPECT_EQ(taggedName(no_thread), legacyName("server.dispatcher."));
+  EXPECT_EQ(base(no_thread), "server.dispatcher");
+  EXPECT_TRUE(tags(no_thread).empty());
+}
+
 } // namespace
 } // namespace Stats
 } // namespace Envoy

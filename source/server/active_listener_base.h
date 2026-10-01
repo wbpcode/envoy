@@ -4,7 +4,11 @@
 #include "envoy/network/listener.h"
 #include "envoy/stats/scope.h"
 
+#include "source/common/stats/prefix_utility.h"
+#include "source/common/stats/utility.h"
 #include "source/server/listener_stats.h"
+
+#include "absl/strings/strip.h"
 
 namespace Envoy {
 namespace Server {
@@ -18,15 +22,20 @@ public:
       : stats_({ALL_LISTENER_STATS(POOL_COUNTER(config->listenerScope()),
                                    POOL_GAUGE(config->listenerScope()),
                                    POOL_HISTOGRAM(config->listenerScope()))}),
+        // listener.<address>.(worker_<id>.)*: the handler's stat prefix is its dispatcher's name
+        // (with a trailing dot), and a worker's name contributes the envoy.worker_id tag.
+        per_worker_prefix_(Stats::workerStatPrefix(config->listenerScope().symbolTable(), "",
+                                                   parent.statPrefix())),
         per_worker_stats_({ALL_PER_HANDLER_LISTENER_STATS(
-            POOL_COUNTER_PREFIX(config->listenerScope(), parent.statPrefix()),
-            POOL_GAUGE_PREFIX(config->listenerScope(), parent.statPrefix()))}),
+            POOL_COUNTER_TAGGED(config->listenerScope(), per_worker_prefix_),
+            POOL_GAUGE_TAGGED(config->listenerScope(), per_worker_prefix_))}),
         config_(config) {}
 
   // Network::ConnectionHandler::ActiveListener.
   uint64_t listenerTag() override { return config_->listenerTag(); }
 
   ListenerStats stats_;
+  const Stats::TaggedStatName per_worker_prefix_;
   PerHandlerListenerStats per_worker_stats_;
   Network::ListenerConfig* config_{};
 };

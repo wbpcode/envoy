@@ -1,14 +1,19 @@
 #include "source/common/stats/prefix_utility.h"
 
+#include <initializer_list>
 #include <optional>
 #include <string>
+#include <vector>
 
 #include "source/common/common/assert.h"
 #include "source/common/config/well_known_names.h"
 
 #include "absl/container/inlined_vector.h"
+#include "absl/strings/ascii.h"
 #include "absl/strings/match.h"
 #include "absl/strings/str_cat.h"
+#include "absl/strings/str_join.h"
+#include "absl/strings/strip.h"
 
 namespace Envoy {
 namespace Stats {
@@ -17,6 +22,7 @@ namespace {
 
 constexpr absl::string_view HTTP_PREFIX = "http.";
 constexpr absl::string_view CLUSTER_PREFIX = "cluster.";
+constexpr absl::string_view WORKER_PREFIX = "worker_";
 
 // Extracts the parent prefix's single tag: "http.<x>." -> {HTTP_CONN_MANAGER_PREFIX, x},
 // "cluster.<x>." -> {CLUSTER_NAME, x}, anything else -> none. The trailing dot is stripped first.
@@ -81,6 +87,40 @@ TaggedStatName mergeStatPrefix(SymbolTable& symbol_table, absl::string_view pref
   }
   const std::string base = absl::StrCat(base_prefix, base_name);
   return {symbol_table, base, merged_tags, tagged};
+}
+
+std::optional<absl::string_view> workerIdFromName(absl::string_view name) {
+  if (!absl::StartsWith(name, WORKER_PREFIX)) {
+    return std::nullopt;
+  }
+  name = name.substr(WORKER_PREFIX.size());
+  name = absl::StripSuffix(name, ".");
+
+  if (name.empty()) {
+    return std::nullopt;
+  }
+
+  for (const char c : name) {
+    if (!absl::ascii_isdigit(c)) {
+      return std::nullopt;
+    }
+  }
+  return name;
+}
+
+TaggedStatName workerStatPrefix(SymbolTable& symbol_table, absl::string_view prefix,
+                                absl::string_view name, absl::string_view suffix) {
+  const std::optional<absl::string_view> worker_id = workerIdFromName(name);
+  if (!worker_id.has_value()) {
+    // Not a worker thread name, return the untagged prefix.
+    return {symbol_table, absl::StrCat(prefix, name, suffix), {}, {}};
+  }
+
+  const TagStringView tag{Envoy::Config::TagNames::get().WORKER_ID, *worker_id};
+  return {symbol_table,
+          absl::StrCat(prefix, "worker.", suffix),
+          {tag},
+          absl::StrCat(prefix, name, suffix)};
 }
 
 } // namespace Stats
