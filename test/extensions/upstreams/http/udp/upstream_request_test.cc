@@ -284,6 +284,24 @@ TEST_F(UdpConnPoolTest, ConnectionInfoProviderHasRemoteAddress) {
   EXPECT_THAT(remote_address, Eq("127.0.0.1:80"));
 }
 
+// When the downstream connection is not available (for example for an async-client-originated
+// stream whose connection() is empty), newStream must fail the pool gracefully with a
+// LocalConnectionFailure rather than dereferencing the empty connection.
+TEST_F(UdpConnPoolTest, NoDownstreamConnection) {
+  EXPECT_CALL(mock_callback_, upstreamToDownstream);
+  EXPECT_CALL(mock_callback_.upstream_to_downstream_, connection)
+      .WillRepeatedly(Return(Envoy::OptRef<const Envoy::Network::Connection>{}));
+  EXPECT_CALL(mock_callback_,
+              onPoolFailure(ConnectionPool::PoolFailureReason::LocalConnectionFailure, _, _));
+  EXPECT_CALL(mock_callback_, onPoolReady).Times(0);
+  // Mock syscall to make the bind call succeed so execution reaches the connection check.
+  NiceMock<Envoy::Api::MockOsSysCalls> mock_os_sys_calls;
+  Envoy::TestThreadsafeSingletonInjector<Envoy::Api::OsSysCallsImpl> os_sys_calls(
+      &mock_os_sys_calls);
+  EXPECT_CALL(mock_os_sys_calls, bind).WillOnce(Return(Api::SysCallIntResult{0, 0}));
+  udp_conn_pool_->newStream(&mock_callback_);
+}
+
 } // namespace Udp
 } // namespace Http
 } // namespace Upstreams

@@ -48,7 +48,14 @@ void UdpConnPool::newStream(Router::GenericConnectionPoolCallbacks* callbacks) {
   const Network::ConnectionInfoProvider& connection_info_provider =
       socket->connectionInfoProvider();
   Router::UpstreamToDownstream& upstream_to_downstream = callbacks->upstreamToDownstream();
-  ASSERT(upstream_to_downstream.connection().has_value());
+  // The UDP upstream obtains its dispatcher from the downstream connection, so it cannot be created
+  // without one (for example for an async-client-originated stream, whose connection() is empty).
+  // Fail the pool gracefully rather than dereferencing an empty connection.
+  if (!upstream_to_downstream.connection().has_value()) {
+    callbacks->onPoolFailure(ConnectionPool::PoolFailureReason::LocalConnectionFailure,
+                             "UDP upstream requires a downstream connection", host_);
+    return;
+  }
   Event::Dispatcher& dispatcher = upstream_to_downstream.connection()->dispatcher();
   auto upstream =
       std::make_unique<UdpUpstream>(&upstream_to_downstream, std::move(socket), host_, dispatcher);
