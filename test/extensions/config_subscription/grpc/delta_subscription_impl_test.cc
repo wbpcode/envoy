@@ -113,6 +113,41 @@ TEST_P(DeltaSubscriptionImplTest, OnDemandUpdateRoutesResponseToWatch) {
   EXPECT_TRUE(delivered_name2);
 }
 
+// Requesting a resource on demand that the watch already retains must request it from the server
+// again. For example, VHDS answers an alias it cannot resolve with an empty resource and the
+// request that triggered the lookup waits for exactly that answer; a second request for the same
+// alias would otherwise send nothing and wait for an unsolicited update.
+TEST_P(DeltaSubscriptionImplTest, OnDemandUpdateForAlreadyRequestedNameIsRequestedAgain) {
+  startSubscription({"name1"});
+  deliverConfigUpdate({"name1"}, "version1", true);
+
+  expectSendMessage({"name2"}, {}, Grpc::Status::WellKnownGrpcStatus::Ok, "", {});
+  subscription_->requestOnDemandUpdate({"name2"});
+  Mock::VerifyAndClearExpectations(&async_stream_);
+
+  // The server answers.
+  const std::string version = "version2";
+  auto response = std::make_unique<envoy::service::discovery::v3::DeltaDiscoveryResponse>();
+  last_response_nonce_ = std::to_string(HashUtil::xxHash64(version));
+  response->set_nonce(last_response_nonce_);
+  response->set_system_version_info(version);
+  response->set_type_url(Config::TestTypeUrl::get().ClusterLoadAssignment);
+  envoy::config::endpoint::v3::ClusterLoadAssignment load_assignment;
+  load_assignment.set_cluster_name("name2");
+  auto* resource = response->add_resources();
+  resource->set_name("name2");
+  resource->set_version(version);
+  std::ignore = resource->mutable_resource()->PackFrom(load_assignment);
+  EXPECT_CALL(callbacks_, onConfigUpdate(_, _, version)).WillOnce(Return(absl::OkStatus()));
+  expectSendMessage({}, version); // ACK
+  onDiscoveryResponse(std::move(response));
+  Mock::VerifyAndClearExpectations(&async_stream_);
+
+  // Asking for name2 again is sent to the server again, although the watch already retains it.
+  expectSendMessage({"name2"}, {}, Grpc::Status::WellKnownGrpcStatus::Ok, "", {});
+  subscription_->requestOnDemandUpdate({"name2"});
+}
+
 // Regression test for the VHDS-style pattern: a subscription that accepts a glob prefix for routing
 // (accept("<rc1>/*"), as VHDS does for its route configuration) then requests, on demand, a
 // resource that is NOT covered by that glob (here under a different "<rc2>/" prefix). The response

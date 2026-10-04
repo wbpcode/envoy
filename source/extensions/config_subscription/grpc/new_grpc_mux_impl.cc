@@ -348,11 +348,14 @@ void NewGrpcMuxImpl::appendWatch(const std::string& type_url, Watch* watch,
   auto sub = subscriptions_.find(type_url);
   RELEASE_ASSERT(sub != subscriptions_.end(),
                  fmt::format("Watch of {} has no subscription to update.", type_url));
-  // Additionally update the watch-map routing, then subscribe to whatever became newly interesting
-  // across the whole subscription. This keeps watch_interest_ and the subscription consistent.
-  auto added_removed =
-      sub->second->watch_map_.appendWatchInterest(watch, effectiveResources(resources, options));
-  sub->second->sub_state_.updateSubscriptionInterest(added_removed.added_, {});
+  const absl::flat_hash_set<std::string> effective_resources =
+      effectiveResources(resources, options);
+  // Additionally update the watch-map routing, so that the response is delivered to the watch.
+  sub->second->watch_map_.appendWatchInterest(watch, effective_resources);
+  // Then request every named resource from the server, including the ones this watch already
+  // retains. An on-demand request is a request for the server to answer, e.g. a second request for
+  // a host the server could not resolve the first time must be sent (and answered) again.
+  sub->second->sub_state_.updateSubscriptionInterest(effective_resources, {});
   if (sub->second->sub_state_.subscriptionUpdatePending()) {
     trySendDiscoveryRequests();
   }
