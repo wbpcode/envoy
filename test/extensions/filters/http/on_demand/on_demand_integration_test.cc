@@ -575,6 +575,46 @@ TEST_P(OnDemandVhdsIntegrationTest, VhdsOnDemandUpdateFailToResolveTheAlias) {
 // tests a scenario when:
 //  - an RDS exchange contains a non-empty virtual_hosts array
 //  - Upstream makes a request to vhost.third that cannot be resolved by the management server
+//  - Management server sends an empty response and upstream receives a 404 response
+//  - Upstream makes another request to the same unknown host
+//  - The alias is requested from the management server again, and upstream receives a 404 again
+// The second request must not wait for an unsolicited update: its callback is only completed by a
+// response that names the alias, so the request has to be sent again.
+TEST_P(OnDemandVhdsIntegrationTest, VhdsOnDemandUpdateFailToResolveTheSameAliasTwice) {
+  useRdsWithVhosts();
+
+  testRouterHeaderOnlyRequestAndResponse(nullptr, 1);
+  cleanupUpstreamAndDownstream();
+  ASSERT_TRUE(codec_client_->waitForDisconnect());
+
+  Http::TestRequestHeaderMapImpl request_headers{{":method", "GET"},
+                                                 {":path", "/"},
+                                                 {":scheme", "http"},
+                                                 {":authority", "vhost.third"},
+                                                 {"x-lyft-user-id", "123"}};
+  for (const char* version : {"4", "5"}) {
+    codec_client_ = makeHttpConnection(makeClientConnection((lookupPort("http"))));
+    IntegrationStreamDecoderPtr response = codec_client_->makeHeaderOnlyRequest(request_headers);
+    EXPECT_TRUE(compareDeltaDiscoveryRequest(Config::TestTypeUrl::get().VirtualHost,
+                                             {vhdsRequestResourceName("vhost.third")}, {},
+                                             vhds_stream_.get()))
+        << "no discovery request was sent for attempt with version " << version;
+    // The management server isn't aware of vhost.third.
+    notifyAboutAliasResolutionFailure(version, vhds_stream_, {"my_route/vhost.third"});
+    // Envoy ACKs the response; consume it so the next request is the one that is checked.
+    EXPECT_TRUE(compareDeltaDiscoveryRequest(Config::TestTypeUrl::get().VirtualHost, {}, {},
+                                             vhds_stream_.get()));
+
+    ASSERT_TRUE(response->waitForEndStream());
+    EXPECT_EQ("404", response->headers().getStatusValue());
+    cleanupUpstreamAndDownstream();
+    ASSERT_TRUE(codec_client_->waitForDisconnect());
+  }
+}
+
+// tests a scenario when:
+//  - an RDS exchange contains a non-empty virtual_hosts array
+//  - Upstream makes a request to vhost.third that cannot be resolved by the management server
 //  - Management server sends a spontaneous update for vhost.first and an empty response for
 //  vhost.third
 //  - Upstream receives a 404 response
