@@ -1,0 +1,13 @@
+diff --git a/BUILD.bazel b/BUILD.bazel
+--- a/BUILD.bazel
++++ b/BUILD.bazel
+@@ -1,8 +1,7 @@
+ # Description:
+ #   Brotli is a generic-purpose lossless compression algorithm.
+ 
+-load("@rules_cc//cc:cc_binary.bzl", "cc_binary")
+-load("@rules_cc//cc:cc_library.bzl", "cc_library")
++load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library")
+ 
+ package(
+     default_visibility = ["//visibility:public"],

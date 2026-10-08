@@ -486,6 +486,8 @@ filegroup(
 def _org_brotli():
     external_http_archive(
         name = "org_brotli",
+        patch_args = ["-p1"],
+        patches = ["@envoy//bazel:brotli.patch"],
     )
 
 def _com_github_facebook_zstd():
