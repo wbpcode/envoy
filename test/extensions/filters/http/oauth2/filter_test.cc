@@ -288,7 +288,8 @@ public:
           ::envoy::extensions::filters::http::oauth2::v3::CookieConfig_SameSite::
               CookieConfig_SameSite_DISABLED,
       int csrf_token_expires_in = 0, int code_verifier_token_expires_in = 0,
-      bool disable_token_encryption = false) {
+      bool disable_token_encryption = false, uint32_t chunking_max_cookie_size = 0,
+      uint32_t chunking_max_chunks = 0) {
 
     envoy::extensions::filters::http::oauth2::v3::OAuth2Config p;
     auto* endpoint = p.mutable_token_endpoint();
@@ -380,6 +381,15 @@ public:
 
     p.set_disable_token_encryption(disable_token_encryption);
 
+    // 0 keeps the default: chunking is on with the default values even without the message.
+    if (chunking_max_cookie_size != 0) {
+      p.mutable_token_cookie_chunking()->mutable_max_cookie_size()->set_value(
+          chunking_max_cookie_size);
+    }
+    if (chunking_max_chunks != 0) {
+      p.mutable_token_cookie_chunking()->mutable_max_chunks()->set_value(chunking_max_chunks);
+    }
+
     MessageUtil::validate(p, ProtobufMessage::getStrictValidationVisitor());
 
     // Create filter config.
@@ -388,6 +398,21 @@ public:
         p, factory_context_.server_factory_context_, secret_reader, scope_, "test.");
 
     return c;
+  }
+
+  // getConfig() with the token_cookie_chunking fields set. 0 keeps a field at its default.
+  FilterConfigSharedPtr getChunkingConfig(uint32_t max_cookie_size, uint32_t max_chunks = 0,
+                                          bool forward_bearer_token = true,
+                                          bool use_refresh_token = false,
+                                          bool disable_token_encryption = false) {
+    constexpr auto kDisabled = ::envoy::extensions::filters::http::oauth2::v3::
+        CookieConfig_SameSite::CookieConfig_SameSite_DISABLED;
+    return getConfig(forward_bearer_token, use_refresh_token,
+                     ::envoy::extensions::filters::http::oauth2::v3::OAuth2Config_AuthType::
+                         OAuth2Config_AuthType_URL_ENCODED_BODY,
+                     0, false, false, false, false, false, kDisabled, kDisabled, kDisabled,
+                     kDisabled, kDisabled, kDisabled, kDisabled, 0, 0, disable_token_encryption,
+                     max_cookie_size, max_chunks);
   }
 
   // Test helpers exposing private OAuth2Filter methods. OAuth2Filter declares
@@ -403,17 +428,11 @@ public:
     return filter_->encryptToken(token);
   }
   std::string decryptTokenForTest(const std::string& ct) const { return filter_->decryptToken(ct); }
-  static size_t maxEncryptedTokenSizeForTest(size_t token_size) {
-    return OAuth2Filter::maxEncryptedTokenSize(token_size);
-  }
   void setCookieExpiresForTest(const std::string& expires_in, const std::string& id_token_in,
                                const std::string& refresh_token_in) {
     filter_->expires_in_ = expires_in;
     filter_->expires_id_token_in_ = id_token_in;
     filter_->expires_refresh_token_in_ = refresh_token_in;
-  }
-  size_t cookieTailSizeForTest(int cookie_type) const {
-    return filter_->cookieTailSize(cookie_type);
   }
   std::string buildCookieTailForTest(int cookie_type) const {
     return filter_->BuildCookieTail(cookie_type);
@@ -957,11 +976,11 @@ TEST_F(OAuth2Test, RequestSignout) {
       {Http::Headers::get().SetCookie.get(),
        "CodeVerifier=deleted; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT"},
       {Http::Headers::get().SetCookie.get(),
+       "BearerToken_chunks=deleted; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT"},
+      {Http::Headers::get().SetCookie.get(),
        "BearerToken_0=deleted; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT"},
       {Http::Headers::get().SetCookie.get(),
        "BearerToken_1=deleted; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT"},
-      {Http::Headers::get().SetCookie.get(),
-       "BearerToken_chunks=deleted; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT"},
       {Http::Headers::get().Location.get(), "https://traffic.example.com/"},
   };
   EXPECT_CALL(decoder_callbacks_, encodeHeaders_(HeaderMapEqualRef(&response_headers), true));
@@ -4356,9 +4375,9 @@ TEST_F(OAuth2Test, PostMigrationConfigRejectsCbcCiphertext) {
 }
 
 TEST_F(OAuth2Test, RequestSignoutWithTokenCookieChunkingDisabled) {
-  TestScopedRuntime scoped_runtime;
-  scoped_runtime.mergeValues(
-      {{"envoy.reloadable_features.oauth2_chunk_large_token_cookies", "false"}});
+  // A huge max_cookie_size effectively disables chunking; chunked request cookies are still
+  // rejoined and deleted.
+  init(getChunkingConfig(1024 * 1024));
 
   std::string long_token(5000, 'x');
 
@@ -4397,11 +4416,8 @@ TEST_F(OAuth2Test, RequestSignoutWithTokenCookieChunkingDisabled) {
             filter_->decodeHeaders(request_headers, false));
 }
 
+// Chunking is on by default, without any token_cookie_chunking config.
 TEST_F(OAuth2Test, OAuthAccessTokenSucessWithChunkedToken) {
-  TestScopedRuntime scoped_runtime;
-  scoped_runtime.mergeValues(
-      {{"envoy.reloadable_features.oauth2_chunk_large_token_cookies", "true"}});
-
   std::string long_token(5000, 'x');
   oauthHMAC = "70RVEPVYna4P+pWr7p9ILsA9RobsKbFUiuMp5FGpAm4=;";
   // Set SystemTime to a fixed point so we get consistent HMAC encodings between test runs.
@@ -4442,12 +4458,10 @@ TEST_F(OAuth2Test, OAuthAccessTokenSucessWithChunkedToken) {
   EXPECT_EQ(1, config_->stats().oauth_token_cookie_chunked_.value());
 }
 
-// With the guard off, a token too large for one cookie is written as one oversized cookie, as
-// before chunking.
+// With chunking effectively disabled by a huge max_cookie_size, a token too large for a browser
+// cookie is written as one oversized cookie, as before chunking.
 TEST_F(OAuth2Test, OAuthAccessTokenSucessWithChunkedTokenDisabled) {
-  TestScopedRuntime scoped_runtime;
-  scoped_runtime.mergeValues(
-      {{"envoy.reloadable_features.oauth2_chunk_large_token_cookies", "false"}});
+  init(getChunkingConfig(1024 * 1024));
 
   std::string long_token(5000, 'x');
   oauthHMAC = "70RVEPVYna4P+pWr7p9ILsA9RobsKbFUiuMp5FGpAm4=;";
@@ -4480,23 +4494,15 @@ TEST_F(OAuth2Test, OAuthAccessTokenSucessWithChunkedTokenDisabled) {
                                    std::chrono::seconds(600));
 }
 
-// Enabling the guard must not change anything for a cookie that already fits. This pins the exact
-// boundary: at the size limit the output is identical either way, and only one byte past it does
-// chunking start. Encryption is off so the cookie value is the token itself and the math is exact.
+// Chunking must not change anything for a cookie that already fits. This pins the exact
+// boundary: at the size limit the output is identical with and without chunking, and only one
+// byte past it does chunking start. Encryption is off so the cookie value is the token itself and
+// the math is exact.
 TEST_F(OAuth2Test, TokenCookieAtSizeLimitIsNotChunked) {
-  constexpr auto DisabledSameSite = ::envoy::extensions::filters::http::oauth2::v3::
-      CookieConfig_SameSite::CookieConfig_SameSite_DISABLED;
-
   auto emit = [&](bool chunking_enabled, const std::string& access_token) {
-    TestScopedRuntime scoped_runtime;
-    scoped_runtime.mergeValues({{"envoy.reloadable_features.oauth2_chunk_large_token_cookies",
-                                 chunking_enabled ? "true" : "false"}});
-    init(getConfig(true /* forward_bearer_token */, true /* use_refresh_token */,
-                   ::envoy::extensions::filters::http::oauth2::v3::OAuth2Config_AuthType::
-                       OAuth2Config_AuthType_URL_ENCODED_BODY,
-                   0, false, false, false, false, false, DisabledSameSite, DisabledSameSite,
-                   DisabledSameSite, DisabledSameSite, DisabledSameSite, DisabledSameSite,
-                   DisabledSameSite, 0, 0, true /* disable_token_encryption */));
+    // Chunking is "off" through a max_cookie_size no token here reaches.
+    init(getChunkingConfig(chunking_enabled ? 0 : 1024 * 1024, 0, true /* forward_bearer_token */,
+                           true /* use_refresh_token */, true /* disable_token_encryption */));
     test_time_.setSystemTime(SystemTime(std::chrono::seconds(1000)));
 
     Http::TestRequestHeaderMapImpl request_headers{
@@ -4538,17 +4544,17 @@ TEST_F(OAuth2Test, TokenCookieAtSizeLimitIsNotChunked) {
   const std::string probe = bearer_cookie(emit(false, "x"));
   ASSERT_FALSE(probe.empty());
   const size_t overhead = probe.size() - 1;
-  ASSERT_LT(overhead, MaxCookieSize);
+  ASSERT_LT(overhead, DefaultMaxTokenCookieSize);
 
   // A token that fills the cookie exactly to the limit must be written the same way either way.
-  const std::string exact_fit(MaxCookieSize - overhead, 'a');
-  const std::vector<std::string> without_guard = emit(false, exact_fit);
-  const std::vector<std::string> with_guard = emit(true, exact_fit);
-  EXPECT_EQ(without_guard, with_guard);
-  EXPECT_EQ(bearer_cookie(with_guard).size(), MaxCookieSize);
+  const std::string exact_fit(DefaultMaxTokenCookieSize - overhead, 'a');
+  const std::vector<std::string> without_chunking = emit(false, exact_fit);
+  const std::vector<std::string> with_chunking = emit(true, exact_fit);
+  EXPECT_EQ(without_chunking, with_chunking);
+  EXPECT_EQ(bearer_cookie(with_chunking).size(), DefaultMaxTokenCookieSize);
 
   // One byte past the limit is where chunking starts.
-  const std::string one_too_big(MaxCookieSize - overhead + 1, 'a');
+  const std::string one_too_big(DefaultMaxTokenCookieSize - overhead + 1, 'a');
   const std::vector<std::string> over = emit(true, one_too_big);
   // The base cookie is either absent or expired, never carrying the value.
   const std::string over_base = bearer_cookie(over);
@@ -4563,9 +4569,6 @@ TEST_F(OAuth2Test, TokenCookieAtSizeLimitIsNotChunked) {
 }
 
 TEST_F(OAuth2Test, SetTokenCookie) {
-  TestScopedRuntime scoped_runtime;
-  scoped_runtime.mergeValues(
-      {{"envoy.reloadable_features.oauth2_chunk_large_token_cookies", "true"}});
   init(getConfig(true /* forward_bearer_token */, true /* use_refresh_token */));
 
   // Helper function to create tokens of specific sizes
@@ -4645,9 +4648,6 @@ TEST_F(OAuth2Test, SetTokenCookie) {
 }
 
 TEST_F(OAuth2Test, EncryptedChunkedCookieRoundTripUsesRealValidator) {
-  TestScopedRuntime scoped_runtime;
-  scoped_runtime.mergeValues(
-      {{"envoy.reloadable_features.oauth2_chunk_large_token_cookies", "true"}});
   initWithRealValidator(getConfig(true /* forward_bearer_token */));
   test_time_.setSystemTime(SystemTime(std::chrono::seconds(1000)));
 
@@ -4689,11 +4689,10 @@ TEST_F(OAuth2Test, EncryptedChunkedCookieRoundTripUsesRealValidator) {
   EXPECT_EQ(upstream_cookies.find("BearerToken_chunks"), absl::string_view::npos);
 }
 
-TEST_F(OAuth2Test, RuntimeRollbackReplacesChunkedCookie) {
-  TestScopedRuntime scoped_runtime;
-  scoped_runtime.mergeValues(
-      {{"envoy.reloadable_features.oauth2_chunk_large_token_cookies", "false"}});
-  init(getConfig(false /* forward_bearer_token */));
+// Disabling chunking through a huge max_cookie_size still replaces chunked cookies a client
+// carries from before the rollback with a single cookie.
+TEST_F(OAuth2Test, ChunkingRollbackReplacesChunkedCookie) {
+  init(getChunkingConfig(1024 * 1024, 0, false /* forward_bearer_token */));
   const size_t split = TEST_ENCRYPTED_ACCESS_TOKEN.size() / 2;
   Http::TestRequestHeaderMapImpl request_headers{
       {Http::Headers::get().Path.get(), "/resource"},
@@ -4715,11 +4714,11 @@ TEST_F(OAuth2Test, RuntimeRollbackReplacesChunkedCookie) {
         EXPECT_EQ(Http::Utility::parseSetCookieValue(headers, "BearerToken_0"), "deleted");
         EXPECT_EQ(Http::Utility::parseSetCookieValue(headers, "BearerToken_1"), "deleted");
         EXPECT_EQ(Http::Utility::parseSetCookieValue(headers, "BearerToken_chunks"), "deleted");
-        // With the guard off, a token too large for one cookie is still written as one cookie.
+        // With chunking disabled, a token too large for one cookie is still written as one cookie.
         const std::string bearer = Http::Utility::parseSetCookieValue(headers, "BearerToken");
-        EXPECT_GT(bearer.size(), MaxCookieSize);
+        EXPECT_GT(bearer.size(), DefaultMaxTokenCookieSize);
       }));
-  // Large enough that it would be chunked with the guard on.
+  // Large enough that it would be chunked with the default settings.
   filter_->onGetAccessTokenSuccess(std::string(5000, 'x'), "", "", std::chrono::seconds(600));
   EXPECT_EQ(0, config_->stats().oauth_token_cookie_chunked_.value());
 }
@@ -4756,9 +4755,6 @@ TEST_F(OAuth2Test, RefreshFlowPreservesNormalizedChunkedRefreshToken) {
 }
 
 TEST_F(OAuth2Test, OversizedTokenStopsBeforeSettingSessionCookies) {
-  TestScopedRuntime scoped_runtime;
-  scoped_runtime.mergeValues(
-      {{"envoy.reloadable_features.oauth2_chunk_large_token_cookies", "true"}});
   Http::TestRequestHeaderMapImpl request_headers{
       {Http::Headers::get().Path.get(), "/_signout"},
       {Http::Headers::get().Host.get(), "traffic.example.com"},
@@ -4773,7 +4769,7 @@ TEST_F(OAuth2Test, OversizedTokenStopsBeforeSettingSessionCookies) {
       }));
   EXPECT_CALL(decoder_callbacks_,
               sendLocalReply(Http::Code::ServiceUnavailable, "Service Unavailable", _, _, _));
-  filter_->onGetAccessTokenSuccess(std::string(MaxCookieSize * 15, 'x'), "", "",
+  filter_->onGetAccessTokenSuccess(std::string(DefaultMaxTokenCookieSize * 15, 'x'), "", "",
                                    std::chrono::seconds(600));
   EXPECT_EQ(1, config_->stats().oauth_token_cookie_oversized_.value());
 }
@@ -4790,7 +4786,7 @@ TEST_F(OAuth2Test, RequestSignoutWithMalformedChunkCount) {
   EXPECT_CALL(decoder_callbacks_, encodeHeaders_(_, true))
       .WillOnce(Invoke([&](Http::ResponseHeaderMap& headers, bool) {
         // Without a valid count every index a chunk may use is deleted, with the count cookie.
-        for (size_t index = 0; index < MaxChunksPerToken; ++index) {
+        for (size_t index = 0; index < MaxTokenCookieChunks; ++index) {
           EXPECT_EQ(
               Http::Utility::parseSetCookieValue(headers, absl::StrCat("BearerToken_", index)),
               "deleted");
@@ -4806,9 +4802,6 @@ TEST_F(OAuth2Test, RequestSignoutWithMalformedChunkCount) {
 // Replacing a chunked token with a smaller chunked token must not send a delete and a set for the
 // same cookie name. Only the stale chunks beyond the new count are deleted.
 TEST_F(OAuth2Test, RechunkedTokenOnlyDeletesStaleChunks) {
-  TestScopedRuntime scoped_runtime;
-  scoped_runtime.mergeValues(
-      {{"envoy.reloadable_features.oauth2_chunk_large_token_cookies", "true"}});
   init(getConfig(false /* forward_bearer_token */));
   test_time_.setSystemTime(SystemTime(std::chrono::seconds(1000)));
   Http::TestRequestHeaderMapImpl request_headers{
@@ -4881,55 +4874,9 @@ TEST_F(OAuth2Test, ChunkedTokenWithoutReplacementIsFullyDeleted) {
   filter_->onGetAccessTokenSuccess("new-access-token", "", "", std::chrono::seconds(600));
 }
 
-// The size check uses an upper bound of the encrypted size instead of encrypting. It must never be
-// smaller than what encryptToken() produces, with either cipher.
-TEST_F(OAuth2Test, MaxEncryptedTokenSizeCoversEncryptedToken) {
-  for (const bool use_gcm : {false, true}) {
-    TestScopedRuntime scoped_runtime;
-    scoped_runtime.mergeValues(
-        {{"envoy.reloadable_features.oauth2_use_gcm_encryption", use_gcm ? "true" : "false"}});
-    std::vector<size_t> sizes;
-    for (size_t size = 0; size <= 100; ++size) {
-      sizes.push_back(size);
-    }
-    sizes.insert(sizes.end(), {1000, 4096, 12345, 20000});
-    for (const size_t size : sizes) {
-      const size_t encrypted_size = encryptTokenForTest(std::string(size, 'x')).size();
-      const size_t bound = maxEncryptedTokenSizeForTest(size);
-      EXPECT_GE(bound, encrypted_size) << "gcm=" << use_gcm << " size=" << size;
-      // The bound only over-estimates by a few bytes.
-      EXPECT_LE(bound - encrypted_size, 22) << "gcm=" << use_gcm << " size=" << size;
-    }
-  }
-}
-
-// cookieTailSize() must match the tail BuildCookieTail() builds, for every cookie type.
-TEST_F(OAuth2Test, CookieTailSizeMatchesBuiltTail) {
-  constexpr auto StrictSameSite = ::envoy::extensions::filters::http::oauth2::v3::
-      CookieConfig_SameSite::CookieConfig_SameSite_STRICT;
-  constexpr auto DisabledSameSite = ::envoy::extensions::filters::http::oauth2::v3::
-      CookieConfig_SameSite::CookieConfig_SameSite_DISABLED;
-  for (const bool set_cookie_domain : {false, true}) {
-    init(getConfig(true /* forward_bearer_token */, true /* use_refresh_token */,
-                   ::envoy::extensions::filters::http::oauth2::v3::OAuth2Config_AuthType::
-                       OAuth2Config_AuthType_URL_ENCODED_BODY,
-                   0, false, false, set_cookie_domain, false, false, StrictSameSite,
-                   DisabledSameSite, StrictSameSite, DisabledSameSite, StrictSameSite,
-                   DisabledSameSite, DisabledSameSite));
-    setCookieExpiresForTest("600", "3600", "604800");
-    for (int cookie_type = 1; cookie_type <= 5; ++cookie_type) {
-      EXPECT_EQ(cookieTailSizeForTest(cookie_type), buildCookieTailForTest(cookie_type).size())
-          << "domain=" << set_cookie_domain << " type=" << cookie_type;
-    }
-  }
-}
-
 // Chunks do not overwrite a single cookie of the same token, so a single cookie on the request is
 // deleted when the new value is chunked.
 TEST_F(OAuth2Test, ChunkedTokenDeletesSingleCookie) {
-  TestScopedRuntime scoped_runtime;
-  scoped_runtime.mergeValues(
-      {{"envoy.reloadable_features.oauth2_chunk_large_token_cookies", "true"}});
   init(getConfig(false /* forward_bearer_token */));
   test_time_.setSystemTime(SystemTime(std::chrono::seconds(1000)));
   Http::TestRequestHeaderMapImpl request_headers{
@@ -5004,9 +4951,6 @@ TEST_F(OAuth2Test, RequestSignoutSendsDecryptedChunkedIdTokenHint) {
 
 // A refreshed token too large for the cookies is refused without continuing the request.
 TEST_F(OAuth2Test, RefreshWithOversizedTokenIsRefused) {
-  TestScopedRuntime scoped_runtime;
-  scoped_runtime.mergeValues(
-      {{"envoy.reloadable_features.oauth2_chunk_large_token_cookies", "true"}});
   init(getConfig(true /* forward_bearer_token */, true /* use_refresh_token */));
   Http::TestRequestHeaderMapImpl request_headers{
       {Http::Headers::get().Path.get(), "/resource"},
@@ -5031,7 +4975,7 @@ TEST_F(OAuth2Test, RefreshWithOversizedTokenIsRefused) {
       .WillOnce(Invoke([](Http::ResponseHeaderMap& headers, bool) {
         EXPECT_TRUE(headers.get(Http::Headers::get().SetCookie).empty());
       }));
-  filter_->onRefreshAccessTokenSuccess(std::string(MaxCookieSize * 15, 'x'), "", "",
+  filter_->onRefreshAccessTokenSuccess(std::string(DefaultMaxTokenCookieSize * 15, 'x'), "", "",
                                        std::chrono::seconds(600));
   EXPECT_EQ(1, config_->stats().oauth_token_cookie_oversized_.value());
 }
@@ -5210,7 +5154,7 @@ TEST_F(OAuth2Test, ChunksAreRejoinedWithoutDecryption) {
   EXPECT_EQ(1, config_->stats().oauth_token_cookie_malformed_chunks_.value());
 }
 
-// A token is accepted up to exactly MaxChunksPerToken chunks and refused one byte past that.
+// A token is accepted up to exactly the default max_chunks chunks and refused one byte past that.
 // Encryption is off so the cookie value is the token itself and the math is exact.
 TEST_F(OAuth2Test, TokenCookieChunkLimitBoundary) {
   constexpr auto DisabledSameSite = ::envoy::extensions::filters::http::oauth2::v3::
@@ -5228,8 +5172,9 @@ TEST_F(OAuth2Test, TokenCookieChunkLimitBoundary) {
   init(make_config());
   setCookieExpiresForTest("600", "600", "600");
   const size_t chunk_size =
-      MaxCookieSize - (std::string("BearerToken").size() + 3 /* "_<index>" */ + 1 /* "=" */ +
-                       cookieTailSizeForTest(1));
+      DefaultMaxTokenCookieSize -
+      (std::string("BearerToken").size() + 3 /* "_<index>" */ + 1 /* "=" */ +
+       buildCookieTailForTest(1).size());
 
   const auto login = [&](size_t token_size) {
     init(make_config());
@@ -5249,14 +5194,14 @@ TEST_F(OAuth2Test, TokenCookieChunkLimitBoundary) {
                                      std::chrono::seconds(600));
   };
 
-  // Exactly MaxChunksPerToken full chunks is accepted.
+  // Exactly DefaultMaxTokenCookieChunks full chunks is accepted.
   std::string chunk_count;
   EXPECT_CALL(decoder_callbacks_, encodeHeaders_(_, true))
       .WillOnce(Invoke([&chunk_count](Http::ResponseHeaderMap& headers, bool) {
         chunk_count = Http::Utility::parseSetCookieValue(headers, "BearerToken_chunks");
       }));
-  login(MaxChunksPerToken * chunk_size);
-  EXPECT_EQ(chunk_count, absl::StrCat(MaxChunksPerToken));
+  login(DefaultMaxTokenCookieChunks * chunk_size);
+  EXPECT_EQ(chunk_count, absl::StrCat(DefaultMaxTokenCookieChunks));
   EXPECT_EQ(0, config_->stats().oauth_token_cookie_oversized_.value());
 
   // One more byte would need one more chunk, so the session is refused.
@@ -5266,7 +5211,7 @@ TEST_F(OAuth2Test, TokenCookieChunkLimitBoundary) {
       .WillOnce(Invoke([](Http::ResponseHeaderMap& headers, bool) {
         EXPECT_TRUE(headers.get(Http::Headers::get().SetCookie).empty());
       }));
-  login(MaxChunksPerToken * chunk_size + 1);
+  login(DefaultMaxTokenCookieChunks * chunk_size + 1);
   EXPECT_EQ(1, config_->stats().oauth_token_cookie_oversized_.value());
 }
 
@@ -5321,6 +5266,95 @@ TEST_F(OAuth2Test, ChunkDeletesCarryDomainAndSecureAttribute) {
       }));
   EXPECT_EQ(Http::FilterHeadersStatus::StopIteration,
             filter_->decodeHeaders(request_headers, false));
+}
+
+// A smaller max_cookie_size lowers the size at which a token is split.
+TEST_F(OAuth2Test, CustomMaxCookieSizeLowersChunkingThreshold) {
+  init(getChunkingConfig(512, 0, true /* forward_bearer_token */, false /* use_refresh_token */,
+                         true /* disable_token_encryption */));
+  test_time_.setSystemTime(SystemTime(std::chrono::seconds(1000)));
+  Http::TestRequestHeaderMapImpl request_headers{
+      {Http::Headers::get().Host.get(), "traffic.example.com"},
+      {Http::Headers::get().Path.get(), "/_signout"},
+      {Http::Headers::get().Method.get(), Http::Headers::get().MethodValues.Get},
+  };
+  filter_->decodeHeaders(request_headers, false);
+
+  std::string chunk_count;
+  EXPECT_CALL(decoder_callbacks_, encodeHeaders_(_, true))
+      .WillOnce(Invoke([&chunk_count](Http::ResponseHeaderMap& headers, bool) {
+        chunk_count = Http::Utility::parseSetCookieValue(headers, "BearerToken_chunks");
+      }));
+  // 600 bytes fit in one default sized cookie but not in one 512 byte cookie.
+  filter_->onGetAccessTokenSuccess(std::string(600, 'x'), "", "", std::chrono::seconds(600));
+  EXPECT_EQ(chunk_count, "2");
+  EXPECT_EQ(1, config_->stats().oauth_token_cookie_chunked_.value());
+}
+
+// A lower max_chunks refuses a token the default settings would still split.
+TEST_F(OAuth2Test, CustomMaxChunksRefusesEarlier) {
+  const auto login = [&](size_t token_size) {
+    init(getChunkingConfig(0, 2, true /* forward_bearer_token */, false /* use_refresh_token */,
+                           true /* disable_token_encryption */));
+    test_time_.setSystemTime(SystemTime(std::chrono::seconds(1000)));
+    Http::TestRequestHeaderMapImpl request_headers{
+        {Http::Headers::get().Path.get(), "/original_path"},
+        {Http::Headers::get().Host.get(), "traffic.example.com"},
+        {Http::Headers::get().Method.get(), Http::Headers::get().MethodValues.Get},
+        {Http::Headers::get().Scheme.get(), "https"},
+    };
+    std::string legit_token{"legit_token"};
+    EXPECT_CALL(*validator_, setParams(_, _));
+    EXPECT_CALL(*validator_, isValid()).WillOnce(Return(true));
+    EXPECT_CALL(*validator_, token()).WillRepeatedly(ReturnRef(legit_token));
+    filter_->decodeHeaders(request_headers, false);
+    filter_->onGetAccessTokenSuccess(std::string(token_size, 'x'), "", "",
+                                     std::chrono::seconds(600));
+  };
+
+  // 5000 bytes fit in 2 chunks of up to 4096 bytes.
+  std::string chunk_count;
+  EXPECT_CALL(decoder_callbacks_, encodeHeaders_(_, true))
+      .WillOnce(Invoke([&chunk_count](Http::ResponseHeaderMap& headers, bool) {
+        chunk_count = Http::Utility::parseSetCookieValue(headers, "BearerToken_chunks");
+      }));
+  login(5000);
+  EXPECT_EQ(chunk_count, "2");
+
+  // 9000 bytes need a third chunk, which max_chunks 2 refuses.
+  EXPECT_CALL(decoder_callbacks_,
+              sendLocalReply(Http::Code::ServiceUnavailable, "Service Unavailable", _, _, _));
+  EXPECT_CALL(decoder_callbacks_, encodeHeaders_(_, false))
+      .WillOnce(Invoke([](Http::ResponseHeaderMap& headers, bool) {
+        EXPECT_TRUE(headers.get(Http::Headers::get().SetCookie).empty());
+      }));
+  login(9000);
+  EXPECT_EQ(1, config_->stats().oauth_token_cookie_oversized_.value());
+}
+
+// Requests are rejoined up to 16 chunks whatever max_chunks says, so lowering it does not
+// invalidate existing sessions.
+TEST_F(OAuth2Test, ChunksBeyondConfiguredMaxAreStillRejoined) {
+  init(getChunkingConfig(0, 2, true /* forward_bearer_token */, false /* use_refresh_token */,
+                         true /* disable_token_encryption */));
+  Http::TestRequestHeaderMapImpl request_headers{
+      {Http::Headers::get().Cookie.get(), "BearerToken_0=part0-"},
+      {Http::Headers::get().Cookie.get(), "BearerToken_1=part1-"},
+      {Http::Headers::get().Cookie.get(), "BearerToken_2=part2"},
+      {Http::Headers::get().Cookie.get(), "BearerToken_chunks=3"},
+  };
+  decryptAndUpdateOAuthTokenCookiesForTest(request_headers);
+  const auto cookies = Http::Utility::parseCookies(request_headers);
+  EXPECT_EQ(cookies.at("BearerToken"), "part0-part1-part2");
+  EXPECT_EQ(1, config_->stats().oauth_token_cookie_reassembled_.value());
+}
+
+// max_cookie_size has a floor but no ceiling, so a huge value can disable chunking explicitly.
+TEST_F(OAuth2Test, TokenCookieChunkingValidationBounds) {
+  EXPECT_NO_THROW(getChunkingConfig(100 * 1024 * 1024));
+  EXPECT_THROW(getChunkingConfig(256), EnvoyException);
+  EXPECT_THROW(getChunkingConfig(0, 1), EnvoyException);
+  EXPECT_THROW(getChunkingConfig(0, 17), EnvoyException);
 }
 
 } // namespace Oauth2

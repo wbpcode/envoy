@@ -83,31 +83,25 @@ constexpr absl::string_view SameSiteStrict = ";SameSite=Strict";
 constexpr absl::string_view SameSiteNone = ";SameSite=None";
 constexpr absl::string_view HmacPayloadSeparator = "\n";
 
-// Envoy only chunks a value that does not fit in a single cookie, and each chunk holds less than a
-// single cookie would, so a valid chunked set always has at least 2 chunks.
-absl::optional<size_t> parseChunkedCookiesCount(absl::string_view count_value) {
-  size_t count = 0;
-  if (!absl::SimpleAtoi(count_value, &count) || count < 2 || count > MaxChunksPerToken) {
-    return absl::nullopt;
-  }
-  return count;
+// The longest "_<index>" suffix of a token chunk cookie name.
+constexpr size_t ChunkSuffixSize = 3;
+static_assert(MaxTokenCookieChunks <= 100, "a chunk index must have at most two digits");
+
+// Cookies named "__Secure-" or "__Host-" must carry the Secure attribute, also when they are
+// deleted, or the browser ignores them.
+absl::string_view secureAttribute(absl::string_view cookie_name) {
+  return cookie_name.starts_with("__Secure-") || cookie_name.starts_with("__Host-") ? "; Secure"
+                                                                                    : "";
 }
 
-struct TokenCookieValueAndState {
-  // The token: rejoined from valid chunks, otherwise the single cookie. Empty when a counted chunk
-  // is missing.
-  std::string value_;
-  TokenCookieState state_;
-};
-
-// Builds the chunk cookie names of a token in one reused buffer: "<name>_chunks" and
-// "<name>_<index>". A returned view is only valid until the next call.
+// Builds the chunk cookie names of a token, "<name>_chunks" and "<name>_<index>", in one reused
+// buffer. A returned view is valid until the next call.
 class TokenCookieNameBuilder {
 public:
-  // Starts as "<name>_chunks". Chunk indexes are at most two digits, shorter than "chunks", so
-  // every name fits in this single allocation.
-  explicit TokenCookieNameBuilder(absl::string_view name)
-      : buffer_(absl::StrCat(name, "_chunks")), prefix_size_(name.size() + 1) {}
+  // A chunk index has at most two digits, fewer than "chunks", so every name fits in the first
+  // allocation.
+  explicit TokenCookieNameBuilder(absl::string_view cookie_name)
+      : buffer_(absl::StrCat(cookie_name, "_chunks")), prefix_size_(cookie_name.size() + 1) {}
 
   absl::string_view chunks() {
     buffer_.resize(prefix_size_);
@@ -117,7 +111,7 @@ public:
 
   absl::string_view chunk(size_t index) {
     buffer_.resize(prefix_size_);
-    buffer_.append(absl::StrCat(index));
+    absl::StrAppend(&buffer_, index);
     return buffer_;
   }
 
@@ -126,35 +120,43 @@ private:
   const size_t prefix_size_;
 };
 
-TokenCookieValueAndState
-findTokenCookieValueAndState(const absl::flat_hash_map<std::string, std::string>& cookies,
-                             absl::string_view key) {
-  TokenCookieValueAndState result;
-  TokenCookieNameBuilder names(key);
+// Envoy only splits a token that does not fit in one cookie, so a valid count is at least 2.
+std::optional<size_t> parseChunkCount(absl::string_view value) {
+  size_t count = 0;
+  if (!absl::SimpleAtoi(value, &count) || count < 2 || count > MaxTokenCookieChunks) {
+    return std::nullopt;
+  }
+  return count;
+}
 
-  const auto value_it = cookies.find(key);
-  result.state_.single_ = value_it != cookies.end();
+struct TokenCookie {
+  std::string value_;
+  TokenCookieState state_;
+};
+
+// Reads a token from its chunks, or from its single cookie when there is no valid chunk set.
+TokenCookie readTokenCookie(const absl::flat_hash_map<std::string, std::string>& cookies,
+                            absl::string_view cookie_name) {
+  TokenCookie result;
+  TokenCookieNameBuilder names(cookie_name);
+  const auto single_it = cookies.find(cookie_name);
   const auto count_it = cookies.find(names.chunks());
+  result.state_.single_ = single_it != cookies.end();
   result.state_.chunks_ = count_it != cookies.end();
 
-  // Chunked cookies is present and should be processed preferentially over a single cookie.
   if (result.state_.chunks_) {
-    const auto count = parseChunkedCookiesCount(count_it->second);
-    if (count.has_value()) {
-      // Valid chunks take precedence over a single cookie.
-      result.state_.count_ = count.value();
-      std::string value;
-      value.reserve(count.value() * MaxCookieSize);
-      for (size_t index = 0; index < count.value(); ++index) {
-        const auto chunk_it = cookies.find(names.chunk(index));
-        if (chunk_it == cookies.end()) {
-          result.state_.malformed_ = true;
-          return result;
-        }
-        value.append(chunk_it->second);
+    const std::optional<size_t> count = parseChunkCount(count_it->second);
+    std::string value;
+    for (size_t index = 0; count.has_value() && index < count.value(); ++index) {
+      const auto chunk_it = cookies.find(names.chunk(index));
+      if (chunk_it == cookies.end()) {
+        value.clear();
+        break;
       }
-      // Envoy never writes empty chunks, so an empty joined value is malformed too.
-      result.state_.malformed_ = value.empty();
+      value.append(chunk_it->second);
+    }
+    if (!value.empty()) {
+      result.state_.count_ = count.value();
       result.value_ = std::move(value);
       return result;
     }
@@ -162,96 +164,69 @@ findTokenCookieValueAndState(const absl::flat_hash_map<std::string, std::string>
   }
 
   if (result.state_.single_) {
-    result.value_ = value_it->second;
+    result.value_ = single_it->second;
   }
   return result;
 }
 
-// The number of chunk indexes to clear for the given state. A malformed set has no count to trust,
-// so every index a chunk may use is cleared, leaving no fragment behind.
-size_t chunkIndexesToClear(TokenCookieState state) {
+// The chunk indexes that may be present. A malformed set has no count to trust, so every index
+// a chunk can use is included.
+size_t chunkIndexesInUse(TokenCookieState state) {
   if (!state.chunks_) {
     return 0;
   }
-  return state.malformed_ ? MaxChunksPerToken : std::min(MaxChunksPerToken, state.count_);
+  return state.malformed_ ? MaxTokenCookieChunks : state.count_;
 }
 
-// Remove the cookies associated with the given key based on the provided state.
 void eraseTokenCookies(absl::flat_hash_map<std::string, std::string>& cookies,
-                       absl::string_view key, TokenCookieState state) {
+                       absl::string_view cookie_name, TokenCookieState state) {
   if (state.single_) {
-    cookies.erase(key);
+    cookies.erase(cookie_name);
   }
+  TokenCookieNameBuilder names(cookie_name);
   if (state.chunks_) {
-    TokenCookieNameBuilder names(key);
     cookies.erase(names.chunks());
-    const size_t chunks_to_erase = chunkIndexesToClear(state);
-    for (size_t index = 0; index < chunks_to_erase; ++index) {
-      cookies.erase(names.chunk(index));
-    }
+  }
+  const size_t chunk_indexes = chunkIndexesInUse(state);
+  for (size_t index = 0; index < chunk_indexes; ++index) {
+    cookies.erase(names.chunk(index));
   }
 }
 
-absl::optional<size_t> tokenCookieDataSize(size_t key_size, size_t tail_size) {
-  // Size of the chunk cookie name suffix, e.g., "_1", "_2", etc. 3 is used because we assume
-  // no more than 99 chunks, so the suffix will be at most 3 characters long.
-  constexpr size_t chunk_suffix_size = 3;
-  static_assert(MaxChunksPerToken <= 100, "a chunk index must fit in two digits");
-  // Size of the separator between the key and the value in the cookie (e.g., "=")
-  constexpr size_t separator_size = 1;
-  const size_t chunk_overhead = key_size + chunk_suffix_size + separator_size + tail_size;
-  if (chunk_overhead >= MaxCookieSize) {
-    return absl::nullopt;
-  }
-  return MaxCookieSize - chunk_overhead;
+using TokenCookieChunkingSettings = FilterConfig::TokenCookieChunkingSettings;
+
+std::optional<TokenCookieChunkingSettings> tokenCookieChunkingSettings(
+    const envoy::extensions::filters::http::oauth2::v3::OAuth2Config& proto_config) {
+  // Unlike upstream, chunking is enabled by default: an absent message means the default values,
+  // and a huge max_cookie_size is the way to disable splitting.
+  const auto& chunking = proto_config.token_cookie_chunking();
+  return TokenCookieChunkingSettings{
+      PROTOBUF_GET_WRAPPED_OR_DEFAULT(chunking, max_cookie_size, DefaultMaxTokenCookieSize),
+      PROTOBUF_GET_WRAPPED_OR_DEFAULT(chunking, max_chunks, DefaultMaxTokenCookieChunks)};
 }
 
-// True when the value must be split: chunking is on and a single cookie would exceed the limit.
-bool tokenCookieNeedsChunking(absl::string_view key, absl::string_view data,
-                              absl::string_view cookie_tail, bool chunking_enabled) {
-  if (!chunking_enabled) {
-    return false;
-  }
-  return key.size() + 1 /* "=" */ + data.size() + cookie_tail.size() > MaxCookieSize;
+// The value bytes one chunk cookie "<name>_<index>=<value><tail>" holds, or 0 if there is no room.
+size_t tokenChunkCapacity(size_t name_size, size_t tail_size, size_t max_cookie_size) {
+  const size_t overhead = name_size + ChunkSuffixSize + 1 /* "=" */ + tail_size;
+  return overhead < max_cookie_size ? max_cookie_size - overhead : 0;
 }
 
-// True when a cookie value of value_size is written as a single cookie or fits in at most
-// MaxChunksPerToken chunks. Only meaningful while chunking is enabled.
-bool tokenCookieFits(size_t key_size, size_t value_size, size_t tail_size) {
-  if (key_size + 1 /* "=" */ + value_size + tail_size <= MaxCookieSize) {
-    return true;
-  }
-  const auto chunk_size = tokenCookieDataSize(key_size, tail_size);
-  // No room for data in a chunk: the value is written as a single cookie, as before chunking.
-  if (!chunk_size.has_value()) {
-    return true;
-  }
-  return (value_size + chunk_size.value() - 1) / chunk_size.value() <= MaxChunksPerToken;
-}
-
-// Cookie names prefixed with "__Secure-" or "__Host-" are special. They MUST be set with the
-// Secure attribute, including when they are deleted, so that the browser accepts them.
-absl::string_view mayAddSecureAttributeForCookie(absl::string_view cookie_name) {
-  return cookie_name.starts_with("__Secure-") || cookie_name.starts_with("__Host-") ? "; Secure"
-                                                                                    : "";
-}
-
-// The number of cookies the value is written as: 1 for a single cookie, otherwise the number of
-// chunks.
-size_t tokenCookieCount(absl::string_view key, absl::string_view data,
-                        absl::string_view cookie_tail, bool chunking_enabled) {
-  const auto chunk_size = tokenCookieDataSize(key.size(), cookie_tail.size());
-  // No room for data in a chunk: the value is written as a single cookie, as before chunking.
-  if (!chunk_size.has_value() ||
-      !tokenCookieNeedsChunking(key, data, cookie_tail, chunking_enabled)) {
+// The number of cookies a token value is written as: 1 when chunking is not configured or it fits
+// in one cookie, otherwise the number of chunks. std::nullopt when it needs more chunks than
+// allowed.
+std::optional<size_t> tokenCookieCount(size_t name_size, size_t value_size, size_t tail_size,
+                                       const std::optional<TokenCookieChunkingSettings>& chunking) {
+  if (!chunking.has_value() ||
+      name_size + 1 /* "=" */ + value_size + tail_size <= chunking->max_cookie_size_) {
     return 1;
   }
-  const size_t count = (data.size() + chunk_size.value() - 1) / chunk_size.value();
-  if (count > MaxChunksPerToken) {
-    // tokenCookiesFit() refuses such a session before any cookie is written. Should the two ever
-    // disagree, write a single cookie as before chunking rather than chunks no request can rejoin.
-    IS_ENVOY_BUG(fmt::format("token cookie {} needs {} chunks", key, count));
-    return 1;
+  const size_t capacity = tokenChunkCapacity(name_size, tail_size, chunking->max_cookie_size_);
+  if (capacity == 0) {
+    return std::nullopt;
+  }
+  const size_t count = (value_size + capacity - 1) / capacity;
+  if (count > chunking->max_chunks_) {
+    return std::nullopt;
   }
   return count;
 }
@@ -757,6 +732,8 @@ FilterConfig::FilterConfig(
       deny_redirect_header_matchers_(headerMatchers(proto_config.deny_redirect_matcher(), context)),
       cookie_names_(proto_config.credentials().cookie_names()),
       cookie_domain_(proto_config.credentials().cookie_domain()),
+      cookie_domain_attribute_(
+          cookie_domain_.empty() ? "" : fmt::format(CookieDomainFormatString, cookie_domain_)),
       auth_type_(getAuthType(proto_config.auth_type())),
       default_expires_in_(PROTOBUF_GET_SECONDS_OR_DEFAULT(proto_config, default_expires_in, 0)),
       default_refresh_token_expires_in_(
@@ -806,7 +783,8 @@ FilterConfig::FilterConfig(
           (proto_config.has_cookie_configs() &&
            proto_config.cookie_configs().has_code_verifier_cookie_config())
               ? CookieSettings(proto_config.cookie_configs().code_verifier_cookie_config())
-              : CookieSettings()) {
+              : CookieSettings()),
+      token_cookie_chunking_(tokenCookieChunkingSettings(proto_config)) {
   if (!context.clusterManager().getThreadLocalCluster(oauth_token_endpoint_.cluster())) {
     // This is not necessarily a configuration error — sometimes cluster is sent later than the
     // listener in the xDS stream.
@@ -922,12 +900,6 @@ void OAuth2Filter::onDestroy() {
  * 5) user is unauthorized
  */
 Http::FilterHeadersStatus OAuth2Filter::decodeHeaders(Http::RequestHeaderMap& headers, bool) {
-  // Read the guard once so the size check and the cookie writes of this request agree. It only
-  // controls whether Envoy emits chunked token cookies. Parsing and deletion of chunked cookies
-  // always remain enabled to handle cookies created while the guard was true.
-  chunk_large_token_cookies_ =
-      Runtime::runtimeFeatureEnabled("envoy.reloadable_features.oauth2_chunk_large_token_cookies");
-
   // Skip Filter and continue chain if a Passthrough header is matching.
   // Only increment counters here; do not modify request headers, as there may be
   // other instances of this filter configured that still need to process the request.
@@ -1132,34 +1104,26 @@ void OAuth2Filter::decryptAndUpdateOAuthTokenCookies(Http::RequestHeaderMap& hea
 
   const CookieNames& cookie_names = config_->cookieNames();
 
-  // Records the state of the token cookie and rewrites it. Returns whether the cookies changed.
-  const auto update_token_cookie = [this, &cookies,
-                                    &decrypt_tokens](absl::string_view cookie_name,
-                                                     TokenCookieState& recorded_state) -> bool {
-    auto [token, state] = findTokenCookieValueAndState(cookies, cookie_name);
-
+  // Returns whether the request cookies changed.
+  const auto update_token_cookie = [&](const std::string& cookie_name, TokenCookieState& state) {
+    TokenCookie token = readTokenCookie(cookies, cookie_name);
+    state = token.state_;
     if (state.malformed_) {
       config_->stats().oauth_token_cookie_malformed_chunks_.inc();
-    } else if (state.count_ >= 2) {
+    } else if (state.count_ > 0) {
       config_->stats().oauth_token_cookie_reassembled_.inc();
-    }
-    recorded_state = state;
-
-    if (token.empty()) {
-      // Drop an incomplete chunk set rather than forward its fragments upstream.
-      eraseTokenCookies(cookies, cookie_name, state);
-      return state.chunks_;
     }
 
     eraseTokenCookies(cookies, cookie_name, state);
-
-    if (decrypt_tokens) {
-      token = decryptToken(token);
+    if (token.value_.empty()) {
+      return state.chunks_;
     }
-    cookies.insert_or_assign(cookie_name, token);
+    cookies.insert_or_assign(cookie_name,
+                             decrypt_tokens ? decryptToken(token.value_) : token.value_);
     return decrypt_tokens || state.chunks_;
   };
-  // Every token is updated, so the results are combined without short-circuiting.
+
+  // Not short-circuited: every token must be updated.
   bool updated = update_token_cookie(cookie_names.bearer_token_, bearer_token_cookie_state_);
   updated |= update_token_cookie(cookie_names.id_token_, id_token_cookie_state_);
   updated |= update_token_cookie(cookie_names.refresh_token_, refresh_token_cookie_state_);
@@ -1168,13 +1132,6 @@ void OAuth2Filter::decryptAndUpdateOAuthTokenCookies(Http::RequestHeaderMap& hea
     std::string new_cookies(absl::StrJoin(cookies, "; ", absl::PairFormatter("=")));
     headers.setReferenceKey(Http::Headers::get().Cookie, new_cookies);
   }
-}
-
-// Both ciphers add at most 32 bytes (CBC: 16 byte IV and up to 16 bytes of padding; GCM: 12 byte IV
-// and 16 byte tag, plus the 4 character "gcm." prefix after encoding), then Base64Url encodes every
-// 3 bytes as 4 characters without padding.
-size_t OAuth2Filter::maxEncryptedTokenSize(size_t token_size) {
-  return (4 * (token_size + 32) + 2) / 3;
 }
 
 std::string OAuth2Filter::encryptToken(absl::string_view token) const {
@@ -1330,101 +1287,68 @@ void OAuth2Filter::redirectToOAuthServer(Http::RequestHeaderMap& headers) {
   config_->stats().oauth_unauthorized_rq_.inc();
 }
 
-void OAuth2Filter::setCookie(Http::ResponseHeaderMap& headers, absl::string_view key,
-                             absl::string_view value, absl::string_view cookie_tail) const {
-  headers.addReferenceKey(Http::Headers::get().SetCookie,
-                          absl::StrCat(key, "=", value, cookie_tail));
-}
-
-// Set the token set-cookie header into the response headers, potentially chunking it if necessary.
-void OAuth2Filter::setTokenCookie(Http::ResponseHeaderMap& headers, absl::string_view key,
-                                  absl::string_view data, absl::string_view cookie_tail,
-                                  size_t cookie_count) const {
-  // Limit: each of the 3 tokens (access, id, refresh) is written as at most MaxChunksPerToken
-  // chunks of up to MaxCookieSize bytes and 1 count cookie. Fully chunked tokens together can
-  // exceed the default max_request_headers_kb. This can be made configurable in the future if
-  // needed.
-
-  ASSERT(cookie_count > 0);
-
-  const auto max_allowed_data_size = tokenCookieDataSize(key.size(), cookie_tail.size());
-
-  // A single cookie pays no chunk index suffix, so it fits at sizes a chunk would not. Anything
-  // that fits is written as it is today. Without room for data in a chunk, fall back to the legacy
-  // single cookie too.
-  if (cookie_count <= 1 || !max_allowed_data_size.has_value()) {
-    if (key.size() + 1 + data.size() + cookie_tail.size() > MaxCookieSize) {
-      ENVOY_LOG_EVERY_POW_2(warn,
-                            "token cookie {} exceeds the max allowed cookie size, but it is not "
-                            "chunked",
-                            key);
-    }
-    setCookie(headers, key, data, cookie_tail);
+void OAuth2Filter::setTokenCookie(Http::ResponseHeaderMap& headers, absl::string_view cookie_name,
+                                  TokenCookieState state, absl::string_view token,
+                                  int cookie_type) const {
+  if (token.empty()) {
+    deleteStaleTokenCookies(headers, cookie_name, state, 0);
     return;
   }
 
-  const size_t chunk_size = max_allowed_data_size.value();
-  TokenCookieNameBuilder names(key);
-  size_t chunk_count = 0;
-  for (size_t i = 0; i < data.size(); i += chunk_size) {
-    setCookie(headers, names.chunk(i / chunk_size), data.substr(i, chunk_size), cookie_tail);
-    chunk_count++;
+  const std::string value = encryptToken(token);
+  const std::string cookie_tail = BuildCookieTail(cookie_type);
+  // tokenCookiesFit() has already refused a token that needs too many chunks.
+  const size_t cookie_count = tokenCookieCount(cookie_name.size(), value.size(), cookie_tail.size(),
+                                               config_->tokenCookieChunking())
+                                  .value_or(1);
+  deleteStaleTokenCookies(headers, cookie_name, state, cookie_count);
+
+  if (cookie_count == 1) {
+    headers.addReferenceKey(Http::Headers::get().SetCookie,
+                            absl::StrCat(cookie_name, "=", value, cookie_tail));
+    return;
   }
-  setCookie(headers, names.chunks(), absl::StrCat(chunk_count), cookie_tail);
+
+  const size_t capacity = tokenChunkCapacity(cookie_name.size(), cookie_tail.size(),
+                                             config_->tokenCookieChunking()->max_cookie_size_);
+  const absl::string_view value_view = value;
+  TokenCookieNameBuilder names(cookie_name);
+  for (size_t index = 0; index < cookie_count; ++index) {
+    headers.addReferenceKey(Http::Headers::get().SetCookie,
+                            absl::StrCat(names.chunk(index), "=",
+                                         value_view.substr(index * capacity, capacity),
+                                         cookie_tail));
+  }
+  headers.addReferenceKey(Http::Headers::get().SetCookie,
+                          absl::StrCat(names.chunks(), "=", cookie_count, cookie_tail));
   config_->stats().oauth_token_cookie_chunked_.inc();
-  ENVOY_LOG(debug, "token cookie {} chunked into {} cookies", key, chunk_count);
 }
 
-void OAuth2Filter::deleteRecordedTokenCookies(Http::ResponseHeaderMap& headers,
-                                              absl::string_view cookie_name, TokenCookieState state,
-                                              size_t new_cookie_count,
-                                              absl::string_view cookie_domain,
-                                              absl::string_view maybe_secure_attr) const {
+void OAuth2Filter::deleteStaleTokenCookies(Http::ResponseHeaderMap& headers,
+                                           absl::string_view cookie_name, TokenCookieState state,
+                                           size_t new_cookie_count) const {
+  // Chunk names share the token cookie name's prefix, so they need the same Secure attribute.
+  const absl::string_view secure_attribute = secureAttribute(cookie_name);
+  const auto delete_cookie = [&](absl::string_view name) {
+    headers.addReferenceKey(Http::Headers::get().SetCookie,
+                            absl::StrCat(fmt::format(CookieDeleteFormatString, name),
+                                         config_->cookieDomainAttribute(), secure_attribute));
+  };
 
-#define DELETE_COOKIE_NAME(X)                                                                      \
-  headers.addReferenceKey(                                                                         \
-      Http::Headers::get().SetCookie,                                                              \
-      absl::StrCat(fmt::format(CookieDeleteFormatString, X), cookie_domain, maybe_secure_attr))
-
-  if (new_cookie_count == 1) {
-    // If the new value is a single cookie. We only need to delete the existing chunked cookies.
-    if (state.chunks_) {
-      TokenCookieNameBuilder names(cookie_name);
-      const size_t chunks_to_delete = chunkIndexesToClear(state);
-      for (size_t index = 0; index < chunks_to_delete; ++index) {
-        DELETE_COOKIE_NAME(names.chunk(index));
-      }
-      DELETE_COOKIE_NAME(names.chunks());
-    }
-  } else if (new_cookie_count > 1) {
-    // If the new value is chunked, we need to delete the existing single cookie if it exists.
-    if (state.single_) {
-      DELETE_COOKIE_NAME(cookie_name);
-    }
-    // If the previous value was chunked, we also need to delete the extra chunks that are no longer
-    // needed.
-    if (state.chunks_) {
-      TokenCookieNameBuilder names(cookie_name);
-      const size_t chunks_to_delete = chunkIndexesToClear(state);
-      for (size_t index = new_cookie_count; index < chunks_to_delete; ++index) {
-        DELETE_COOKIE_NAME(names.chunk(index));
-      }
-    }
-  } else {
-    // If the new value is empty, we need to delete all existing cookies.
-    if (state.single_) {
-      DELETE_COOKIE_NAME(cookie_name);
-    }
-    if (state.chunks_) {
-      TokenCookieNameBuilder names(cookie_name);
-      const size_t chunks_to_delete = chunkIndexesToClear(state);
-      for (size_t index = 0; index < chunks_to_delete; ++index) {
-        DELETE_COOKIE_NAME(names.chunk(index));
-      }
-      DELETE_COOKIE_NAME(names.chunks());
-    }
+  // A new single cookie overwrites the single cookie, and new chunks overwrite the count cookie
+  // and the chunks below new_cookie_count.
+  if (state.single_ && new_cookie_count != 1) {
+    delete_cookie(cookie_name);
   }
-#undef DELETE_COOKIE_NAME
+  TokenCookieNameBuilder names(cookie_name);
+  if (state.chunks_ && new_cookie_count <= 1) {
+    delete_cookie(names.chunks());
+  }
+  const size_t first_stale_chunk = new_cookie_count > 1 ? new_cookie_count : 0;
+  const size_t chunk_indexes = chunkIndexesInUse(state);
+  for (size_t index = first_stale_chunk; index < chunk_indexes; ++index) {
+    delete_cookie(names.chunk(index));
+  }
 }
 
 /**
@@ -1445,30 +1369,20 @@ Http::FilterHeadersStatus OAuth2Filter::signOutUser(const Http::RequestHeaderMap
   };
 
   for (const auto& cookie_name : cookie_names) {
-    // Cookie names prefixed with "__Secure-" or "__Host-" are special. They MUST be set with the
-    // Secure attribute so that the browser handles their deletion properly.
-    const bool add_secure_attr =
-        cookie_name.starts_with("__Secure-") || cookie_name.starts_with("__Host-");
-    const absl::string_view maybe_secure_attr = add_secure_attr ? "; Secure" : "";
-
     response_headers->addReferenceKey(
         Http::Headers::get().SetCookie,
         absl::StrCat(fmt::format(CookieDeleteFormatString, cookie_name), cookie_domain,
-                     maybe_secure_attr));
+                     secureAttribute(cookie_name)));
   }
 
-  // The single token cookies are deleted above, which a new value of 1 cookie stands for, so only
-  // their chunks are left. They are deleted regardless of the runtime guard value.
+  // The loop above already deletes the single token cookies, so only their chunks are left.
   const CookieNames& token_cookie_names = config_->cookieNames();
-  deleteRecordedTokenCookies(*response_headers, token_cookie_names.bearer_token_,
-                             bearer_token_cookie_state_, 1, cookie_domain,
-                             mayAddSecureAttributeForCookie(token_cookie_names.bearer_token_));
-  deleteRecordedTokenCookies(*response_headers, token_cookie_names.id_token_,
-                             id_token_cookie_state_, 1, cookie_domain,
-                             mayAddSecureAttributeForCookie(token_cookie_names.id_token_));
-  deleteRecordedTokenCookies(*response_headers, token_cookie_names.refresh_token_,
-                             refresh_token_cookie_state_, 1, cookie_domain,
-                             mayAddSecureAttributeForCookie(token_cookie_names.refresh_token_));
+  deleteStaleTokenCookies(*response_headers, token_cookie_names.bearer_token_,
+                          bearer_token_cookie_state_, 1);
+  deleteStaleTokenCookies(*response_headers, token_cookie_names.id_token_, id_token_cookie_state_,
+                          1);
+  deleteStaleTokenCookies(*response_headers, token_cookie_names.refresh_token_,
+                          refresh_token_cookie_state_, 1);
 
   const std::string post_logout_redirect_url =
       absl::StrCat(headers.getSchemeValue(), "://", host_, "/");
@@ -1634,18 +1548,6 @@ std::string OAuth2Filter::BuildCookieTail(int cookie_type) const {
   return cookie_tail;
 }
 
-// The size of BuildCookieTail(cookie_type) without building it: each format string less its "{}"
-// placeholders, plus the values that fill them.
-size_t OAuth2Filter::cookieTailSize(int cookie_type) const {
-  const CookieTailParts parts = cookieTailParts(cookie_type);
-  size_t size = absl::string_view(CookieTailHttpOnlyFormatString).size() - 4 +
-                parts.expires_time_.size() + parts.same_site_.size();
-  if (!config_->cookieDomain().empty()) {
-    size += absl::string_view(CookieDomainFormatString).size() - 2 + config_->cookieDomain().size();
-  }
-  return size;
-}
-
 void OAuth2Filter::onGetAccessTokenSuccess(const std::string& access_code,
                                            const std::string& id_token,
                                            const std::string& refresh_token,
@@ -1753,43 +1655,22 @@ void OAuth2Filter::onRefreshAccessTokenFailure() {
 }
 
 bool OAuth2Filter::tokenCookiesFit() const {
-  // Without chunking every token is written as a single cookie, as before chunking.
-  if (!chunk_large_token_cookies_) {
+  const auto& chunking = config_->tokenCookieChunking();
+  if (!chunking.has_value()) {
     return true;
   }
-  const CookieNames& cookie_names = config_->cookieNames();
-  const auto fits = [this](absl::string_view key, absl::string_view token, int cookie_type) {
-    // Uses an upper bound of the encrypted size, so a token within a few bytes of the limit may be
-    // refused although it would fit.
-    const size_t value_size =
-        config_->disableTokenEncryption() ? token.size() : maxEncryptedTokenSize(token.size());
-    return token.empty() || tokenCookieFits(key.size(), value_size, cookieTailSize(cookie_type));
+  // The ciphertext size depends only on the token size, so one encryption measures it exactly.
+  const auto fits = [this, &chunking](absl::string_view cookie_name, absl::string_view token,
+                                      int cookie_type) {
+    return token.empty() ||
+           tokenCookieCount(cookie_name.size(), encryptToken(token).size(),
+                            BuildCookieTail(cookie_type).size(), chunking)
+               .has_value();
   };
+  const CookieNames& cookie_names = config_->cookieNames();
   return fits(cookie_names.bearer_token_, access_token_, 1) && // BEARER_TOKEN
          fits(cookie_names.id_token_, id_token_, 4) &&         // ID_TOKEN
          fits(cookie_names.refresh_token_, refresh_token_, 5); // REFRESH_TOKEN
-}
-
-// Deletes are driven by the token cookie states recorded by decryptAndUpdateOAuthTokenCookies(),
-// because the request cookies were rewritten since then.
-void OAuth2Filter::addTokenCookie(Http::ResponseHeaderMap& headers, absl::string_view cookie_name,
-                                  TokenCookieState state, absl::string_view token, int cookie_type,
-                                  absl::string_view cookie_domain) const {
-  const absl::string_view maybe_secure_attr = mayAddSecureAttributeForCookie(cookie_name);
-
-  if (token.empty()) {
-    // No new value: delete the token found on the request, whichever form it had.
-    deleteRecordedTokenCookies(headers, cookie_name, state, 0, cookie_domain, maybe_secure_attr);
-    return;
-  }
-
-  const std::string encrypted_token = encryptToken(token);
-  const std::string cookie_tail = BuildCookieTail(cookie_type);
-  const size_t cookie_count =
-      tokenCookieCount(cookie_name, encrypted_token, cookie_tail, chunk_large_token_cookies_);
-  deleteRecordedTokenCookies(headers, cookie_name, state, cookie_count, cookie_domain,
-                             maybe_secure_attr);
-  setTokenCookie(headers, cookie_name, encrypted_token, cookie_tail, cookie_count);
 }
 
 void OAuth2Filter::addResponseCookies(Http::ResponseHeaderMap& headers,
@@ -1806,17 +1687,12 @@ void OAuth2Filter::addResponseCookies(Http::ResponseHeaderMap& headers,
                           absl::StrCat(cookie_names.oauth_expires_, "=", new_expires_,
                                        BuildCookieTail(3))); // OAUTH_EXPIRES
 
-  std::string cookie_domain;
-  if (!config_->cookieDomain().empty()) {
-    cookie_domain = fmt::format(CookieDomainFormatString, config_->cookieDomain());
-  }
-
-  addTokenCookie(headers, cookie_names.bearer_token_, bearer_token_cookie_state_, access_token_,
-                 1 /* BEARER_TOKEN */, cookie_domain);
-  addTokenCookie(headers, cookie_names.id_token_, id_token_cookie_state_, id_token_,
-                 4 /* ID_TOKEN */, cookie_domain);
-  addTokenCookie(headers, cookie_names.refresh_token_, refresh_token_cookie_state_, refresh_token_,
-                 5 /* REFRESH_TOKEN */, cookie_domain);
+  setTokenCookie(headers, cookie_names.bearer_token_, bearer_token_cookie_state_, access_token_,
+                 1 /* BEARER_TOKEN */);
+  setTokenCookie(headers, cookie_names.id_token_, id_token_cookie_state_, id_token_,
+                 4 /* ID_TOKEN */);
+  setTokenCookie(headers, cookie_names.refresh_token_, refresh_token_cookie_state_, refresh_token_,
+                 5 /* REFRESH_TOKEN */);
 }
 
 void OAuth2Filter::sendUnauthorizedResponse(const std::string& details) {

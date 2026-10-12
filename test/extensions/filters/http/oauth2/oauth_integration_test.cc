@@ -992,16 +992,9 @@ TEST_P(OauthIntegrationTest, LegacyCbcCodeVerifierAcceptedByDefault) {
                        TEST_ENCRYPTED_CODE_VERIFIER);
 }
 
-// With chunking enabled, a token too large for one cookie must be split on the way out and
+// Chunking is on by default: a token too large for one cookie must be split on the way out and
 // rejoined on the way back in, with the HMAC still valid. This also covers real header size limits.
-class OauthChunkedCookieIntegrationTest : public OauthIntegrationTest {
-public:
-  void initialize() override {
-    config_helper_.addRuntimeOverride("envoy.reloadable_features.oauth2_chunk_large_token_cookies",
-                                      "true");
-    OauthIntegrationTest::initialize();
-  }
-};
+class OauthChunkedCookieIntegrationTest : public OauthIntegrationTest {};
 
 INSTANTIATE_TEST_SUITE_P(IpVersionsAndGrpcTypes, OauthChunkedCookieIntegrationTest,
                          GRPC_CLIENT_INTEGRATION_PARAMS_WITH_GCM_FLAG,
