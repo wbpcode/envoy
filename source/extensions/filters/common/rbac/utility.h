@@ -4,6 +4,7 @@
 
 #include "source/common/common/fmt.h"
 #include "source/common/singleton/const_singleton.h"
+#include "source/common/stats/utility.h"
 #include "source/extensions/filters/common/rbac/engine_impl.h"
 
 namespace Envoy {
@@ -34,31 +35,34 @@ struct RoleBasedAccessControlFilterStats {
   SHADOW_RBAC_FILTER_STATS(GENERATE_COUNTER_STRUCT)
 
   Stats::Scope& scope_;
-  std::string per_policy_final_prefix_;
-  std::string per_policy_final_shadow_prefix_;
+
+  // The tagged per-policy prefixes ("<prefix>.rbac.[<group_prefix>.]policy") of the enforced and
+  // shadow rules, with the policy name supplied per call: the flat name is
+  // "<name()>.<policy>.<leaf>". When the group carries tags (a recognized parent prefix), the
+  // policy name becomes the RBAC_POLICY_NAME tag and the tag-extracted name is
+  // "<baseName()>.<leaf>"; otherwise (an empty stat prefix or an unrecognized parent prefix) the
+  // stats are untagged and the policy name stays in the name.
+  Stats::TaggedStatName per_policy_final_prefix_;
+  Stats::TaggedStatName per_policy_final_shadow_prefix_;
 
   void incPolicyAllowed(absl::string_view name) {
-    incCounter(per_policy_final_prefix_, name, ".allowed");
+    incCounter(per_policy_final_prefix_, name, "allowed");
   }
 
   void incPolicyDenied(absl::string_view name) {
-    incCounter(per_policy_final_prefix_, name, ".denied");
+    incCounter(per_policy_final_prefix_, name, "denied");
   }
 
   void incPolicyShadowAllowed(absl::string_view name) {
-    incCounter(per_policy_final_shadow_prefix_, name, ".shadow_allowed");
+    incCounter(per_policy_final_shadow_prefix_, name, "shadow_allowed");
   }
 
   void incPolicyShadowDenied(absl::string_view name) {
-    incCounter(per_policy_final_shadow_prefix_, name, ".shadow_denied");
+    incCounter(per_policy_final_shadow_prefix_, name, "shadow_denied");
   }
 
-  void incCounter(absl::string_view prefix, absl::string_view name, absl::string_view suffix) {
-    Stats::StatNameDynamicPool pool(scope_.symbolTable());
-    Stats::StatName metric_prefix = pool.add(prefix);
-    Stats::StatName metric_name = pool.add(absl::StrCat(name, suffix));
-    Stats::Utility::counterFromElements(scope_, {metric_prefix, metric_name}).inc();
-  }
+  void incCounter(const Stats::TaggedStatName& prefix, absl::string_view policy,
+                  absl::string_view leaf);
 };
 
 RoleBasedAccessControlFilterStats generateStats(const std::string& prefix,
