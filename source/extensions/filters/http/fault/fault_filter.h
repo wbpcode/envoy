@@ -149,7 +149,9 @@ private:
   Stats::StatNameSetPtr stat_name_set_;
   const Stats::StatName aborts_injected_;
   const Stats::StatName delays_injected_;
-  const Stats::StatName stats_prefix_; // Includes ".fault".
+  const Stats::StatName stats_prefix_; // Includes "fault".
+  // The tag the downstream cluster is emitted as on the per-cluster stats.
+  const Stats::StatName downstream_cluster_tag_;
 };
 
 using FaultFilterConfigSharedPtr = std::shared_ptr<FaultFilterConfig>;
