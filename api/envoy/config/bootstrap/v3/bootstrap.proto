@@ -466,7 +466,7 @@ message Bootstrap {
 
 // Administration interface :ref:`operations documentation
 // <operations_admin_interface>`.
-// [#next-free-field: 8]
+// [#next-free-field: 9]
 message Admin {
   option (udpa.annotations.versioning).previous_message_type = "envoy.config.bootstrap.v2.Admin";
 
@@ -514,6 +514,15 @@ message Admin {
   //   - prefix: /healthcheck
   //
   repeated type.matcher.v3.StringMatcher allow_paths = 7;
+
+  // Soft limit on the size of the read and write buffers of each admin connection. When set,
+  // streamed admin responses are flow controlled: a handler produces its next chunk only after
+  // the client has drained the response buffered so far below half of this limit, so a slow
+  // client does not make Envoy buffer a whole large response (for example ``/stats`` or
+  // ``/config_dump``). Since a handler chunk may be larger than this limit, the buffered response
+  // can exceed it by up to one chunk. Request bodies larger than this limit are rejected. If not
+  // specified, there is no limit and responses are not flow controlled.
+  google.protobuf.UInt32Value per_connection_buffer_limit_bytes = 8;
 }
 
 // Cluster manager :ref:`architecture overview <arch_overview_cluster_manager>`.

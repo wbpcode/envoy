@@ -4,6 +4,7 @@
 #include <list>
 
 #include "envoy/event/schedulable_cb.h"
+#include "envoy/http/codec.h"
 #include "envoy/http/filter.h"
 #include "envoy/server/admin.h"
 
@@ -23,6 +24,7 @@ namespace Server {
  */
 class AdminFilter : public Http::PassThroughFilter,
                     public AdminStream,
+                    public Http::DownstreamWatermarkCallbacks,
                     Logger::Loggable<Logger::Id::admin> {
 public:
   using AdminServerCallbackFunction = std::function<Http::Code(
@@ -60,6 +62,10 @@ public:
   }
   Http::Utility::QueryParamsMulti queryParams() const override;
 
+  // Http::DownstreamWatermarkCallbacks
+  void onAboveWriteBufferHighWatermark() override;
+  void onBelowWriteBufferLowWatermark() override;
+
 private:
   /**
    * Called when an admin request has been completely received.
@@ -78,6 +84,16 @@ private:
    */
   void scheduleNextChunk();
 
+  /**
+   * Encodes chunks of request_ until it is done or the downstream applies backpressure. With
+   * neither yield_between_chunks_ nor flow control, all of them are encoded inline; otherwise only
+   * one, and the next is scheduled.
+   */
+  void encodeChunks();
+
+  // True while the downstream connection or stream is above its write buffer high watermark.
+  bool paused() const { return above_high_watermark_count_ > 0; }
+
   const Admin& admin_;
   // Latched at construction so the runtime guard is not re-read for every request chunk.
   const bool yield_between_chunks_;
@@ -88,6 +104,12 @@ private:
   // The request whose response is still being streamed, if any.
   Admin::RequestPtr request_;
   Event::SchedulableCallbackPtr next_chunk_cb_;
+  // The stream and the connection may each be above their high watermark, see
+  // Http::DownstreamWatermarkCallbacks.
+  uint32_t above_high_watermark_count_{0};
+  // Set once this filter has registered for downstream watermark callbacks, which is done only when
+  // the admin connection has a buffer limit.
+  bool watermark_callbacks_registered_{false};
   bool destroyed_{false};
 };
 
